@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Heart, ShieldCheck, Check, ArrowUp } from 'lucide-react';
+import { Search, Heart, ShieldCheck, Check, ArrowUp, Key } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -8,8 +8,10 @@ import { ProductModal } from './components/ProductModal';
 import { AdminPanel } from './components/AdminPanel';
 import { WishlistModal } from './components/WishlistModal';
 import { R2DeploymentGuideModal } from './components/R2DeploymentGuideModal';
+import { AuthModal } from './components/AuthModal';
 import { JerseyProduct, StoreStats } from './types';
-import { INITIAL_JERSEYS } from './data/mockJerseys';
+import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './types/settings';
+import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './data/mockJerseys';
 import { CurrencyCode } from './utils/currency';
 
 export default function App() {
@@ -30,7 +32,53 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'showcase' | 'admin'>(getInitialView);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [currency, setCurrency] = useState<CurrencyCode>('USD');
+  const [currency, setCurrency] = useState<CurrencyCode>(() => {
+    try {
+      const saved = localStorage.getItem('orifake_currency') as CurrencyCode;
+      return saved || 'BDT';
+    } catch {
+      return 'BDT';
+    }
+  });
+
+  // Site CMS Settings & Categories
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    try {
+      const saved = localStorage.getItem('orifake_site_settings');
+      return saved ? JSON.parse(saved) : DEFAULT_SITE_SETTINGS;
+    } catch {
+      return DEFAULT_SITE_SETTINGS;
+    }
+  });
+
+  const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('orifake_categories');
+      return saved ? JSON.parse(saved) : CATEGORY_CAROUSEL_ITEMS;
+    } catch {
+      return CATEGORY_CAROUSEL_ITEMS;
+    }
+  });
+
+  // Auth States
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('orifake_admin_auth') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [customerUser, setCustomerUser] = useState<{ name: string; email: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('orifake_customer_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Product Data
   const [products, setProducts] = useState<JerseyProduct[]>(INITIAL_JERSEYS);
@@ -53,6 +101,31 @@ export default function App() {
       setToastMessage((prev) => (prev === msg ? null : prev));
     }, 3000);
   };
+
+  // Persist siteSettings and categoryItems
+  useEffect(() => {
+    try {
+      localStorage.setItem('orifake_site_settings', JSON.stringify(siteSettings));
+    } catch (e) {
+      console.warn('Storage error', e);
+    }
+  }, [siteSettings]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('orifake_categories', JSON.stringify(categoryItems));
+    } catch (e) {
+      console.warn('Storage error', e);
+    }
+  }, [categoryItems]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('orifake_currency', currency);
+    } catch (e) {
+      console.warn('Storage error', e);
+    }
+  }, [currency]);
 
   // Listen to browser popstate for /admin route
   useEffect(() => {
@@ -102,14 +175,12 @@ export default function App() {
     fetchStats();
   }, []);
 
-  // Categories list
-  const uniqueCategories = Array.from(new Set(products.map((p) => p.category)));
-
   // Filter products by selected category and search query
   const displayedProducts = products.filter((p) => {
     const matchesCategory =
       selectedCategory === 'all' ||
-      p.category.toLowerCase() === selectedCategory.toLowerCase();
+      p.category.toLowerCase() === selectedCategory.toLowerCase() ||
+      (selectedCategory === 'kits' && (p.category.toLowerCase().includes('madrid') || p.category.toLowerCase().includes('barcelona') || p.category.toLowerCase().includes('manchester')));
 
     const matchesSearch =
       !searchQuery.trim() ||
@@ -203,13 +274,75 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setProducts(INITIAL_JERSEYS);
-        showToast('Catalog restored to default!');
+        setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
+        setSiteSettings(DEFAULT_SITE_SETTINGS);
+        showToast('Store reset to original demo setup!');
         fetchStats();
       }
     } catch (err) {
       setProducts(INITIAL_JERSEYS);
-      showToast('Catalog restored to default!');
+      setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
+      setSiteSettings(DEFAULT_SITE_SETTINGS);
+      showToast('Store reset to original demo setup!');
     }
+  };
+
+  // CMS Settings Actions
+  const handleUpdateSiteSettings = (newSettings: Partial<SiteSettings>) => {
+    setSiteSettings((prev) => ({ ...prev, ...newSettings }));
+    showToast('Store settings updated live!');
+  };
+
+  const handleAddCategory = (cat: CategoryItem) => {
+    setCategoryItems((prev) => [...prev, cat]);
+    showToast(`Category "${cat.name}" added!`);
+  };
+
+  const handleUpdateCategory = (id: string, updated: Partial<CategoryItem>) => {
+    setCategoryItems((prev) => prev.map((c) => (c.id === id ? { ...c, ...updated } : c)));
+    showToast('Category updated!');
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    setCategoryItems((prev) => prev.filter((c) => c.id !== id));
+    showToast('Category removed.');
+  };
+
+  // Auth Actions
+  const handleAdminLoginSuccess = () => {
+    setIsAdminAuthenticated(true);
+    try {
+      localStorage.setItem('orifake_admin_auth', 'true');
+    } catch {}
+    setCurrentView('admin');
+    window.history.pushState({}, '', '/admin');
+    showToast('Admin access granted! Welcome back.');
+  };
+
+  const handleCustomerLoginSuccess = (user: { name: string; email: string }) => {
+    setCustomerUser(user);
+    try {
+      localStorage.setItem('orifake_customer_user', JSON.stringify(user));
+    } catch {}
+    showToast(`Welcome ${user.name}!`);
+  };
+
+  const handleLogoutCustomer = () => {
+    setCustomerUser(null);
+    try {
+      localStorage.removeItem('orifake_customer_user');
+    } catch {}
+    showToast('Logged out of customer profile.');
+  };
+
+  const handleLogoutAdmin = () => {
+    setIsAdminAuthenticated(false);
+    try {
+      localStorage.removeItem('orifake_admin_auth');
+    } catch {}
+    setCurrentView('showcase');
+    window.history.pushState({}, '', '/');
+    showToast('Logged out of Admin Portal.');
   };
 
   return (
@@ -229,6 +362,11 @@ export default function App() {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         openR2Guide={() => setIsR2GuideOpen(true)}
+        siteSettings={siteSettings}
+        isAdminAuthenticated={isAdminAuthenticated}
+        customerUser={customerUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogoutCustomer={handleLogoutCustomer}
       />
 
       {/* Main Content */}
@@ -238,6 +376,7 @@ export default function App() {
             {/* Cinematic Red FRAGMENT Banner */}
             {!searchQuery && (
               <HeroBanner 
+                siteSettings={siteSettings}
                 onExplore={() => {
                   setSelectedCategory('all');
                   window.scrollTo({ top: 400, behavior: 'smooth' });
@@ -249,13 +388,17 @@ export default function App() {
             <CategoryFilter
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
+              categories={categoryItems}
+              headingTitle={siteSettings.categoryHeading || 'Shop by Category'}
             />
 
             {/* Bestsellers Section matching screenshot */}
             <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pt-4 sm:pt-6">
               <div className="flex items-baseline justify-between mb-4">
                 <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
-                  {selectedCategory === 'all' ? 'Bestsellers' : `${selectedCategory} Collection`}
+                  {selectedCategory === 'all' 
+                    ? (siteSettings.bestsellerHeading || 'Bestsellers') 
+                    : `${categoryItems.find((c) => c.id === selectedCategory)?.name || selectedCategory} Collection`}
                 </h2>
                 {selectedCategory !== 'all' && (
                   <button
@@ -302,19 +445,57 @@ export default function App() {
             </section>
           </>
         ) : (
-          /* Secure Admin Panel */
-          <div className="bg-slate-950 text-white min-h-[90vh]">
+          /* Admin Panel Gate */
+          isAdminAuthenticated ? (
             <AdminPanel
               products={products}
-              categories={uniqueCategories}
+              categories={categoryItems}
+              siteSettings={siteSettings}
               stats={stats}
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
               onResetCatalog={handleResetCatalog}
+              onUpdateSiteSettings={handleUpdateSiteSettings}
+              onAddCategory={handleAddCategory}
+              onUpdateCategory={handleUpdateCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onLogoutAdmin={handleLogoutAdmin}
               currency={currency}
             />
-          </div>
+          ) : (
+            <div className="min-h-[70vh] flex items-center justify-center p-4 bg-slate-950">
+              <div className="max-w-md w-full glass-panel p-8 rounded-3xl border border-white/15 text-center space-y-6 text-white">
+                <div className="w-14 h-14 rounded-2xl bg-[#e50914]/20 border border-[#e50914]/40 text-[#e50914] mx-auto flex items-center justify-center">
+                  <Key className="w-7 h-7" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white font-mono">Control Portal</h2>
+                  <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                    Please sign in with your email address to access your dashboard.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setIsAuthModalOpen(true)}
+                    className="w-full py-3 rounded-xl bg-[#e50914] hover:bg-[#cc0812] text-white font-bold text-xs shadow-lg transition-all"
+                  >
+                    Sign In with Email
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCurrentView('showcase');
+                      window.history.pushState({}, '', '/');
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-white text-xs font-semibold"
+                  >
+                    Return to Storefront
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
         )}
       </main>
 
@@ -323,8 +504,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#e50914]" />
-            <span className="font-bold text-neutral-900 tracking-tight font-typewriter">
-              DIFFERENTIATE, DON'T COMPARE
+            <span className="font-bold text-neutral-900 tracking-tight font-typewriter uppercase">
+              {siteSettings.footerText || "DIFFERENTIATE, DON'T COMPARE"}
             </span>
           </div>
 
@@ -338,17 +519,34 @@ export default function App() {
             <span>•</span>
             <button
               onClick={() => {
-                const nextView = currentView === 'showcase' ? 'admin' : 'showcase';
-                setCurrentView(nextView);
-                window.history.pushState({}, '', nextView === 'admin' ? '/admin' : '/');
+                if (currentView === 'showcase') {
+                  if (isAdminAuthenticated) {
+                    setCurrentView('admin');
+                    window.history.pushState({}, '', '/admin');
+                  } else {
+                    setIsAuthModalOpen(true);
+                  }
+                } else {
+                  setCurrentView('showcase');
+                  window.history.pushState({}, '', '/');
+                }
               }}
               className="hover:text-neutral-900 font-mono transition-colors"
             >
-              {currentView === 'showcase' ? 'Admin Portal' : 'Storefront'}
+              {currentView === 'showcase' ? 'Portal' : 'Storefront'}
             </button>
           </div>
         </div>
       </footer>
+
+      {/* Auth Modal (Admin + Customer Sign in) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAdminLoginSuccess={handleAdminLoginSuccess}
+        onCustomerLoginSuccess={handleCustomerLoginSuccess}
+        adminGmail={siteSettings.adminGmail || 'sahidul010122@gmail.com'}
+      />
 
       {/* Interactive Zoom & Swipe Modal */}
       <ProductModal

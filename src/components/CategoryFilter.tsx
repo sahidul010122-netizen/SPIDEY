@@ -1,25 +1,29 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { CATEGORY_CAROUSEL_ITEMS } from '../data/mockJerseys';
+import React, { useRef, useState } from 'react';
+import { CategoryItem } from '../types/settings';
 
 interface ShopByCategoryProps {
   selectedCategory: string;
   onSelectCategory: (categoryId: string) => void;
+  categories: CategoryItem[];
+  headingTitle?: string;
 }
 
 export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
   selectedCategory,
-  onSelectCategory
+  onSelectCategory,
+  categories,
+  headingTitle = 'Shop by Category'
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const items = CATEGORY_CAROUSEL_ITEMS;
+  const items = categories;
 
   // Handle scroll to calculate active pagination dot
   const handleScroll = () => {
     if (scrollRef.current) {
       const scrollLeft = scrollRef.current.scrollLeft;
-      const cardWidth = 240; // approx width + gap
+      const cardWidth = 240;
       const index = Math.round(scrollLeft / cardWidth);
       setActiveIndex(Math.min(Math.max(index, 0), items.length - 1));
     }
@@ -41,7 +45,7 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
       {/* Centered Heading matching screenshot */}
       <div className="text-center mb-5">
         <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
-          Shop by Category
+          {headingTitle}
         </h2>
       </div>
 
@@ -52,8 +56,7 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
         className="flex items-center gap-3 sm:gap-4 overflow-x-auto no-scrollbar pb-3 px-1 snap-x snap-mandatory"
       >
         {items.map((cat, idx) => {
-          const isSelected = selectedCategory.toLowerCase() === cat.id.toLowerCase() || 
-            (selectedCategory === 'all' && idx === 0 && false);
+          const isSelected = selectedCategory.toLowerCase() === cat.id.toLowerCase();
 
           return (
             <div
@@ -66,19 +69,19 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
                 }
               }}
               className={`snap-start shrink-0 w-[210px] sm:w-[240px] h-[100px] sm:h-[110px] rounded-2xl sm:rounded-3xl p-3 flex items-center justify-between cursor-pointer transition-all duration-200 select-none ${
-                selectedCategory === cat.id
+                isSelected
                   ? 'bg-neutral-900 text-white shadow-md'
                   : 'bg-[#f6f7f9] hover:bg-[#ededf2] text-neutral-900'
               }`}
             >
               {/* Category Name on Left */}
-              <div className="pl-2 flex-1">
-                <span className="text-sm sm:text-base font-bold tracking-tight block">
+              <div className="pl-2 flex-1 min-w-0 pr-2">
+                <span className="text-sm sm:text-base font-bold tracking-tight block truncate">
                   {cat.name}
                 </span>
                 {cat.subtitle && (
-                  <span className={`text-[10px] sm:text-[11px] block mt-0.5 ${
-                    selectedCategory === cat.id ? 'text-neutral-400' : 'text-neutral-500'
+                  <span className={`text-[10px] sm:text-[11px] block mt-0.5 truncate ${
+                    isSelected ? 'text-neutral-400' : 'text-neutral-500'
                   }`}>
                     {cat.subtitle}
                   </span>
@@ -100,23 +103,25 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
       </div>
 
       {/* Pagination Dot Indicators with Elongated Active Pill */}
-      <div className="flex items-center justify-center gap-1.5 mt-3">
-        {items.map((cat, idx) => {
-          const isActive = activeIndex === idx;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => scrollToItem(idx)}
-              aria-label={`Go to category ${cat.name}`}
-              className={`transition-all duration-300 ${
-                isActive 
-                  ? 'w-7 h-2 bg-neutral-600 rounded-full' 
-                  : 'w-2 h-2 bg-neutral-300 rounded-full hover:bg-neutral-400'
-              }`}
-            />
-          );
-        })}
-      </div>
+      {items.length > 0 && (
+        <div className="flex items-center justify-center gap-1.5 mt-3">
+          {items.map((cat, idx) => {
+            const isActive = activeIndex === idx;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => scrollToItem(idx)}
+                aria-label={`Go to category ${cat.name}`}
+                className={`transition-all duration-300 ${
+                  isActive 
+                    ? 'w-7 h-2 bg-neutral-600 rounded-full' 
+                    : 'w-2 h-2 bg-neutral-300 rounded-full hover:bg-neutral-400'
+                }`}
+              />
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 };
