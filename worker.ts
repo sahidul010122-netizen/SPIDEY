@@ -28,7 +28,7 @@ export interface CloudflareFetcher {
 }
 
 export interface Env {
-  MY_BUCKET: CloudflareR2Bucket;
+  MY_BUCKET?: CloudflareR2Bucket;
   ASSETS?: CloudflareFetcher;
   ADMIN_PASSCODE?: string;
 }
@@ -112,7 +112,9 @@ export default {
           });
         }
 
-        const imageUrl = `/api/images/${encodeURIComponent(key)}`;
+        const imageUrl = env.MY_BUCKET 
+          ? `/api/images/${encodeURIComponent(key)}` 
+          : (base64Data.startsWith('data:') ? base64Data : `data:${mime};base64,${cleanData}`);
 
         return new Response(
           JSON.stringify({
@@ -121,8 +123,8 @@ export default {
             url: imageUrl,
             size: bytes.byteLength,
             contentType: mime,
-            bucket: 'spidey-jersey-images',
-            binding: 'MY_BUCKET'
+            bucket: env.MY_BUCKET ? 'spidey-jersey-images' : 'inline-storage',
+            binding: env.MY_BUCKET ? 'MY_BUCKET' : 'inline'
           }),
           { headers: { 'Content-Type': 'application/json', ...corsHeaders } }
         );
