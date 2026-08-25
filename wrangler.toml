@@ -1,0 +1,7 @@
+name = "spidey-jersey-store"
+compatibility_date = "2026-03-01"
+assets = { directory = "./dist", binding = "ASSETS" }
+
+[[r2_buckets]]
+binding = "MY_BUCKET"
+bucket_name = "spidey-jersey-images"

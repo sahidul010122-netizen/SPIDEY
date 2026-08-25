@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #ffffff;
+    --card-bg: #f6f7f9;
+    --brand-red: #e11d48;
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+  }
+
+  body {
+    background-color: #ffffff;
+    color: #111827;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Monospace font for typewriter slogans */
+.font-typewriter {
+  font-family: "Courier New", Courier, monospace, ui-monospace, SFMono-Regular;
+  letter-spacing: 0.05em;
+}
+
+/* Category Card Styling */
+.category-card {
+  background-color: #f6f7f9;
+  border-radius: 1.25rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.category-card:hover {
+  background-color: #ededf2;
+  transform: translateY(-2px);
+}
+
+/* Product Card Styling */
+.product-card-container {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.product-card-container:hover {
+  transform: translateY(-3px);
+}
+
+.product-image-box {
+  background-color: #f6f7f9;
+  border-radius: 1.25rem;
+  transition: background-color 0.25s ease;
+}
+
+.product-card-container:hover .product-image-box {
+  background-color: #ededf2;
+}
+
+/* Glass Modal Overlay */
+.clean-modal-backdrop {
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.clean-modal-content {
+  background-color: #ffffff;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Custom Scrollbar for Smooth Category Carousel */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth Image Transition */
+.img-smooth-zoom {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.img-smooth-zoom:hover {
+  transform: scale(1.04);
+}
