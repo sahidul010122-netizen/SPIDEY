@@ -142,7 +142,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch Products from Backend API if available
+  // Fetch Products, Settings, and Categories from Backend API if available
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
@@ -154,6 +154,34 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Using mock dataset:', err);
+    }
+  };
+
+  const fetchSiteSettings = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.settings && typeof data.settings === 'object') {
+          setSiteSettings(data.settings);
+        }
+      }
+    } catch (err) {
+      console.warn('Settings fetch error:', err);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.categories && Array.isArray(data.categories)) {
+          setCategoryItems(data.categories);
+        }
+      }
+    } catch (err) {
+      console.warn('Categories fetch error:', err);
     }
   };
 
@@ -172,6 +200,8 @@ export default function App() {
 
   useEffect(() => {
     fetchProducts();
+    fetchSiteSettings();
+    fetchCategories();
     fetchStats();
   }, []);
 
@@ -287,25 +317,81 @@ export default function App() {
     }
   };
 
-  // CMS Settings Actions
-  const handleUpdateSiteSettings = (newSettings: Partial<SiteSettings>) => {
-    setSiteSettings((prev) => ({ ...prev, ...newSettings }));
-    showToast('Store settings updated live!');
+  // CMS Settings Actions (Sync with R2 backend)
+  const handleUpdateSiteSettings = async (newSettings: Partial<SiteSettings>) => {
+    const updated = { ...siteSettings, ...newSettings };
+    setSiteSettings(updated);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+      const data = await res.json();
+      if (data.success && data.settings) {
+        setSiteSettings(data.settings);
+      }
+    } catch (e) {
+      console.warn('Failed to sync settings with R2:', e);
+    }
+    showToast('Store banner & settings updated live across all devices!');
   };
 
-  const handleAddCategory = (cat: CategoryItem) => {
-    setCategoryItems((prev) => [...prev, cat]);
-    showToast(`Category "${cat.name}" added!`);
+  const handleAddCategory = async (cat: CategoryItem) => {
+    const updated = [...categoryItems, cat];
+    setCategoryItems(updated);
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cat)
+      });
+      const data = await res.json();
+      if (data.success && data.categories) {
+        setCategoryItems(data.categories);
+      }
+    } catch (e) {
+      console.warn('Failed to sync category with R2:', e);
+    }
+    showToast(`Category "${cat.name}" saved & synced!`);
+    fetchStats();
   };
 
-  const handleUpdateCategory = (id: string, updated: Partial<CategoryItem>) => {
-    setCategoryItems((prev) => prev.map((c) => (c.id === id ? { ...c, ...updated } : c)));
-    showToast('Category updated!');
+  const handleUpdateCategory = async (id: string, updated: Partial<CategoryItem>) => {
+    const nextCategories = categoryItems.map((c) => (c.id === id ? { ...c, ...updated } : c));
+    setCategoryItems(nextCategories);
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated)
+      });
+      const data = await res.json();
+      if (data.success && data.categories) {
+        setCategoryItems(data.categories);
+      }
+    } catch (e) {
+      console.warn('Failed to update category in R2:', e);
+    }
+    showToast('Category updated live across all devices!');
   };
 
-  const handleDeleteCategory = (id: string) => {
-    setCategoryItems((prev) => prev.filter((c) => c.id !== id));
-    showToast('Category removed.');
+  const handleDeleteCategory = async (id: string) => {
+    const nextCategories = categoryItems.filter((c) => c.id !== id);
+    setCategoryItems(nextCategories);
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success && data.categories) {
+        setCategoryItems(data.categories);
+      }
+    } catch (e) {
+      console.warn('Failed to delete category in R2:', e);
+    }
+    showToast('Category removed from store.');
+    fetchStats();
   };
 
   // Auth Actions

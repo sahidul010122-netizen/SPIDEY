@@ -3,8 +3,9 @@
  * Bound to R2 Bucket: spidey-jersey-images
  */
 
-import { INITIAL_JERSEYS } from './src/data/mockJerseys.ts';
+import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './src/data/mockJerseys.ts';
 import { JerseyProduct, Order, StoreStats } from './src/types.ts';
+import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './src/types/settings.ts';
 
 // Cloudflare Workers Type Definitions
 export interface CloudflareR2Object {
@@ -34,11 +35,15 @@ export interface Env {
 // In-Memory cache for speed
 let cachedProducts: JerseyProduct[] | null = null;
 let cachedOrders: Order[] | null = null;
+let cachedSettings: SiteSettings | null = null;
+let cachedCategories: CategoryItem[] | null = null;
 let cachedPasscode: string = 'spidey2026';
 
 // Keys in R2
 const R2_PRODUCTS_KEY = '_db/products.json';
 const R2_ORDERS_KEY = '_db/orders.json';
+const R2_SETTINGS_KEY = '_db/settings.json';
+const R2_CATEGORIES_KEY = '_db/categories.json';
 const R2_CONFIG_KEY = '_db/config.json';
 
 // Helper: Load Products from R2 or fallback to initial
@@ -75,6 +80,82 @@ async function saveStoredProducts(env: Env, products: JerseyProduct[]): Promise<
       });
     } catch (e) {
       console.error('Error persisting products to R2:', e);
+    }
+  }
+}
+
+// Helper: Load Site Settings from R2 (Hero Banner, Headlines, Slogans, Logos)
+async function getStoredSettings(env: Env): Promise<SiteSettings> {
+  if (cachedSettings) return cachedSettings;
+
+  if (env.MY_BUCKET) {
+    try {
+      const obj = await env.MY_BUCKET.get(R2_SETTINGS_KEY);
+      if (obj) {
+        const text = await new Response(obj.body).text();
+        const data = JSON.parse(text);
+        if (data && typeof data === 'object') {
+          cachedSettings = { ...DEFAULT_SITE_SETTINGS, ...data };
+          return cachedSettings!;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading settings from R2:', e);
+    }
+  }
+
+  cachedSettings = { ...DEFAULT_SITE_SETTINGS };
+  return cachedSettings;
+}
+
+// Helper: Save Site Settings to R2
+async function saveStoredSettings(env: Env, settings: SiteSettings): Promise<void> {
+  cachedSettings = settings;
+  if (env.MY_BUCKET) {
+    try {
+      await env.MY_BUCKET.put(R2_SETTINGS_KEY, JSON.stringify(settings), {
+        httpMetadata: { contentType: 'application/json' }
+      });
+    } catch (e) {
+      console.error('Error persisting settings to R2:', e);
+    }
+  }
+}
+
+// Helper: Load Categories from R2 (Carousel Logos, Tags, Subtitles)
+async function getStoredCategories(env: Env): Promise<CategoryItem[]> {
+  if (cachedCategories) return cachedCategories;
+
+  if (env.MY_BUCKET) {
+    try {
+      const obj = await env.MY_BUCKET.get(R2_CATEGORIES_KEY);
+      if (obj) {
+        const text = await new Response(obj.body).text();
+        const data = JSON.parse(text);
+        if (Array.isArray(data) && data.length > 0) {
+          cachedCategories = data;
+          return cachedCategories!;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading categories from R2:', e);
+    }
+  }
+
+  cachedCategories = [...CATEGORY_CAROUSEL_ITEMS];
+  return cachedCategories;
+}
+
+// Helper: Save Categories to R2
+async function saveStoredCategories(env: Env, categories: CategoryItem[]): Promise<void> {
+  cachedCategories = categories;
+  if (env.MY_BUCKET) {
+    try {
+      await env.MY_BUCKET.put(R2_CATEGORIES_KEY, JSON.stringify(categories), {
+        httpMetadata: { contentType: 'application/json' }
+      });
+    } catch (e) {
+      console.error('Error persisting categories to R2:', e);
     }
   }
 }
@@ -196,8 +277,8 @@ export default {
         }
 
         const extension = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
-        const cleanFilename = (filename || 'jersey').replace(/[^a-zA-Z0-9_-]/g, '_');
-        const key = `jerseys/${Date.now()}-${cleanFilename}.${extension}`;
+        const cleanFilename = (filename || 'image').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const key = `uploads/${Date.now()}-${cleanFilename}.${extension}`;
 
         // Convert base64 to binary
         const binaryString = atob(cleanData);
@@ -230,7 +311,108 @@ export default {
         );
       }
 
-      // 5. Admin Authentication
+      // 5. Site Settings (Hero Banner, Slogans, Logos) - GET & POST/PUT
+      if (pathname === '/api/settings') {
+        if (request.method === 'GET') {
+          const settings = await getStoredSettings(env);
+          return new Response(JSON.stringify({ success: true, settings }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        if (request.method === 'POST' || request.method === 'PUT') {
+          const updateData: Partial<SiteSettings> = await request.json();
+          const current = await getStoredSettings(env);
+          const updatedSettings: SiteSettings = {
+            ...current,
+            ...updateData
+          };
+
+          await saveStoredSettings(env, updatedSettings);
+
+          return new Response(JSON.stringify({ success: true, settings: updatedSettings }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
+
+      // 6. Categories (Carousels, Logos, Subtitles) - GET, POST, PUT, DELETE
+      if (pathname === '/api/categories') {
+        if (request.method === 'GET') {
+          const categories = await getStoredCategories(env);
+          return new Response(JSON.stringify({ success: true, categories }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        if (request.method === 'POST') {
+          const body: any = await request.json();
+          const current = await getStoredCategories(env);
+          
+          if (Array.isArray(body)) {
+            // Full array replacement
+            await saveStoredCategories(env, body);
+            return new Response(JSON.stringify({ success: true, categories: body }), {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          } else if (body && body.id && body.name) {
+            // Add single category
+            const existingIndex = current.findIndex(c => c.id === body.id);
+            let updatedList: CategoryItem[];
+            if (existingIndex >= 0) {
+              current[existingIndex] = { ...current[existingIndex], ...body };
+              updatedList = [...current];
+            } else {
+              updatedList = [...current, body];
+            }
+            await saveStoredCategories(env, updatedList);
+            return new Response(JSON.stringify({ success: true, categories: updatedList, category: body }), {
+              status: 201,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          } else {
+            return new Response(JSON.stringify({ success: false, message: 'Invalid category payload' }), {
+              status: 400,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+            });
+          }
+        }
+      }
+
+      if (pathname.startsWith('/api/categories/') && request.method === 'PUT') {
+        const id = decodeURIComponent(pathname.replace('/api/categories/', ''));
+        const updateData: Partial<CategoryItem> = await request.json();
+        const current = await getStoredCategories(env);
+        const index = current.findIndex(c => c.id === id);
+
+        if (index === -1) {
+          return new Response(JSON.stringify({ success: false, message: 'Category not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        current[index] = { ...current[index], ...updateData };
+        await saveStoredCategories(env, current);
+
+        return new Response(JSON.stringify({ success: true, category: current[index], categories: current }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      if (pathname.startsWith('/api/categories/') && request.method === 'DELETE') {
+        const id = decodeURIComponent(pathname.replace('/api/categories/', ''));
+        const current = await getStoredCategories(env);
+        const updated = current.filter(c => c.id !== id);
+
+        await saveStoredCategories(env, updated);
+
+        return new Response(JSON.stringify({ success: true, message: 'Category deleted', categories: updated }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 7. Admin Authentication
       if (pathname === '/api/admin/verify' && request.method === 'POST') {
         const { passcode } = await request.json() as any;
         const validPass = env.ADMIN_PASSCODE || cachedPasscode;
@@ -250,7 +432,7 @@ export default {
         );
       }
 
-      // 6. Admin Passcode Update
+      // 8. Admin Passcode Update
       if (pathname === '/api/admin/change-passcode' && request.method === 'POST') {
         const { currentPasscode, newPasscode } = await request.json() as any;
         const validPass = env.ADMIN_PASSCODE || cachedPasscode;
@@ -277,7 +459,7 @@ export default {
         });
       }
 
-      // 7. Products List (GET)
+      // 9. Products List (GET)
       if (pathname === '/api/products' && request.method === 'GET') {
         const category = url.searchParams.get('category');
         const search = url.searchParams.get('search');
@@ -320,7 +502,7 @@ export default {
         });
       }
 
-      // 8. Single Product (GET)
+      // 10. Single Product (GET)
       if (pathname.startsWith('/api/products/') && request.method === 'GET') {
         const id = pathname.replace('/api/products/', '');
         const allProducts = await getStoredProducts(env);
@@ -338,7 +520,7 @@ export default {
         });
       }
 
-      // 9. Create Product (POST)
+      // 11. Create Product (POST)
       if (pathname === '/api/products' && request.method === 'POST') {
         const data: any = await request.json();
         if (!data.title || !data.category || data.price === undefined) {
@@ -391,7 +573,7 @@ export default {
         });
       }
 
-      // 10. Update Product (PUT)
+      // 12. Update Product (PUT)
       if (pathname.startsWith('/api/products/') && request.method === 'PUT') {
         const id = pathname.replace('/api/products/', '');
         const updateData: any = await request.json();
@@ -424,7 +606,7 @@ export default {
         });
       }
 
-      // 11. Delete Product (DELETE)
+      // 13. Delete Product (DELETE)
       if (pathname.startsWith('/api/products/') && request.method === 'DELETE') {
         const id = pathname.replace('/api/products/', '');
         const allProducts = await getStoredProducts(env);
@@ -445,7 +627,7 @@ export default {
         });
       }
 
-      // 12. Orders (GET & POST)
+      // 14. Orders (GET & POST)
       if (pathname === '/api/orders') {
         if (request.method === 'GET') {
           const orders = await getStoredOrders(env);
@@ -510,19 +692,19 @@ export default {
         }
       }
 
-      // 13. Admin Store Stats
+      // 15. Admin Store Stats
       if (pathname === '/api/stats' && request.method === 'GET') {
         const products = await getStoredProducts(env);
         const orders = await getStoredOrders(env);
+        const categories = await getStoredCategories(env);
 
-        const categoriesSet = new Set(products.map((p) => p.category));
         const inStockCount = products.filter((p) => p.inStock && p.stockCount > 0).length;
         const totalInventoryValue = products.reduce((acc, p) => acc + p.price * p.stockCount, 0);
         const totalRevenue = orders.reduce((acc, o) => acc + o.totalAmount, 0);
 
         const stats: StoreStats = {
           totalProducts: products.length,
-          totalCategories: categoriesSet.size,
+          totalCategories: categories.length,
           inStockCount,
           totalOrders: orders.length,
           totalRevenue,
@@ -539,16 +721,26 @@ export default {
         });
       }
 
-      // 14. Reset / Seed Catalog
+      // 16. Reset / Seed Catalog
       if (pathname === '/api/seed' && request.method === 'POST') {
-        const fresh = [...INITIAL_JERSEYS];
-        await saveStoredProducts(env, fresh);
-        return new Response(JSON.stringify({ success: true, message: 'Store reset to default showcase catalog', count: fresh.length }), {
+        const freshProducts = [...INITIAL_JERSEYS];
+        const freshCategories = [...CATEGORY_CAROUSEL_ITEMS];
+        const freshSettings = { ...DEFAULT_SITE_SETTINGS };
+
+        await saveStoredProducts(env, freshProducts);
+        await saveStoredCategories(env, freshCategories);
+        await saveStoredSettings(env, freshSettings);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Store reset to default showcase catalog', 
+          count: freshProducts.length 
+        }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
 
-      // 15. Static Assets fallback for Cloudflare Pages / Workers
+      // 17. Static Assets fallback for Cloudflare Pages / Workers
       if (env.ASSETS) {
         return env.ASSETS.fetch(request);
       }

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Upload, Trash2, Edit3, Shield, Check, X, 
   RefreshCw, Layers, Database, Sparkles, Image as ImageIcon,
@@ -68,6 +68,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Editable Site Settings State (Local copy for live typing)
   const [localSettings, setLocalSettings] = useState<SiteSettings>(siteSettings);
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
+
+  useEffect(() => {
+    setLocalSettings(siteSettings);
+  }, [siteSettings]);
 
   // Product Form Fields
   const [formTitle, setFormTitle] = useState('');

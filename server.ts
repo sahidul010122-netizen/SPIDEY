@@ -2,12 +2,15 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { INITIAL_JERSEYS } from './src/data/mockJerseys.ts';
+import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './src/data/mockJerseys.ts';
 import { JerseyProduct, Order, StoreStats } from './src/types.ts';
+import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './src/types/settings.ts';
 
 // In-memory data store with disk persistence fallback
 let products: JerseyProduct[] = [...INITIAL_JERSEYS];
 let orders: Order[] = [];
+let siteSettings: SiteSettings = { ...DEFAULT_SITE_SETTINGS };
+let categoryItems: CategoryItem[] = [...CATEGORY_CAROUSEL_ITEMS];
 let adminPasscode = 'spidey2026';
 
 // Storage for uploaded images (key -> { data: Buffer/base64, mime: string, size: number })
@@ -20,7 +23,6 @@ interface StoredImage {
 }
 const imageStore = new Map<string, StoredImage>();
 
-// Initialize some sample upload keys if needed
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -45,7 +47,7 @@ async function startServer() {
       compatibilityDate: '2026-03-01',
       totalStoredImages: imageStore.size,
       storageMode: 'R2-Emulated-Node-Express',
-      deployCommand: 'npx wrangler pages deploy dist'
+      deployCommand: 'npx wrangler deploy'
     });
   });
 
@@ -61,12 +63,12 @@ async function startServer() {
     } else {
       res.status(401).json({
         success: false,
-        message: 'Invalid admin passcode. Default is "spidey2026"'
+        message: 'Invalid passcode. Default passcode is "spidey2026"'
       });
     }
   });
 
-  // Admin Change Passcode
+  // Change Admin Passcode
   app.post('/api/admin/change-passcode', (req: Request, res: Response) => {
     const { currentPasscode, newPasscode } = req.body;
     if (currentPasscode !== adminPasscode && currentPasscode !== 'spidey2026') {
@@ -76,20 +78,81 @@ async function startServer() {
       return res.status(400).json({ success: false, message: 'New passcode must be at least 4 characters' });
     }
     adminPasscode = newPasscode.trim();
-    res.json({ success: true, message: 'Passcode updated successfully' });
+    res.json({ success: true, message: 'Admin passcode updated successfully' });
   });
 
-  // Products List
+  // --- Site Settings (Hero Banner, Slogans, Logos) ---
+  app.get('/api/settings', (req: Request, res: Response) => {
+    res.json({ success: true, settings: siteSettings });
+  });
+
+  app.post('/api/settings', (req: Request, res: Response) => {
+    siteSettings = {
+      ...siteSettings,
+      ...req.body
+    };
+    res.json({ success: true, settings: siteSettings });
+  });
+
+  app.put('/api/settings', (req: Request, res: Response) => {
+    siteSettings = {
+      ...siteSettings,
+      ...req.body
+    };
+    res.json({ success: true, settings: siteSettings });
+  });
+
+  // --- Categories (Carousels, Logos, Subtitles) ---
+  app.get('/api/categories', (req: Request, res: Response) => {
+    res.json({ success: true, categories: categoryItems });
+  });
+
+  app.post('/api/categories', (req: Request, res: Response) => {
+    const body = req.body;
+    if (Array.isArray(body)) {
+      categoryItems = body;
+      return res.json({ success: true, categories: categoryItems });
+    } else if (body && body.id && body.name) {
+      const idx = categoryItems.findIndex(c => c.id === body.id);
+      if (idx >= 0) {
+        categoryItems[idx] = { ...categoryItems[idx], ...body };
+      } else {
+        categoryItems.push(body);
+      }
+      return res.status(201).json({ success: true, categories: categoryItems, category: body });
+    }
+    res.status(400).json({ success: false, message: 'Invalid category payload' });
+  });
+
+  app.put('/api/categories/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    const idx = categoryItems.findIndex(c => c.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: 'Category not found' });
+    }
+    categoryItems[idx] = { ...categoryItems[idx], ...req.body };
+    res.json({ success: true, category: categoryItems[idx], categories: categoryItems });
+  });
+
+  app.delete('/api/categories/:id', (req: Request, res: Response) => {
+    const id = req.params.id;
+    categoryItems = categoryItems.filter(c => c.id !== id);
+    res.json({ success: true, message: 'Category deleted', categories: categoryItems });
+  });
+
+  // --- Products Endpoints ---
+  // List Products with Filters
   app.get('/api/products', (req: Request, res: Response) => {
     const { category, search, sortBy, inStockOnly } = req.query;
+
     let list = [...products];
 
     if (category && category !== 'all') {
-      list = list.filter((p) => p.category.toLowerCase() === String(category).toLowerCase());
+      list = list.filter((p) => p.category.toLowerCase() === (category as string).toLowerCase());
     }
 
     if (search) {
-      const q = String(search).toLowerCase();
+      const q = (search as string).toLowerCase();
       list = list.filter(
         (p) =>
           p.title.toLowerCase().includes(q) ||
@@ -113,7 +176,6 @@ async function startServer() {
     } else if (sortBy === 'popular') {
       list.sort((a, b) => b.reviewCount - a.reviewCount);
     } else {
-      // Default: newest first
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
@@ -216,7 +278,6 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'base64Data is required' });
       }
 
-      // Clean base64 data
       let cleanData = base64Data;
       let mime = contentType || 'image/jpeg';
 
@@ -228,8 +289,8 @@ async function startServer() {
       }
 
       const extension = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
-      const cleanFilename = (filename || 'jersey').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const key = `jerseys/${Date.now()}-${cleanFilename}.${extension}`;
+      const cleanFilename = (filename || 'image').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const key = `uploads/${Date.now()}-${cleanFilename}.${extension}`;
 
       const buffer = Buffer.from(cleanData, 'base64');
 
@@ -241,7 +302,6 @@ async function startServer() {
         uploadedAt: new Date().toISOString()
       });
 
-      // Construct public URL
       const imageUrl = `/api/images/${encodeURIComponent(key)}`;
 
       res.json({
@@ -277,14 +337,13 @@ async function startServer() {
 
   // Admin Stats
   app.get('/api/stats', (req: Request, res: Response) => {
-    const categoriesSet = new Set(products.map((p) => p.category));
     const inStockCount = products.filter((p) => p.inStock && p.stockCount > 0).length;
     const totalInventoryValue = products.reduce((acc, p) => acc + p.price * p.stockCount, 0);
     const totalRevenue = orders.reduce((acc, o) => acc + o.totalAmount, 0);
 
     const stats: StoreStats = {
       totalProducts: products.length,
-      totalCategories: categoriesSet.size,
+      totalCategories: categoryItems.length,
       inStockCount,
       totalOrders: orders.length,
       totalRevenue,
@@ -350,6 +409,8 @@ async function startServer() {
   // Reset / Seed Catalog
   app.post('/api/seed', (req: Request, res: Response) => {
     products = [...INITIAL_JERSEYS];
+    categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+    siteSettings = { ...DEFAULT_SITE_SETTINGS };
     res.json({ success: true, message: 'Store reset to initial showcase jersey catalog', count: products.length });
   });
 
