@@ -57,17 +57,115 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
   const [isPrinting, setIsPrinting] = useState(false);
   const printableAreaRef = useRef<HTMLDivElement | null>(null);
 
-  // Direct bulletproof print trigger
+  // Direct bulletproof print trigger using an isolated clean print frame
   const handlePrint = () => {
+    if (!printableAreaRef.current) return;
     setIsPrinting(true);
+
     try {
-      window.focus();
-      window.print();
-      setIsPrinting(false);
+      // Create an invisible iframe exclusively for printing invoices
+      const printIframe = document.createElement('iframe');
+      printIframe.name = 'invoice-print-frame';
+      printIframe.style.position = 'fixed';
+      printIframe.style.top = '-9999px';
+      printIframe.style.left = '-9999px';
+      printIframe.style.width = '0px';
+      printIframe.style.height = '0px';
+      printIframe.style.border = 'none';
+      printIframe.style.opacity = '0';
+      document.body.appendChild(printIframe);
+
+      const contentHtml = printableAreaRef.current.innerHTML;
+      const frameDoc = printIframe.contentWindow?.document || printIframe.contentDocument;
+
+      if (!frameDoc || !printIframe.contentWindow) {
+        throw new Error('Could not access print iframe document');
+      }
+
+      frameDoc.open();
+      frameDoc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Invoices Print</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              @page {
+                size: ${printLayout === 'a4_grid' ? 'A4 portrait' : '80mm auto'};
+                margin: 4mm;
+              }
+              *, *::before, *::after {
+                box-sizing: border-box !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                box-shadow: none !important;
+                text-shadow: none !important;
+              }
+              html, body {
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              }
+              .invoice-grid-container {
+                display: ${printLayout === 'a4_grid' ? 'grid' : 'flex'};
+                ${printLayout === 'a4_grid' ? 'grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;' : 'flex-direction: column; gap: 8px; align-items: center;'}
+                width: 100%;
+                max-width: 200mm;
+                margin: 0 auto;
+                padding: 2px;
+              }
+              .compact-thermal-slip {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+                margin: 4px auto !important;
+                border: 1.5px solid #171717 !important;
+                background: #ffffff !important;
+                background-color: #ffffff !important;
+                box-shadow: none !important;
+                border-radius: 12px !important;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="invoice-grid-container">
+              ${contentHtml}
+            </div>
+          </body>
+        </html>
+      `);
+      frameDoc.close();
+
+      // Trigger print after Tailwind styles and barcodes are ready
+      setTimeout(() => {
+        try {
+          printIframe.contentWindow?.focus();
+          printIframe.contentWindow?.print();
+        } catch (err) {
+          console.warn('Iframe print failed, falling back to window.print:', err);
+          window.print();
+        } finally {
+          setIsPrinting(false);
+          // Cleanup iframe after a minute
+          setTimeout(() => {
+            try {
+              if (document.body.contains(printIframe)) {
+                document.body.removeChild(printIframe);
+              }
+            } catch (e) {}
+          }, 60000);
+        }
+      }, 400);
+
     } catch (e) {
-      console.warn('Native window.print was restricted by iframe:', e);
-      handlePrintInNewWindow();
+      console.warn('Isolated frame printing failed:', e);
       setIsPrinting(false);
+      window.print();
     }
   };
 
