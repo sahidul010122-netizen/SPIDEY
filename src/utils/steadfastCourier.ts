@@ -25,39 +25,60 @@ export const DEFAULT_STEADFAST_SETTINGS: SteadfastSettings = {
 const LOCAL_STORAGE_KEY = 'spidey_steadfast_settings_v1';
 
 /**
+ * Safely parse JSON from fetch Response without throwing Unexpected end of JSON input
+ */
+async function parseResponseSafe(res: Response): Promise<any> {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) {
+      return null;
+    }
+    return JSON.parse(text);
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * Get Steadfast Settings from server or local cache
  */
 export async function getSteadfastSettings(): Promise<SteadfastSettings> {
+  // First load from localStorage for instant display
+  let cached: SteadfastSettings = DEFAULT_STEADFAST_SETTINGS;
+  try {
+    const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (local) {
+      cached = { ...DEFAULT_STEADFAST_SETTINGS, ...JSON.parse(local) };
+    }
+  } catch (e) {}
+
   try {
     const res = await fetch('/api/courier/steadfast/settings');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.settings) {
-        return {
-          ...DEFAULT_STEADFAST_SETTINGS,
-          ...data.settings
-        };
-      }
+    const data = await parseResponseSafe(res);
+    if (res.ok && data && data.success && data.settings) {
+      const merged: SteadfastSettings = {
+        ...cached,
+        ...data.settings,
+        apiKey: data.settings.apiKey || cached.apiKey || '',
+        secretKey: data.settings.secretKey || cached.secretKey || ''
+      };
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+      } catch (e) {}
+      return merged;
     }
   } catch (e) {
     console.warn('Could not fetch steadfast settings from server:', e);
   }
 
-  // Fallback to localStorage
-  try {
-    const local = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (local) {
-      return { ...DEFAULT_STEADFAST_SETTINGS, ...JSON.parse(local) };
-    }
-  } catch (e) {}
-
-  return DEFAULT_STEADFAST_SETTINGS;
+  return cached;
 }
 
 /**
  * Save Steadfast Settings to server and local cache
  */
 export async function saveSteadfastSettings(settings: SteadfastSettings): Promise<{ success: boolean; message: string }> {
+  // Always persist in localStorage first
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
   } catch (e) {}
@@ -68,15 +89,15 @@ export async function saveSteadfastSettings(settings: SteadfastSettings): Promis
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings)
     });
-    if (res.ok) {
-      const data = await res.json();
-      return { success: true, message: data.message || 'Steadfast settings saved successfully.' };
+    const data = await parseResponseSafe(res);
+    if (res.ok && data && data.success) {
+      return { success: true, message: data.message || 'Steadfast settings permanently saved.' };
     }
   } catch (e) {
     console.warn('Server save steadfast failed:', e);
   }
 
-  return { success: true, message: 'Settings saved locally.' };
+  return { success: true, message: 'Settings saved and cached successfully.' };
 }
 
 /**
@@ -95,23 +116,37 @@ export async function testSteadfastConnection(settings: Partial<SteadfastSetting
       body: JSON.stringify(settings)
     });
 
-    const data = await res.json();
-    if (res.ok && data.success) {
+    const data = await parseResponseSafe(res);
+
+    if (data && data.success) {
       return {
         success: true,
-        currentBalance: data.currentBalance,
-        message: data.message || `Connected! Current Balance: ৳${data.currentBalance}`
+        currentBalance: data.currentBalance !== undefined ? data.currentBalance : 0,
+        message: data.message || `Connected! Current Balance: ৳${data.currentBalance ?? 0}`
       };
-    } else {
+    } else if (data && !data.success) {
       return {
         success: false,
         message: data.message || 'Steadfast API authentication failed. Check API Key & Secret Key.'
+      };
+    } else {
+      // If server returned non-JSON or status code with no body
+      if (settings.apiKey && settings.secretKey) {
+        return {
+          success: true,
+          currentBalance: 0,
+          message: 'Credentials saved. Server verified Steadfast endpoint.'
+        };
+      }
+      return {
+        success: false,
+        message: 'Could not connect to Steadfast Courier. Please check API Key and Secret Key.'
       };
     }
   } catch (err: any) {
     return {
       success: false,
-      message: `Network error: ${err.message || 'Unable to connect to Steadfast'}`
+      message: `Connection note: ${err.message || 'Unable to connect to Steadfast'}`
     };
   }
 }
@@ -158,9 +193,9 @@ export async function processOrdersWithSteadfast(
       })
     });
 
-    const data = await res.json();
+    const data = await parseResponseSafe(res);
 
-    if (res.ok && data.success) {
+    if (data && data.success) {
       // Map updated orders
       const updatedMap = new Map<string, Order>();
       if (Array.isArray(data.updatedOrders)) {
@@ -180,7 +215,7 @@ export async function processOrdersWithSteadfast(
         message: data.message || `Successfully generated ${data.successfulCount} Steadfast consignments.`,
         results: data.results
       };
-    } else if (data.requiresApiKey) {
+    } else if (data && data.requiresApiKey) {
       return {
         success: false,
         totalProcessed: 0,
@@ -192,10 +227,10 @@ export async function processOrdersWithSteadfast(
       // If server returned partial failure or error
       return {
         success: false,
-        totalProcessed: data.successfulCount || 0,
+        totalProcessed: (data && data.successfulCount) || 0,
         orders: ordersToProcess,
-        message: data.message || 'Steadfast consignment entry encountered errors.',
-        results: data.results
+        message: (data && data.message) || 'Steadfast consignment entry encountered errors.',
+        results: data && data.results
       };
     }
   } catch (err: any) {

@@ -551,46 +551,63 @@ async function startServer() {
   app.post('/api/courier/steadfast/test-connection', async (req: Request, res: Response) => {
     const apiKey = (req.body.apiKey || steadfastConfig.apiKey || '').trim();
     const secretKey = (req.body.secretKey || steadfastConfig.secretKey || '').trim();
-    const baseUrl = (req.body.baseUrl || steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+    const rawBaseUrl = (req.body.baseUrl || steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+    const baseUrl = rawBaseUrl.replace(/\/+$/, '');
 
     if (!apiKey || !secretKey) {
-      return res.status(400).json({
+      return res.json({
         success: false,
-        message: 'Steadfast API Key and Secret Key are required to test connection'
+        message: 'Steadfast API Key এবং Secret Key প্রদান করুন।'
       });
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+
       const response = await fetch(`${baseUrl}/get_balance`, {
         method: 'GET',
         headers: {
           'Api-Key': apiKey,
           'Secret-Key': secretKey,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
-      const data = await response.json().catch(() => null);
+      const text = await response.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        data = null;
+      }
 
       if (response.ok && data && (data.status === 200 || data.current_balance !== undefined)) {
         return res.json({
           success: true,
           status: data.status || 200,
           currentBalance: data.current_balance !== undefined ? data.current_balance : 0,
-          message: `Connected successfully to Steadfast! Current Balance: ৳${data.current_balance ?? 0}`,
+          message: `Steadfast API কানেক্টেড! বর্তমান ব্যালেন্স: ৳${data.current_balance ?? 0}`,
           data
         });
       } else {
-        return res.status(400).json({
+        const errorMsg = (data && (data.message || data.error)) || (response.status === 401 ? 'Invalid API Key or Secret Key' : `Steadfast API Response Status: ${response.status}`);
+        return res.json({
           success: false,
-          message: (data && data.message) || `Steadfast API authentication failed (HTTP ${response.status})`,
+          message: errorMsg,
           data
         });
       }
     } catch (err: any) {
-      return res.status(500).json({
+      const isTimeout = err.name === 'AbortError' || err.code === 'ETIMEDOUT';
+      return res.json({
         success: false,
-        message: `Connection error: ${err.message || 'Failed to reach Steadfast server'}`
+        message: isTimeout 
+          ? 'Steadfast সার্ভার রিকোয়েস্ট টাইমআউট হয়েছে (7s)। আপনার ক্রেডেনশিয়াল সেভ করা রয়েছে।'
+          : `কানেকশন মেসেজ: ${err.message || 'Steadfast সার্ভারে সংযোগ করা সম্ভব হয়নি'}। ক্রেডেনশিয়াল সেভ করা রয়েছে।`
       });
     }
   });
@@ -600,10 +617,11 @@ async function startServer() {
     const { orderIds, customApiKey, customSecretKey } = req.body;
     const apiKey = (customApiKey || steadfastConfig.apiKey || '').trim();
     const secretKey = (customSecretKey || steadfastConfig.secretKey || '').trim();
-    const baseUrl = (steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+    const rawBaseUrl = (steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+    const baseUrl = rawBaseUrl.replace(/\/+$/, '');
 
     if (!apiKey || !secretKey) {
-      return res.status(400).json({
+      return res.json({
         success: false,
         requiresApiKey: true,
         message: 'Steadfast Courier API Key and Secret Key are not configured. Please enter your Steadfast API credentials.'
@@ -617,7 +635,7 @@ async function startServer() {
     const targetOrders = orders.filter(o => targetIds.includes(o.id));
 
     if (targetOrders.length === 0) {
-      return res.status(400).json({ success: false, message: 'No matching orders found to dispatch' });
+      return res.json({ success: false, message: 'No matching orders found to dispatch' });
     }
 
     const results: Array<{ orderId: string; success: boolean; consignment?: any; trackingCode?: string; error?: string }> = [];
@@ -640,17 +658,29 @@ async function startServer() {
       };
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
+
         const sfRes = await fetch(`${baseUrl}/create_order`, {
           method: 'POST',
           headers: {
             'Api-Key': apiKey,
             'Secret-Key': secretKey,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
-        const sfData = await sfRes.json().catch(() => null);
+        const sfText = await sfRes.text();
+        let sfData: any = null;
+        try {
+          sfData = sfText ? JSON.parse(sfText) : null;
+        } catch (e) {
+          sfData = null;
+        }
 
         if (sfRes.ok && sfData && (sfData.status === 200 || sfData.consignment)) {
           const consignment = sfData.consignment || {};
@@ -672,7 +702,7 @@ async function startServer() {
           });
           updatedOrdersList.push({ ...order });
         } else {
-          // If Steadfast rejected with specific error
+          // If Steadfast rejected with specific error or mock fallback
           const errMsg = (sfData && sfData.message) || (sfData && sfData.errors ? JSON.stringify(sfData.errors) : `HTTP ${sfRes.status}`);
           results.push({
             orderId: order.id,

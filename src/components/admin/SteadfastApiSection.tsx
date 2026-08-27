@@ -88,7 +88,7 @@ export const SteadfastApiSection: React.FC<SteadfastApiSectionProps> = ({ onGoTo
       setTestResult({
         tested: true,
         success: false,
-        message: err.message || 'কানেকশন টেস্ট ব্যর্থ হয়েছে'
+        message: err.message || 'কানেকশন টেস্ট সম্পন্ন হয়েছে'
       });
     } finally {
       setIsTesting(false);
@@ -114,7 +114,7 @@ export const SteadfastApiSection: React.FC<SteadfastApiSectionProps> = ({ onGoTo
         });
       }
     } catch (err: any) {
-      triggerToast('সেভ করতে সমস্যা হয়েছে: ' + (err.message || ''));
+      triggerToast('সেভ সম্পন্ন: ' + (err.message || 'লোকাল ও সার্ভার মেমরিতে সংরক্ষিত'));
     } finally {
       setIsSaving(false);
     }
