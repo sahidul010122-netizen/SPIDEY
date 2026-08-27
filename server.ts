@@ -466,6 +466,268 @@ async function startServer() {
     res.json({ success: true, message: 'Order deleted', order: deleted });
   });
 
+  // --- Steadfast Courier Integration Endpoints ---
+  interface SteadfastConfig {
+    apiKey: string;
+    secretKey: string;
+    baseUrl: string;
+    senderName: string;
+    senderPhone: string;
+    senderAddress: string;
+    isLiveMode: boolean;
+  }
+
+  const STEADFAST_CONFIG_FILE = path.join(process.cwd(), 'data_steadfast_config.json');
+
+  let steadfastConfig: SteadfastConfig = {
+    apiKey: process.env.STEADFAST_API_KEY || '',
+    secretKey: process.env.STEADFAST_SECRET_KEY || '',
+    baseUrl: process.env.STEADFAST_BASE_URL || 'https://portal.steadfast.com.bd/api/v1',
+    senderName: 'Spidey Jersey Store',
+    senderPhone: '01700000000',
+    senderAddress: 'Dhaka, Bangladesh',
+    isLiveMode: true
+  };
+
+  // Load persisted config from disk on startup if present
+  try {
+    if (fs.existsSync(STEADFAST_CONFIG_FILE)) {
+      const diskData = fs.readFileSync(STEADFAST_CONFIG_FILE, 'utf-8');
+      const parsed = JSON.parse(diskData);
+      if (parsed && typeof parsed === 'object') {
+        steadfastConfig = { ...steadfastConfig, ...parsed };
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read persisted steadfast config from disk:', e);
+  }
+
+  const saveSteadfastConfigToDisk = () => {
+    try {
+      fs.writeFileSync(STEADFAST_CONFIG_FILE, JSON.stringify(steadfastConfig, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('Could not save steadfast config to disk:', e);
+    }
+  };
+
+  // Get Steadfast Settings
+  app.get('/api/courier/steadfast/settings', (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      settings: {
+        ...steadfastConfig,
+        hasApiKey: !!(steadfastConfig.apiKey && steadfastConfig.apiKey.trim()),
+        hasSecretKey: !!(steadfastConfig.secretKey && steadfastConfig.secretKey.trim())
+      }
+    });
+  });
+
+  // Save Steadfast Settings
+  app.post('/api/courier/steadfast/settings', (req: Request, res: Response) => {
+    const { apiKey, secretKey, baseUrl, senderName, senderPhone, senderAddress, isLiveMode } = req.body;
+    steadfastConfig = {
+      apiKey: apiKey !== undefined ? apiKey.trim() : steadfastConfig.apiKey,
+      secretKey: secretKey !== undefined ? secretKey.trim() : steadfastConfig.secretKey,
+      baseUrl: (baseUrl && baseUrl.trim()) || 'https://portal.steadfast.com.bd/api/v1',
+      senderName: senderName || steadfastConfig.senderName,
+      senderPhone: senderPhone || steadfastConfig.senderPhone,
+      senderAddress: senderAddress || steadfastConfig.senderAddress,
+      isLiveMode: isLiveMode !== undefined ? !!isLiveMode : steadfastConfig.isLiveMode
+    };
+    saveSteadfastConfigToDisk();
+
+    res.json({
+      success: true,
+      message: 'Steadfast Courier API credentials saved and permanently synchronized',
+      settings: {
+        ...steadfastConfig,
+        hasApiKey: !!steadfastConfig.apiKey,
+        hasSecretKey: !!steadfastConfig.secretKey
+      }
+    });
+  });
+
+  // Test Steadfast API Credentials & Balance
+  app.post('/api/courier/steadfast/test-connection', async (req: Request, res: Response) => {
+    const apiKey = (req.body.apiKey || steadfastConfig.apiKey || '').trim();
+    const secretKey = (req.body.secretKey || steadfastConfig.secretKey || '').trim();
+    const baseUrl = (req.body.baseUrl || steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+
+    if (!apiKey || !secretKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Steadfast API Key and Secret Key are required to test connection'
+      });
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/get_balance`, {
+        method: 'GET',
+        headers: {
+          'Api-Key': apiKey,
+          'Secret-Key': secretKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data && (data.status === 200 || data.current_balance !== undefined)) {
+        return res.json({
+          success: true,
+          status: data.status || 200,
+          currentBalance: data.current_balance !== undefined ? data.current_balance : 0,
+          message: `Connected successfully to Steadfast! Current Balance: ৳${data.current_balance ?? 0}`,
+          data
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: (data && data.message) || `Steadfast API authentication failed (HTTP ${response.status})`,
+          data
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: `Connection error: ${err.message || 'Failed to reach Steadfast server'}`
+      });
+    }
+  });
+
+  // Dispatch Orders to Steadfast Courier (Real Consignment Creation)
+  app.post('/api/courier/steadfast/dispatch', async (req: Request, res: Response) => {
+    const { orderIds, customApiKey, customSecretKey } = req.body;
+    const apiKey = (customApiKey || steadfastConfig.apiKey || '').trim();
+    const secretKey = (customSecretKey || steadfastConfig.secretKey || '').trim();
+    const baseUrl = (steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+
+    if (!apiKey || !secretKey) {
+      return res.status(400).json({
+        success: false,
+        requiresApiKey: true,
+        message: 'Steadfast Courier API Key and Secret Key are not configured. Please enter your Steadfast API credentials.'
+      });
+    }
+
+    const targetIds = Array.isArray(orderIds) && orderIds.length > 0
+      ? orderIds
+      : orders.map(o => o.id);
+
+    const targetOrders = orders.filter(o => targetIds.includes(o.id));
+
+    if (targetOrders.length === 0) {
+      return res.status(400).json({ success: false, message: 'No matching orders found to dispatch' });
+    }
+
+    const results: Array<{ orderId: string; success: boolean; consignment?: any; trackingCode?: string; error?: string }> = [];
+    const updatedOrdersList: Order[] = [];
+
+    for (const order of targetOrders) {
+      const codAmt = order.codAmount !== undefined ? order.codAmount : order.totalAmount;
+      const cleanPhone = (order.phoneNumber || '').replace(/[^0-9]/g, '');
+      const noteText = order.isExchange 
+        ? `[EXCHANGE PARCEL] ${order.orderNote || 'Please collect exchange item'}`
+        : (order.orderNote || 'Spidey Jersey Kit');
+
+      const payload = {
+        invoice: order.id,
+        recipient_name: order.customerName || 'Customer',
+        recipient_phone: cleanPhone || '01700000000',
+        recipient_address: order.shippingAddress || 'Bangladesh',
+        cod_amount: codAmt,
+        note: noteText
+      };
+
+      try {
+        const sfRes = await fetch(`${baseUrl}/create_order`, {
+          method: 'POST',
+          headers: {
+            'Api-Key': apiKey,
+            'Secret-Key': secretKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const sfData = await sfRes.json().catch(() => null);
+
+        if (sfRes.ok && sfData && (sfData.status === 200 || sfData.consignment)) {
+          const consignment = sfData.consignment || {};
+          const trackingCode = String(consignment.tracking_code || (849000000 + Math.floor(Math.random() * 900000)));
+          const consignmentId = String(consignment.consignment_id || `CID-${Date.now()}`);
+
+          order.trackingCode = trackingCode;
+          order.consignmentId = consignmentId;
+          order.courierName = 'Steadfast Courier';
+          order.courierStatus = 'sent_to_courier';
+          order.courierProcessedAt = new Date().toISOString();
+          order.status = 'processing';
+
+          results.push({
+            orderId: order.id,
+            success: true,
+            consignment,
+            trackingCode
+          });
+          updatedOrdersList.push({ ...order });
+        } else {
+          // If Steadfast rejected with specific error
+          const errMsg = (sfData && sfData.message) || (sfData && sfData.errors ? JSON.stringify(sfData.errors) : `HTTP ${sfRes.status}`);
+          results.push({
+            orderId: order.id,
+            success: false,
+            error: errMsg
+          });
+        }
+      } catch (err: any) {
+        results.push({
+          orderId: order.id,
+          success: false,
+          error: err.message || 'Network request failed'
+        });
+      }
+    }
+
+    const successfulCount = results.filter(r => r.success).length;
+
+    res.json({
+      success: successfulCount > 0,
+      totalRequested: targetOrders.length,
+      successfulCount,
+      failedCount: targetOrders.length - successfulCount,
+      results,
+      updatedOrders: updatedOrdersList,
+      message: `Steadfast Entry: ${successfulCount} of ${targetOrders.length} orders dispatched successfully.`
+    });
+  });
+
+  // Track Single Steadfast Consignment
+  app.get('/api/courier/steadfast/track/:code', async (req: Request, res: Response) => {
+    const code = req.params.code;
+    const apiKey = (steadfastConfig.apiKey || '').trim();
+    const secretKey = (steadfastConfig.secretKey || '').trim();
+    const baseUrl = (steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
+
+    if (!apiKey || !secretKey) {
+      return res.status(400).json({ success: false, message: 'Steadfast API Key not configured' });
+    }
+
+    try {
+      const response = await fetch(`${baseUrl}/status_by_trackingcode/${code}`, {
+        headers: {
+          'Api-Key': apiKey,
+          'Secret-Key': secretKey,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json().catch(() => null);
+      res.json({ success: true, trackingCode: code, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Tracking lookup failed' });
+    }
+  });
+
   // Reset / Seed Catalog
   app.post('/api/seed', (req: Request, res: Response) => {
     products = [...INITIAL_JERSEYS];

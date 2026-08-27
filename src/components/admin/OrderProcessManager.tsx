@@ -22,7 +22,15 @@ import {
   Sparkles,
   Layers,
   ArrowUpDown,
-  Filter
+  Filter,
+  Key,
+  Lock,
+  Eye,
+  EyeOff,
+  Coins,
+  CheckCircle,
+  XCircle,
+  HelpCircle
 } from 'lucide-react';
 import { JerseyProduct, Order, CartItem } from '../../types';
 import { SiteSettings } from '../../types/settings';
@@ -34,6 +42,9 @@ import {
 } from '../../utils/bulkOrderParser';
 import { 
   processOrdersWithSteadfast, 
+  getSteadfastSettings,
+  saveSteadfastSettings,
+  testSteadfastConnection,
   DEFAULT_STEADFAST_SETTINGS, 
   SteadfastSettings 
 } from '../../utils/steadfastCourier';
@@ -44,6 +55,7 @@ interface OrderProcessManagerProps {
   products: JerseyProduct[];
   siteSettings: SiteSettings;
   onRefreshStats?: () => void;
+  onNavigateToSteadfastApi?: () => void;
 }
 
 const SAMPLE_BULK_TEXT = `Name: YASIN
@@ -79,7 +91,8 @@ Amount: 1350৳
 export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   products,
   siteSettings,
-  onRefreshStats
+  onRefreshStats,
+  onNavigateToSteadfastApi
 }) => {
   // Master persistent saved orders list
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
@@ -101,10 +114,35 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'courier_sent' | 'exchange'>('all');
 
-  // Steadfast Courier API Configuration Modal
+  // Steadfast Courier API Configuration & Dispatch State
   const [isSteadfastModalOpen, setIsSteadfastModalOpen] = useState(false);
   const [steadfastSettings, setSteadfastSettings] = useState<SteadfastSettings>(DEFAULT_STEADFAST_SETTINGS);
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string; balance?: number } | null>(null);
   const [isProcessingCourier, setIsProcessingCourier] = useState(false);
+  const [dispatchResultModal, setDispatchResultModal] = useState<{
+    isOpen: boolean;
+    results: Array<{ orderId: string; success: boolean; consignment?: any; trackingCode?: string; error?: string }>;
+    successCount: number;
+    failedCount: number;
+    message: string;
+  } | null>(null);
+
+  // Load Steadfast settings from backend / cache on mount & focus
+  useEffect(() => {
+    const refreshSettings = () => {
+      getSteadfastSettings().then(settings => {
+        if (settings) {
+          setSteadfastSettings(settings);
+        }
+      });
+    };
+
+    refreshSettings();
+    window.addEventListener('focus', refreshSettings);
+    return () => window.removeEventListener('focus', refreshSettings);
+  }, []);
 
   // Print Mode State (Thermal / A4 Batch)
   const [ordersToPrint, setOrdersToPrint] = useState<Order[] | null>(null);
@@ -333,8 +371,61 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     });
   };
 
+  // Test Connection to Steadfast API
+  const handleTestSteadfastConnection = async () => {
+    if (!steadfastSettings.apiKey || !steadfastSettings.apiKey.trim() || !steadfastSettings.secretKey || !steadfastSettings.secretKey.trim()) {
+      setConnectionTestResult({
+        success: false,
+        message: 'Please provide both API Key and Secret Key first.'
+      });
+      return;
+    }
+
+    setIsTestingConnection(true);
+    setConnectionTestResult(null);
+    try {
+      const res = await testSteadfastConnection(steadfastSettings);
+      setConnectionTestResult(res);
+      if (res.success) {
+        showToast(`Steadfast Connected! Balance: ৳${res.currentBalance ?? 0}`);
+      } else {
+        showToast(res.message);
+      }
+    } catch (err: any) {
+      setConnectionTestResult({
+        success: false,
+        message: err.message || 'Connection test failed'
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  // Save Steadfast Settings
+  const handleSaveSteadfastSettings = async () => {
+    const res = await saveSteadfastSettings(steadfastSettings);
+    showToast(res.message);
+    setIsSteadfastModalOpen(false);
+  };
+
   // Trigger Steadfast Courier Bulk Dispatch
-  const handleProcessSteadfastCourier = async () => {
+  const handleProcessSteadfastCourier = async (customConfig?: SteadfastSettings) => {
+    const activeConfig = customConfig || steadfastSettings;
+    const hasKey = !!(activeConfig.apiKey && activeConfig.apiKey.trim());
+    const hasSecret = !!(activeConfig.secretKey && activeConfig.secretKey.trim());
+
+    // Prompt user for API credentials if not yet set
+    if (!hasKey || !hasSecret) {
+      if (onNavigateToSteadfastApi) {
+        onNavigateToSteadfastApi();
+        showToast('⚠️ Steadfast API সেকশনে গিয়ে API Key ও Secret Key সেভ করুন।');
+      } else {
+        setIsSteadfastModalOpen(true);
+        showToast('⚠️ Steadfast Courier API Key ও Secret Key প্রদান করুন।');
+      }
+      return;
+    }
+
     const targetIds = selectedOrderIds.size > 0 
       ? Array.from(selectedOrderIds) 
       : savedOrders.map(o => o.id);
@@ -347,10 +438,16 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     setIsProcessingCourier(true);
     try {
       const targetOrders = savedOrders.filter(o => targetIds.includes(o.id));
-      const res = await processOrdersWithSteadfast(targetOrders, steadfastSettings);
+      const res = await processOrdersWithSteadfast(targetOrders, activeConfig);
 
-      if (res.success) {
-        // Update saved orders with assigned tracking numbers
+      if (res.requiresApiKey) {
+        setIsSteadfastModalOpen(true);
+        showToast(res.message);
+        return;
+      }
+
+      if (res.success || (res.results && res.results.length > 0)) {
+        // Update saved orders with assigned tracking numbers and consignment info
         setSavedOrders(prev => {
           return prev.map(o => {
             const updated = res.orders.find(u => u.id === o.id);
@@ -358,14 +455,32 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
           });
         });
 
-        showToast(`🚚 Steadfast Consignments Generated! ${res.totalProcessed} orders assigned 9-digit tracking numbers.`);
+        // Open Steadfast Dispatch Results Summary Modal
+        setDispatchResultModal({
+          isOpen: true,
+          results: res.results || [],
+          successCount: res.totalProcessed,
+          failedCount: res.results ? res.results.filter(r => !r.success).length : 0,
+          message: res.message
+        });
+
+        showToast(`🚚 Steadfast Consignments Entry: ${res.totalProcessed} orders processed successfully!`);
+      } else {
+        showToast(res.message || 'Steadfast consignment entry failed.');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Steadfast error:', e);
-      showToast('Error processing Steadfast consignments.');
+      showToast('Error processing Steadfast consignments: ' + (e.message || ''));
     } finally {
       setIsProcessingCourier(false);
     }
+  };
+
+  // Save settings & dispatch directly
+  const handleSaveAndDispatch = async () => {
+    await saveSteadfastSettings(steadfastSettings);
+    setIsSteadfastModalOpen(false);
+    await handleProcessSteadfastCourier(steadfastSettings);
   };
 
   // Open Batch Thermal / A4 Print View
@@ -799,9 +914,33 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                   {selectedOrderIds.size} Selected
                 </span>
               )}
+              {/* Steadfast API status pill */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onNavigateToSteadfastApi) {
+                    onNavigateToSteadfastApi();
+                  } else {
+                    setIsSteadfastModalOpen(true);
+                  }
+                }}
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  steadfastSettings.apiKey && steadfastSettings.secretKey
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 animate-pulse'
+                }`}
+                title="Click to manage Steadfast Courier API credentials in sidebar"
+              >
+                <Truck className="w-3 h-3" />
+                <span>
+                  {steadfastSettings.apiKey && steadfastSettings.secretKey
+                    ? 'Steadfast API Ready'
+                    : 'Setup Steadfast API'}
+                </span>
+              </button>
             </div>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Select orders to dispatch via Steadfast Courier API and print compact thermal / A4 batch invoices.
+              Select orders to dispatch directly via Steadfast Courier API and print compact thermal / A4 batch invoices.
             </p>
           </div>
 
@@ -812,14 +951,18 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
             <button
               type="button"
               disabled={isProcessingCourier || savedOrders.length === 0}
-              onClick={handleProcessSteadfastCourier}
+              onClick={() => handleProcessSteadfastCourier()}
               className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
               title="Process selected orders via Steadfast API and generate 9-digit tracking numbers"
             >
-              <Truck className="w-4 h-4 text-white" />
+              {isProcessingCourier ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <Truck className="w-4 h-4 text-white" />
+              )}
               <span>
                 {isProcessingCourier 
-                  ? 'Generating Steadfast...' 
+                  ? 'Connecting Steadfast...' 
                   : `Steadfast Courier (${selectedOrderIds.size > 0 ? selectedOrderIds.size : 'All'})`}
               </span>
             </button>
@@ -1057,12 +1200,34 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       {/* Steadfast 9-Digit Tracking */}
                       <td className="py-3 px-3">
                         {order.trackingCode ? (
-                          <div className="space-y-0.5">
-                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono font-black text-xs border border-emerald-300 block text-center">
-                              {order.trackingCode}
-                            </span>
-                            <span className="text-[9px] text-neutral-400 font-mono block text-center">
-                              Steadfast Verified
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono font-black text-xs border border-emerald-300 block text-center">
+                                {order.trackingCode}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard?.writeText(order.trackingCode || '');
+                                  showToast(`Copied tracking code: ${order.trackingCode}`);
+                                }}
+                                className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded"
+                                title="Copy 9-Digit Tracking Code"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                              <a
+                                href={`https://steadfast.com.bd/t/${order.trackingCode}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
+                                title="Track live on Steadfast Courier portal"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                            <span className="text-[9px] text-emerald-700 font-medium block">
+                              {order.consignmentId ? `CID: ${order.consignmentId}` : 'Steadfast Verified'}
                             </span>
                           </div>
                         ) : (
@@ -1122,72 +1287,284 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
           ========================================================================= */}
       {isSteadfastModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-neutral-200 space-y-4 animate-in fade-in">
-            <div className="flex items-center justify-between pb-2 border-b border-neutral-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                  <Truck className="w-4 h-4" />
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-neutral-200 space-y-5 animate-in fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-sm">
+                  <Truck className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-neutral-900">
-                  Steadfast Courier API Settings
-                </h3>
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-1.5">
+                    Steadfast Courier API Integration
+                    <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-mono">v1</span>
+                  </h3>
+                  <p className="text-[11px] text-neutral-500">
+                    Enter your merchant API credentials for automatic consignment booking.
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsSteadfastModalOpen(false)}
-                className="text-neutral-400 hover:text-neutral-600 text-xs font-bold"
+                className="text-neutral-400 hover:text-neutral-600 text-xs font-bold p-1"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            {/* Info Callout */}
+            <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-100 flex items-start gap-2.5 text-xs text-rose-900">
+              <Key className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold">Where to find your Steadfast API Credentials?</p>
+                <p className="text-[11px] text-rose-700 leading-relaxed">
+                  Log in to your <strong>Steadfast Courier Merchant Dashboard</strong> → Go to <strong>Settings / API</strong> → Copy your <strong>API Key</strong> and <strong>Secret Key</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-neutral-600 font-semibold mb-1">
-                  Steadfast API Key
+                <label className="block text-neutral-700 font-bold mb-1 flex items-center justify-between">
+                  <span>Steadfast API Key <span className="text-rose-500">*</span></span>
+                  <span className="text-[10px] text-neutral-400 font-normal">Header: Api-Key</span>
                 </label>
-                <input
-                  type="text"
-                  value={steadfastSettings.apiKey}
-                  onChange={(e) => setSteadfastSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono text-xs"
-                />
+                <div className="relative">
+                  <Key className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={steadfastSettings.apiKey}
+                    onChange={(e) => setSteadfastSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder="e.g. 7q8w9e0r1t2y3u4i5o6p..."
+                    className="w-full pl-9 pr-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono text-xs text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:border-rose-400"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-neutral-600 font-semibold mb-1">
-                  Steadfast Secret Key
+                <label className="block text-neutral-700 font-bold mb-1 flex items-center justify-between">
+                  <span>Steadfast Secret Key <span className="text-rose-500">*</span></span>
+                  <span className="text-[10px] text-neutral-400 font-normal">Header: Secret-Key</span>
                 </label>
-                <input
-                  type="password"
-                  value={steadfastSettings.secretKey}
-                  onChange={(e) => setSteadfastSettings(prev => ({ ...prev, secretKey: e.target.value }))}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono text-xs"
-                />
+                <div className="relative">
+                  <Lock className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showSecretKey ? 'text' : 'password'}
+                    value={steadfastSettings.secretKey}
+                    onChange={(e) => setSteadfastSettings(prev => ({ ...prev, secretKey: e.target.value }))}
+                    placeholder="e.g. sec_982318491029..."
+                    className="w-full pl-9 pr-9 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono text-xs text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:border-rose-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSecretKey(!showSecretKey)}
+                    className="p-1 text-neutral-400 hover:text-neutral-600 absolute right-2.5 top-1/2 -translate-y-1/2"
+                    title={showSecretKey ? 'Hide Secret' : 'Show Secret'}
+                  >
+                    {showSecretKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <div>
-                <label className="block text-neutral-600 font-semibold mb-1">
+                <label className="block text-neutral-700 font-bold mb-1">
                   API Endpoint Base URL
                 </label>
                 <input
                   type="text"
                   value={steadfastSettings.baseUrl}
                   onChange={(e) => setSteadfastSettings(prev => ({ ...prev, baseUrl: e.target.value }))}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono text-xs text-neutral-600"
+                  placeholder="https://portal.steadfast.com.bd/api/v1"
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono text-xs text-neutral-700 focus:bg-white focus:outline-none focus:border-neutral-300"
                 />
               </div>
 
-              <div className="pt-2">
+              {/* Connection Test Result Banner */}
+              {connectionTestResult && (
+                <div className={`p-3 rounded-2xl border text-xs flex items-center justify-between gap-2 ${
+                  connectionTestResult.success 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {connectionTestResult.success ? (
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    )}
+                    <span className="font-semibold">{connectionTestResult.message}</span>
+                  </div>
+                  {connectionTestResult.success && connectionTestResult.balance !== undefined && (
+                    <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 font-mono font-black rounded-lg text-xs">
+                      ৳{connectionTestResult.balance}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+                {/* Test Connection Button */}
                 <button
-                  onClick={() => {
-                    setIsSteadfastModalOpen(false);
-                    showToast('Steadfast settings saved.');
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-neutral-900 hover:bg-black text-white font-bold text-xs transition-all shadow-sm"
+                  type="button"
+                  disabled={isTestingConnection}
+                  onClick={handleTestSteadfastConnection}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs transition-all flex items-center justify-center gap-1.5"
                 >
-                  Save & Apply Settings
+                  {isTestingConnection ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Coins className="w-3.5 h-3.5 text-neutral-600" />
+                  )}
+                  <span>Test API & Balance</span>
+                </button>
+
+                {/* Save Credentials */}
+                <button
+                  type="button"
+                  onClick={handleSaveSteadfastSettings}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-900 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save Settings</span>
+                </button>
+
+                {/* Save & Dispatch */}
+                <button
+                  type="button"
+                  disabled={isProcessingCourier}
+                  onClick={handleSaveAndDispatch}
+                  className="w-full sm:flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>Save & Dispatch Selected</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          STEADFAST COURIER DISPATCH RESULT REPORT MODAL
+          ========================================================================= */}
+      {dispatchResultModal && dispatchResultModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-neutral-200 space-y-4 animate-in fade-in max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-900">
+                    Steadfast Courier Dispatch Complete
+                  </h3>
+                  <p className="text-[11px] text-neutral-500">
+                    {dispatchResultModal.successCount} orders successfully booked into Steadfast Courier.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDispatchResultModal(null)}
+                className="text-neutral-400 hover:text-neutral-600 text-xs font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Consignment List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {dispatchResultModal.results.map((res, idx) => {
+                const matchedOrder = savedOrders.find(o => o.id === res.orderId);
+                const tracking = res.trackingCode || matchedOrder?.trackingCode;
+                const consignmentId = res.consignment?.consignment_id || matchedOrder?.consignmentId;
+
+                return (
+                  <div 
+                    key={res.orderId || idx}
+                    className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs transition-all ${
+                      res.success 
+                        ? 'bg-neutral-50/80 border-neutral-200' 
+                        : 'bg-rose-50/70 border-rose-200'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-neutral-900">
+                          {res.orderId}
+                        </span>
+                        {res.success ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                            Booked
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Failed
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-neutral-600 text-[11px] mt-0.5">
+                        {matchedOrder?.customerName} • {matchedOrder?.phoneNumber}
+                      </div>
+                      {res.error && (
+                        <div className="text-rose-600 text-[10px] mt-0.5">
+                          Error: {res.error}
+                        </div>
+                      )}
+                    </div>
+
+                    {res.success && tracking && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <span className="font-mono font-black text-xs text-neutral-900 bg-white border border-neutral-200 px-2 py-1 rounded-lg block">
+                            {tracking}
+                          </span>
+                          {consignmentId && (
+                            <span className="text-[9px] text-neutral-400 font-mono block mt-0.5">
+                              CID: {consignmentId}
+                            </span>
+                          )}
+                        </div>
+                        <a
+                          href={`https://steadfast.com.bd/t/${tracking}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all"
+                          title="Track Live on Steadfast"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setDispatchResultModal(null)}
+                className="px-4 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDispatchResultModal(null);
+                  handleOpenBatchPrint();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-black text-white font-bold text-xs transition-all shadow-md flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Invoices with Steadfast Barcodes</span>
+              </button>
             </div>
           </div>
         </div>

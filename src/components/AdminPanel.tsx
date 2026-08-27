@@ -12,6 +12,7 @@ import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
 import { CurrencyCode, formatPrice, CURRENCY_RATES } from '../utils/currency';
 import { OrderProcessManager } from './admin/OrderProcessManager';
+import { SteadfastApiSection } from './admin/SteadfastApiSection';
 
 interface AdminPanelProps {
   products: JerseyProduct[];
@@ -48,7 +49,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   // Active Sidebar Menu Tab
   const [activeMenu, setActiveMenu] = useState<
-    'order_process' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
+    'order_process' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
   >('order_process');
 
   // Category Sub-filter Tab
@@ -394,6 +395,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </button>
 
+            {/* 2. Steadfast Courier API Configuration (Dedicated Sidebar Section) */}
+            <button
+              onClick={() => setActiveMenu('steadfast_api')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'steadfast_api'
+                  ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Truck className="w-4 h-4 text-rose-500" />
+                <span>Steadfast API</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'steadfast_api' ? 'bg-neutral-900 text-white font-bold' : 'bg-rose-500/20 text-rose-300'
+              }`}>
+                Auto Sync
+              </span>
+            </button>
+
             {/* Overview / Reports */}
             <button
               onClick={() => setActiveMenu('overview')}
@@ -546,6 +567,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight">
                 {activeMenu === 'order_process' && 'Order Process & Management System'}
+                {activeMenu === 'steadfast_api' && 'Steadfast Courier API Settings & Credentials'}
                 {activeMenu === 'overview' && 'Storefront Reports & Analytics'}
                 {activeMenu === 'categories' && 'Category Carousel & Logos Manager'}
                 {activeMenu === 'products' && 'Product Catalog & Inventory'}
@@ -554,9 +576,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {activeMenu === 'r2_storage' && 'Cloudflare R2 Storage Engine'}
               </h1>
               <p className="text-xs text-neutral-500 mt-1 font-medium">
-                {activeMenu === 'order_process' 
-                  ? 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'
-                  : 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
+                {activeMenu === 'order_process' && 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'}
+                {activeMenu === 'steadfast_api' && 'Configure and permanently save your Steadfast Courier Merchant API credentials for automated one-click order dispatching.'}
+                {activeMenu !== 'order_process' && activeMenu !== 'steadfast_api' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
               </p>
             </div>
 
@@ -582,11 +604,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               products={products}
               siteSettings={localSettings}
               onRefreshStats={onResetCatalog}
+              onNavigateToSteadfastApi={() => setActiveMenu('steadfast_api')}
+            />
+          )}
+
+          {/* TAB: STEADFAST COURIER API CONFIGURATION */}
+          {activeMenu === 'steadfast_api' && (
+            <SteadfastApiSection 
+              onGoToOrderProcess={() => setActiveMenu('order_process')}
             />
           )}
 
           {/* 3. FOUR METRIC SUMMARY CARDS (Shown on other tabs) */}
-          {activeMenu !== 'order_process' && (
+          {activeMenu !== 'order_process' && activeMenu !== 'steadfast_api' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* Card 1: Dark Solid Card with Sparkline */}
