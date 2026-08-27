@@ -95,29 +95,41 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
             <style>
               @page {
                 margin: 5mm;
-                size: auto;
+                size: A4 portrait;
               }
               *, *::before, *::after {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 color-adjust: exact !important;
+                box-shadow: none !important;
               }
-              body {
+              html, body {
                 background: #ffffff !important;
                 color: #000000 !important;
-                padding: 10px;
-                margin: 0;
+                padding: 0 !important;
+                margin: 0 !important;
                 font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
               }
               .compact-thermal-slip {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-                margin: 6px auto !important;
+                margin: 4px auto !important;
+                border: 1px solid #171717 !important;
+                background-color: #ffffff !important;
+              }
+              .a4-print-wrapper {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+                width: 100%;
+                max-width: 200mm;
+                margin: 0 auto;
+                padding: 8px;
               }
             </style>
           </head>
           <body>
-            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;">
+            <div class="a4-print-wrapper">
               ${contentHtml}
             </div>
             <script>
@@ -256,7 +268,7 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
       {/* =========================================================================
           PRINT CANVAS & INVOICE SLIPS
           ========================================================================= */}
-      <main className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 print:p-0 print:m-0 print:max-w-none flex flex-col items-center">
+      <main id="invoice-print-container" className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 print:p-0 print:m-0 print:max-w-none flex flex-col items-center">
         
         {/* Printable Grid Wrapper */}
         <div 
