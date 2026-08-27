@@ -87,3 +87,39 @@
 .img-smooth-zoom:hover {
   transform: scale(1.04);
 }
+
+/* Thermal & A4 Batch Invoice Print Media Queries */
+@media print {
+  @page {
+    margin: 5mm;
+    size: auto;
+  }
+
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  nav, header, aside, .print\:hidden {
+    display: none !important;
+  }
+
+  .compact-thermal-slip {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 4px auto !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+}
+
+

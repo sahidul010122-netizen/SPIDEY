@@ -6,6 +6,7 @@ export interface ColorTheme {
 
 export interface JerseyProduct {
   id: string;
+  code?: string; // e.g. SJ-CXYQD, SJ-C8MXU
   title: string;
   category: string;
   price: number;
@@ -42,13 +43,24 @@ export interface Order {
   items: CartItem[];
   customerName: string;
   customerEmail: string;
+  phoneNumber?: string;
   shippingAddress: string;
   paymentMethod: string;
+  isExchange?: boolean;
+  orderNote?: string;
+  orderType?: 'standard' | 'quick_form' | 'bulk_entry';
   subtotal: number;
   discount: number;
   shippingFee: number;
   totalAmount: number;
+  codAmount?: number;
   status: 'confirmed' | 'processing' | 'shipped' | 'delivered';
+  consignmentId?: string;
+  trackingCode?: string; // 9-digit Steadfast tracking code
+  courierStatus?: 'pending' | 'sent_to_courier' | 'in_transit' | 'delivered' | 'cancelled';
+  courierName?: string;
+  courierProcessedAt?: string;
+  invoiceNumber?: string;
   createdAt: string;
 }
 

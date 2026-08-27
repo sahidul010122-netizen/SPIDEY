@@ -478,6 +478,7 @@ export default {
           list = list.filter(
             (p) =>
               p.title.toLowerCase().includes(q) ||
+              p.code?.toLowerCase().includes(q) ||
               p.category.toLowerCase().includes(q) ||
               p.season.toLowerCase().includes(q) ||
               p.edition.toLowerCase().includes(q) ||
@@ -530,8 +531,11 @@ export default {
           });
         }
 
+        const autoCode = data.code || `SJ-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
         const newProduct: JerseyProduct = {
           id: `spidey-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          code: autoCode,
           title: data.title,
           category: data.category,
           price: Number(data.price),
@@ -548,7 +552,7 @@ export default {
             'High-definition thermal-bonded team emblem',
             'Tailored athletic performance fit'
           ],
-          sizes: Array.isArray(data.sizes) && data.sizes.length > 0 ? data.sizes : ['S', 'M', 'L', 'XL', '2XL'],
+          sizes: Array.isArray(data.sizes) && data.sizes.length > 0 ? data.sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
           inStock: data.inStock !== false,
           stockCount: data.stockCount !== undefined ? Number(data.stockCount) : 15,
           rating: 5.0,
@@ -592,6 +596,7 @@ export default {
           ...current,
           ...updateData,
           id: current.id,
+          code: updateData.code !== undefined ? updateData.code : current.code,
           price: updateData.price !== undefined ? Number(updateData.price) : current.price,
           originalPrice: updateData.originalPrice !== undefined ? (updateData.originalPrice ? Number(updateData.originalPrice) : undefined) : current.originalPrice,
           stockCount: updateData.stockCount !== undefined ? Number(updateData.stockCount) : current.stockCount,
@@ -637,7 +642,19 @@ export default {
         }
 
         if (request.method === 'POST') {
-          const { items, customerName, customerEmail, shippingAddress, paymentMethod, discount, shippingFee } = await request.json() as any;
+          const { 
+            items, 
+            customerName, 
+            customerEmail, 
+            phoneNumber,
+            shippingAddress, 
+            paymentMethod, 
+            isExchange,
+            orderNote,
+            orderType,
+            discount, 
+            shippingFee 
+          } = await request.json() as any;
 
           if (!items || !Array.isArray(items) || items.length === 0) {
             return new Response(JSON.stringify({ success: false, message: 'Cart items are required' }), {
@@ -655,9 +672,13 @@ export default {
             id: `SPIDEY-ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
             items,
             customerName: customerName || 'Guest Collector',
-            customerEmail: customerEmail || 'guest@spideyjersey.com',
+            customerEmail: customerEmail || (phoneNumber ? `${phoneNumber}@spideyorder.com` : 'guest@spideyjersey.com'),
+            phoneNumber: phoneNumber || undefined,
             shippingAddress: shippingAddress || '123 Cyber Way, Neo City',
-            paymentMethod: paymentMethod || 'Instant Crypto / Card',
+            paymentMethod: paymentMethod || 'COD (Cash On Delivery)',
+            isExchange: !!isExchange,
+            orderNote: orderNote || undefined,
+            orderType: orderType || 'quick_form',
             subtotal,
             discount: disc,
             shippingFee: ship,

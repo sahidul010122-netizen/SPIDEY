@@ -9,6 +9,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { WishlistModal } from './components/WishlistModal';
 import { R2DeploymentGuideModal } from './components/R2DeploymentGuideModal';
 import { AuthModal } from './components/AuthModal';
+import { PlaceOrderPage } from './components/PlaceOrderPage';
 import { JerseyProduct, StoreStats } from './types';
 import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './types/settings';
 import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './data/mockJerseys';
@@ -16,7 +17,7 @@ import { CurrencyCode } from './utils/currency';
 
 export default function App() {
   // Determine initial view from URL path
-  const getInitialView = (): 'showcase' | 'admin' => {
+  const getInitialView = (): 'showcase' | 'admin' | 'order' => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
@@ -24,14 +25,27 @@ export default function App() {
       if (path === '/admin' || path.startsWith('/admin') || search.includes('view=admin') || hash === '#/admin') {
         return 'admin';
       }
+      if (
+        path === '/place-order' || 
+        path.startsWith('/place-order') || 
+        path === '/order' || 
+        path.startsWith('/order') || 
+        search.includes('view=order') || 
+        search.includes('page=order') || 
+        hash === '#/order' || 
+        hash === '#/place-order'
+      ) {
+        return 'order';
+      }
     }
     return 'showcase';
   };
 
   // Navigation & Filter States
-  const [currentView, setCurrentView] = useState<'showcase' | 'admin'>(getInitialView);
+  const [currentView, setCurrentView] = useState<'showcase' | 'admin' | 'order'>(getInitialView);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedOrderProductId, setSelectedOrderProductId] = useState<string | undefined>(undefined);
   const [currency, setCurrency] = useState<CurrencyCode>(() => {
     try {
       const saved = localStorage.getItem('orifake_currency') as CurrencyCode;
@@ -127,13 +141,23 @@ export default function App() {
     }
   }, [currency]);
 
-  // Listen to browser popstate for /admin route
+  // Listen to browser popstate for routes
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
-      if (path === '/admin' || search.includes('view=admin')) {
+      const hash = window.location.hash.toLowerCase();
+      if (path === '/admin' || search.includes('view=admin') || hash === '#/admin') {
         setCurrentView('admin');
+      } else if (
+        path === '/place-order' || 
+        path === '/order' || 
+        search.includes('view=order') || 
+        search.includes('page=order') ||
+        hash === '#/order' ||
+        hash === '#/place-order'
+      ) {
+        setCurrentView('order');
       } else {
         setCurrentView('showcase');
       }
@@ -439,7 +463,12 @@ export default function App() {
         currentView={currentView}
         setCurrentView={(view) => {
           setCurrentView(view);
-          window.history.pushState({}, '', view === 'admin' ? '/admin' : '/');
+          window.history.pushState({}, '', view === 'admin' ? '/admin' : view === 'order' ? '/place-order' : '/');
+        }}
+        onOpenPlaceOrder={() => {
+          setSelectedOrderProductId(undefined);
+          setCurrentView('order');
+          window.history.pushState({}, '', '/place-order');
         }}
         wishlistCount={wishlist.length}
         openWishlist={() => setIsWishlistOpen(true)}
@@ -457,7 +486,18 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 pb-16">
-        {currentView === 'showcase' ? (
+        {currentView === 'order' ? (
+          <PlaceOrderPage
+            products={products}
+            initialProductId={selectedOrderProductId}
+            currency={currency}
+            siteSettings={siteSettings}
+            onBackToStore={() => {
+              setCurrentView('showcase');
+              window.history.pushState({}, '', '/');
+            }}
+          />
+        ) : currentView === 'showcase' ? (
           <>
             {/* Cinematic Red FRAGMENT Banner */}
             {!searchQuery && (

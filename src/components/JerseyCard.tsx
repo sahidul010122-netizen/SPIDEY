@@ -34,6 +34,15 @@ export const JerseyCard: React.FC<JerseyCardProps> = ({
           className="w-full h-full object-contain object-center img-smooth-zoom transition-transform duration-300 drop-shadow-sm"
         />
 
+        {/* Product Code Badge */}
+        {jersey.code && (
+          <div className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-neutral-900/90 text-white backdrop-blur-xs border border-neutral-700/50 shadow-xs">
+              {jersey.code}
+            </span>
+          </div>
+        )}
+
         {/* Floating Circular Wishlist Heart in Top-Right Corner */}
         <button
           id={`wishlist-btn-${jersey.id}`}
@@ -77,15 +86,17 @@ export const JerseyCard: React.FC<JerseyCardProps> = ({
         </p>
 
         {/* Price */}
-        <div className="pt-0.5">
-          <span className="text-xs sm:text-sm font-bold text-neutral-900">
-            {formatPrice(jersey.price, currency)}
-          </span>
-          {jersey.originalPrice && jersey.originalPrice > jersey.price && (
-            <span className="ml-1.5 text-[10px] sm:text-xs text-neutral-400 line-through">
-              {formatPrice(jersey.originalPrice, currency)}
+        <div className="pt-0.5 flex items-center justify-between">
+          <div>
+            <span className="text-xs sm:text-sm font-bold text-neutral-900">
+              {formatPrice(jersey.price, currency)}
             </span>
-          )}
+            {jersey.originalPrice && jersey.originalPrice > jersey.price && (
+              <span className="ml-1.5 text-[10px] sm:text-xs text-neutral-400 line-through">
+                {formatPrice(jersey.originalPrice, currency)}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -5,11 +5,13 @@ import {
   DollarSign, Package, AlertCircle, ExternalLink, Copy, CheckCircle2,
   Sliders, Type, Layout, Tag, ShieldCheck, LogOut, ArrowLeft, Mail,
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
-  TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight
+  TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
+  PackageCheck, Truck
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
 import { CurrencyCode, formatPrice, CURRENCY_RATES } from '../utils/currency';
+import { OrderProcessManager } from './admin/OrderProcessManager';
 
 interface AdminPanelProps {
   products: JerseyProduct[];
@@ -46,8 +48,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   // Active Sidebar Menu Tab
   const [activeMenu, setActiveMenu] = useState<
-    'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
-  >('overview');
+    'order_process' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
+  >('order_process');
 
   // Category Sub-filter Tab
   const [catFilter, setCatFilter] = useState<'all' | 'active' | 'custom'>('all');
@@ -74,6 +76,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }, [siteSettings]);
 
   // Product Form Fields
+  const [formCode, setFormCode] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formCategory, setFormCategory] = useState('EDC');
   const [formCustomCategory, setFormCustomCategory] = useState('');
@@ -103,9 +106,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Search in Admin
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Random Code Generator helper (e.g. SJ-ABCDE)
+  const generateRandomCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let rand = '';
+    for (let i = 0; i < 5; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `SJ-${rand}`;
+  };
+
   // Open Form for Adding New Product
   const openAddProductModal = () => {
     setEditingProduct(null);
+    setFormCode(generateRandomCode());
     setFormTitle('');
     setFormCategory(categories[0]?.id || 'EDC');
     setFormCustomCategory('');
@@ -114,14 +128,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormSeason('2025');
     setFormEdition('Pro Edition / Titanium');
     setFormBadge('New Drop');
-    setFormDescription('Engineered high-performance EDC case woven with laser-cut ventilation and authentic team insignia.');
+    setFormDescription('Authentic club matchwear jersey with moisture-wicking Dri-FIT fabric and heat-pressed club crest.');
     setFormStockCount('20');
     setFormInStock(true);
     setFormImages(['/images/prod_pixel_case_1787668274006.jpg']);
     setFormFeatures([
-      'CNC milled grade-5 titanium chassis',
-      'Engineered shock absorption matrix',
-      'Precision laser-cut speaker ports'
+      'Moisture-wicking breathable ventilation matrix',
+      'Authentic heat-pressed club emblem',
+      'Athletic ergonomic seam construction'
     ]);
     setIsProductModalOpen(true);
   };
@@ -129,6 +143,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Open Form for Editing Existing Product
   const openEditProductModal = (prod: JerseyProduct) => {
     setEditingProduct(prod);
+    setFormCode(prod.code || generateRandomCode());
     setFormTitle(prod.title);
     setFormCategory(prod.category);
     setFormCustomCategory('');
@@ -277,6 +292,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       : formCategory;
 
     const payload: Partial<JerseyProduct> = {
+      code: formCode.trim() || generateRandomCode(),
       title: formTitle.trim(),
       category: finalCategory,
       price: parseFloat(formPrice) || 99.99,
@@ -288,8 +304,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       stockCount: parseInt(formStockCount, 10) || 15,
       inStock: formInStock,
       images: formImages.length > 0 ? formImages : ['/images/prod_pixel_case_1787668274006.jpg'],
-      features: formFeatures.length > 0 ? formFeatures : ['Laser-engineered structural chassis'],
-      sizes: ['Standard', 'Compact', 'Pro', 'Ultra']
+      features: formFeatures.length > 0 ? formFeatures : ['Moisture-wicking breathable ventilation matrix'],
+      sizes: ['S', 'M', 'L', 'XL', 'XXL']
     };
 
     let success = false;
@@ -358,6 +374,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* Nav Items Group */}
           <nav className="space-y-1.5">
             
+            {/* 1. Order Process & Management (Top of Sidebar) */}
+            <button
+              onClick={() => setActiveMenu('order_process')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'order_process'
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 font-extrabold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <PackageCheck className="w-4 h-4 text-white" />
+                <span className="font-extrabold tracking-tight">Order Process</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'order_process' ? 'bg-white text-rose-900 font-black' : 'bg-rose-500/20 text-rose-300 font-bold'
+              }`}>
+                Auto
+              </span>
+            </button>
+
             {/* Overview / Reports */}
             <button
               onClick={() => setActiveMenu('overview')}
@@ -509,6 +545,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight">
+                {activeMenu === 'order_process' && 'Order Process & Management System'}
                 {activeMenu === 'overview' && 'Storefront Reports & Analytics'}
                 {activeMenu === 'categories' && 'Category Carousel & Logos Manager'}
                 {activeMenu === 'products' && 'Product Catalog & Inventory'}
@@ -517,7 +554,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {activeMenu === 'r2_storage' && 'Cloudflare R2 Storage Engine'}
               </h1>
               <p className="text-xs text-neutral-500 mt-1 font-medium">
-                Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.
+                {activeMenu === 'order_process' 
+                  ? 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'
+                  : 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
               </p>
             </div>
 
@@ -537,8 +576,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
-          {/* 3. FOUR METRIC SUMMARY CARDS (Inspired by Drivery layout) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* TAB 0: ORDER PROCESS & MANAGEMENT WORKSPACE */}
+          {activeMenu === 'order_process' && (
+            <OrderProcessManager 
+              products={products}
+              siteSettings={localSettings}
+              onRefreshStats={onResetCatalog}
+            />
+          )}
+
+          {/* 3. FOUR METRIC SUMMARY CARDS (Shown on other tabs) */}
+          {activeMenu !== 'order_process' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* Card 1: Dark Solid Card with Sparkline */}
             <div className="p-5 rounded-3xl bg-[#0d0f12] text-white shadow-xl flex flex-col justify-between relative overflow-hidden">
@@ -626,6 +675,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
           </div>
+          )}
 
           {/* 4. CONTENT SECTIONS BASED ON ACTIVE TAB */}
 
@@ -799,6 +849,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
+                          {prod.code && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-neutral-900 text-rose-400 border border-neutral-800">
+                              {prod.code}
+                            </span>
+                          )}
                           <h4 className="text-sm font-extrabold text-neutral-900 truncate">
                             {prod.title}
                           </h4>
@@ -1402,6 +1457,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <form onSubmit={handleSubmitProductForm} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Product Code */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-neutral-700">
+                      Product Code (Search & Quick Order) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormCode(generateRandomCode())}
+                      className="text-[10px] text-rose-600 hover:text-rose-700 font-bold underline"
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={formCode}
+                    onChange={(e) => setFormCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. SJ-CXYQD"
+                    className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none focus:bg-white font-mono uppercase font-bold"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 mb-1">
                     Product Title *
@@ -1411,7 +1490,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     required
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder="e.g. Titanium EDC Case"
+                    placeholder="e.g. Barcelona 1999-00 Centenary Home"
                     className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none focus:bg-white"
                   />
                 </div>

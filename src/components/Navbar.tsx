@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Search, Heart, ShieldCheck, X, User, LogIn, LogOut, Globe } from 'lucide-react';
+import { Search, Heart, ShieldCheck, X, User, LogIn, LogOut, Globe, ShoppingBag } from 'lucide-react';
 import { CurrencyCode, CURRENCY_RATES } from '../utils/currency';
 import { SiteSettings } from '../types/settings';
 
 interface NavbarProps {
-  currentView: 'showcase' | 'admin';
-  setCurrentView: (view: 'showcase' | 'admin') => void;
+  currentView: 'showcase' | 'admin' | 'order';
+  setCurrentView: (view: 'showcase' | 'admin' | 'order') => void;
   wishlistCount: number;
   openWishlist: () => void;
   currency: CurrencyCode;
@@ -18,6 +18,7 @@ interface NavbarProps {
   customerUser: { name: string; email: string } | null;
   onOpenAuthModal: () => void;
   onLogoutCustomer: () => void;
+  onOpenPlaceOrder: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,7 +35,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isAdminAuthenticated,
   customerUser,
   onOpenAuthModal,
-  onLogoutCustomer
+  onLogoutCustomer,
+  onOpenPlaceOrder
 }) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -99,9 +101,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Right: Red Brand Pill & Controls */}
+        {/* Right: Place Order Button & Red Brand Pill & Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
           
+          {/* PUBLIC PLACE ORDER BUTTON (Ash / Silver Gray style) */}
+          <button
+            id="nav-place-order-btn"
+            onClick={onOpenPlaceOrder}
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full bg-neutral-200/90 hover:bg-neutral-300 text-neutral-800 text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 border border-neutral-300/80 cursor-pointer"
+            title="Open Order Form (Place Order)"
+          >
+            <span className="w-2 h-2 rounded-full bg-neutral-500 animate-pulse" />
+            <span className="tracking-tight text-neutral-900">Place Order</span>
+          </button>
+
           {/* Currency Selector (BDT ৳ / USD) */}
           <button
             id="nav-currency-btn"
@@ -116,7 +129,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-extrabold text-neutral-950 font-mono text-xs sm:text-sm">
               {CURRENCY_RATES[currency]?.symbol || '৳'}
             </span>
-            <span className="text-[10px] sm:text-[11px] text-neutral-600 font-bold uppercase tracking-tight">
+            <span className="text-[10px] sm:text-[11px] text-neutral-600 font-bold uppercase tracking-tight hidden sm:inline">
               {currency}
             </span>
           </button>
@@ -196,7 +209,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search cases, matchwear kits, EDC gear, teams..."
+            placeholder="Search jerseys by name, code (e.g. SJ-CXYQD), teams..."
             autoFocus
             className="w-full bg-transparent text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none"
           />
@@ -214,13 +227,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-label="Currency"
             className="text-xs bg-white border border-neutral-200 rounded px-2 py-1 text-neutral-700 focus:outline-none"
           >
+            <option value="BDT">BDT (৳)</option>
             <option value="USD">USD ($)</option>
             <option value="EUR">EUR (€)</option>
             <option value="GBP">GBP (£)</option>
-            <option value="JPY">JPY (¥)</option>
           </select>
         </div>
       )}
     </header>
   );
 };
+

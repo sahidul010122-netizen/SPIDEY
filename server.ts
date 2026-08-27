@@ -198,8 +198,11 @@ async function startServer() {
       return res.status(400).json({ success: false, message: 'Title, category, and price are required' });
     }
 
+    const autoCode = data.code || `SJ-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
     const newProduct: JerseyProduct = {
       id: `spidey-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      code: autoCode,
       title: data.title,
       category: data.category,
       price: Number(data.price),
@@ -216,7 +219,7 @@ async function startServer() {
         'High-definition thermal-bonded team emblem',
         'Tailored athletic performance fit'
       ],
-      sizes: Array.isArray(data.sizes) && data.sizes.length > 0 ? data.sizes : ['S', 'M', 'L', 'XL', '2XL'],
+      sizes: Array.isArray(data.sizes) && data.sizes.length > 0 ? data.sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
       inStock: data.inStock !== false,
       stockCount: data.stockCount !== undefined ? Number(data.stockCount) : 15,
       rating: 5.0,
@@ -249,6 +252,7 @@ async function startServer() {
       ...current,
       ...updateData,
       id: current.id,
+      code: updateData.code !== undefined ? updateData.code : current.code,
       price: updateData.price !== undefined ? Number(updateData.price) : current.price,
       originalPrice: updateData.originalPrice !== undefined ? (updateData.originalPrice ? Number(updateData.originalPrice) : undefined) : current.originalPrice,
       stockCount: updateData.stockCount !== undefined ? Number(updateData.stockCount) : current.stockCount,
@@ -360,7 +364,19 @@ async function startServer() {
 
   // Orders / Checkout Simulation
   app.post('/api/orders', (req: Request, res: Response) => {
-    const { items, customerName, customerEmail, shippingAddress, paymentMethod, discount, shippingFee } = req.body;
+    const { 
+      items, 
+      customerName, 
+      customerEmail, 
+      phoneNumber,
+      shippingAddress, 
+      paymentMethod, 
+      isExchange,
+      orderNote,
+      orderType,
+      discount, 
+      shippingFee 
+    } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required' });
@@ -375,9 +391,13 @@ async function startServer() {
       id: `SPIDEY-ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
       items,
       customerName: customerName || 'Guest Collector',
-      customerEmail: customerEmail || 'guest@spideyjersey.com',
+      customerEmail: customerEmail || (phoneNumber ? `${phoneNumber}@spideyorder.com` : 'guest@spideyjersey.com'),
+      phoneNumber: phoneNumber || undefined,
       shippingAddress: shippingAddress || '123 Cyber Way, Neo City',
-      paymentMethod: paymentMethod || 'Instant Crypto / Card',
+      paymentMethod: paymentMethod || 'COD (Cash On Delivery)',
+      isExchange: !!isExchange,
+      orderNote: orderNote || undefined,
+      orderType: orderType || 'quick_form',
       subtotal,
       discount: disc,
       shippingFee: ship,
@@ -404,6 +424,46 @@ async function startServer() {
       order: newOrder,
       message: 'Order confirmed and registered in Spidey Jersey ledger'
     });
+  });
+
+  // Get All Orders (Admin)
+  app.get('/api/orders', (req: Request, res: Response) => {
+    res.json({ success: true, orders, count: orders.length });
+  });
+
+  // Bulk Save Orders (Admin Order Process)
+  app.post('/api/orders/bulk', (req: Request, res: Response) => {
+    const { orders: newBulkOrders } = req.body;
+    if (Array.isArray(newBulkOrders) && newBulkOrders.length > 0) {
+      for (const ord of newBulkOrders) {
+        orders.unshift(ord);
+      }
+    }
+    res.json({ success: true, count: orders.length, orders });
+  });
+
+  // Update Order (Admin / Courier assignment)
+  app.put('/api/orders/:id', (req: Request, res: Response) => {
+    const index = orders.findIndex((o) => o.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    orders[index] = {
+      ...orders[index],
+      ...req.body,
+      id: orders[index].id
+    };
+    res.json({ success: true, order: orders[index] });
+  });
+
+  // Delete Order (Admin)
+  app.delete('/api/orders/:id', (req: Request, res: Response) => {
+    const index = orders.findIndex((o) => o.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    const deleted = orders.splice(index, 1)[0];
+    res.json({ success: true, message: 'Order deleted', order: deleted });
   });
 
   // Reset / Seed Catalog

@@ -386,16 +386,18 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
             {/* Bottom Actions */}
             <div className="pt-3 border-t border-neutral-100 space-y-2.5">
               <div className="flex items-center justify-between text-xs text-neutral-600">
-                <span>Sizes / Models:</span>
+                <span>Sizes Available:</span>
                 <span className="text-neutral-900 font-bold">{jersey.sizes.join(' • ')}</span>
               </div>
 
-              <button
-                onClick={onClose}
-                className="w-full py-3 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs shadow-md transition-all"
-              >
-                Close View
-              </button>
+              <div>
+                <button
+                  onClick={onClose}
+                  className="w-full py-3 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs shadow-sm transition-all"
+                >
+                  Close View
+                </button>
+              </div>
             </div>
           </div>
 
