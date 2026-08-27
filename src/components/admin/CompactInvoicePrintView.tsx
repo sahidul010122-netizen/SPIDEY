@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Order } from '../../types';
 import { Printer, ArrowLeft, Download, CheckCircle2, Sliders, RefreshCw, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
@@ -165,8 +166,10 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 bg-neutral-950/90 backdrop-blur-md overflow-y-auto flex flex-col print:bg-white print:static print:overflow-visible print:inset-auto">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div id="invoice-print-portal" className="fixed inset-0 z-50 bg-neutral-950/90 backdrop-blur-md overflow-y-auto flex flex-col print:bg-white print:static print:overflow-visible print:inset-auto print:p-0 print:m-0">
       
       {/* =========================================================================
           TOP NAVIGATION & PRINT CONTROL TOOLBAR (Hidden during actual print)
@@ -273,10 +276,10 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
         {/* Printable Grid Wrapper */}
         <div 
           ref={printableAreaRef}
-          className={`w-full transition-all ${
+          className={`w-full transition-all print:transform-none print:scale-100 ${
             printLayout === 'a4_grid' 
-              ? 'grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 print:grid print:grid-cols-2 print:gap-3 print:w-full' 
-              : 'flex flex-col items-center gap-4 print:flex print:flex-col print:gap-2 print:w-auto'
+              ? 'grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 print:grid print:grid-cols-2 print:gap-3 print:w-full print:m-0' 
+              : 'flex flex-col items-center gap-4 print:flex print:flex-col print:gap-2 print:w-auto print:m-0'
           }`}
           style={{ transform: `scale(${scale / 100})`, transformOrigin: 'top center' }}
         >
@@ -429,6 +432,7 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
         </div>
 
       </main>
-    </div>
+    </div>,
+    document.body
   );
 };
