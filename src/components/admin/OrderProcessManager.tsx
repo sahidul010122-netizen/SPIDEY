@@ -48,7 +48,7 @@ import {
   DEFAULT_STEADFAST_SETTINGS, 
   SteadfastSettings 
 } from '../../utils/steadfastCourier';
-import { CompactInvoicePrintView } from './CompactInvoicePrintView';
+import { CompactInvoicePrintView, getSteadfastParcelId } from './CompactInvoicePrintView';
 import { cleanAndFormatPhoneNumber, convertBengaliToEnglishDigits } from '../../utils/phoneUtils';
 
 interface OrderProcessManagerProps {
@@ -1197,27 +1197,28 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                         ৳{codAmt}
                       </td>
 
-                      {/* Steadfast 9-Digit Tracking */}
+                      {/* Steadfast 9-Digit Tracking & Parcel ID */}
                       <td className="py-3 px-3">
-                        {order.trackingCode ? (
+                        {order.consignmentId || order.trackingCode ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-1">
-                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono font-black text-xs border border-emerald-300 block text-center">
-                                {order.trackingCode}
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono font-black text-xs border border-emerald-300 block text-center">
+                                #{getSteadfastParcelId(order)}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  navigator.clipboard?.writeText(order.trackingCode || '');
-                                  showToast(`Copied tracking code: ${order.trackingCode}`);
+                                  const pid = getSteadfastParcelId(order);
+                                  navigator.clipboard?.writeText(pid);
+                                  showToast(`Copied Parcel ID: #${pid}`);
                                 }}
                                 className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded"
-                                title="Copy 9-Digit Tracking Code"
+                                title="Copy Steadfast Parcel ID"
                               >
                                 <Copy className="w-3 h-3" />
                               </button>
                               <a
-                                href={`https://steadfast.com.bd/t/${order.trackingCode}`}
+                                href={`https://steadfast.com.bd/t/${order.trackingCode || order.consignmentId}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
@@ -1226,9 +1227,11 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                                 <ExternalLink className="w-3 h-3" />
                               </a>
                             </div>
-                            <span className="text-[9px] text-emerald-700 font-medium block">
-                              {order.consignmentId ? `CID: ${order.consignmentId}` : 'Steadfast Verified'}
-                            </span>
+                            {order.trackingCode && (
+                              <span className="text-[9.5px] text-emerald-700 font-mono block">
+                                {order.consignmentId ? `CID: ${order.consignmentId}` : `Tracking: ${order.trackingCode}`}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-[11px] text-neutral-400 italic">

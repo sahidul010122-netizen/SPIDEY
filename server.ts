@@ -6,12 +6,46 @@ import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './src/data/mockJerseys
 import { JerseyProduct, Order, StoreStats } from './src/types.ts';
 import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './src/types/settings.ts';
 
-// In-memory data store with disk persistence fallback
-let products: JerseyProduct[] = [...INITIAL_JERSEYS];
-let orders: Order[] = [];
-let siteSettings: SiteSettings = { ...DEFAULT_SITE_SETTINGS };
-let categoryItems: CategoryItem[] = [...CATEGORY_CAROUSEL_ITEMS];
-let adminPasscode = 'spidey2026';
+// Persistent data store directory and file paths
+const DATA_DIR = path.join(process.cwd(), 'store_data');
+if (!fs.existsSync(DATA_DIR)) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (e) {
+    console.warn('Could not create store_data dir:', e);
+  }
+}
+
+const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'site_settings.json');
+const CATEGORIES_FILE = path.join(DATA_DIR, 'categories.json');
+const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const STEADFAST_CONFIG_FILE = path.join(DATA_DIR, 'steadfast_config.json');
+const IMAGES_FILE = path.join(DATA_DIR, 'images.json');
+
+// Helper to safely load JSON
+function loadJsonFile<T>(filePath: string, defaultValue: T): T {
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8');
+      if (data && data.trim()) {
+        return JSON.parse(data);
+      }
+    }
+  } catch (e) {
+    console.warn(`Could not load ${filePath}:`, e);
+  }
+  return defaultValue;
+}
+
+// Helper to safely save JSON
+function saveJsonFile(filePath: string, data: any) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn(`Could not save ${filePath}:`, e);
+  }
+}
 
 // Storage for uploaded images (key -> { data: Buffer/base64, mime: string, size: number })
 interface StoredImage {
@@ -21,7 +55,62 @@ interface StoredImage {
   filename: string;
   uploadedAt: string;
 }
+
+// Initialize persistent state
+let products: JerseyProduct[] = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, [...INITIAL_JERSEYS]);
+let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
+let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
+let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
+let adminPasscode = 'spidey2026';
+
+// Persistent Steadfast Configuration
+interface SteadfastConfig {
+  apiKey: string;
+  secretKey: string;
+  baseUrl: string;
+  senderName: string;
+  senderPhone: string;
+  senderAddress: string;
+  isLiveMode: boolean;
+}
+
+const defaultSteadfastConfig: SteadfastConfig = {
+  apiKey: process.env.STEADFAST_API_KEY || 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl',
+  secretKey: process.env.STEADFAST_SECRET_KEY || 'crjccez7uboye8w81jcyza7k',
+  baseUrl: process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1',
+  senderName: 'Spidey Jersey Store',
+  senderPhone: '01715123766',
+  senderAddress: 'Dhaka, Bangladesh',
+  isLiveMode: true
+};
+
+let steadfastConfig: SteadfastConfig = loadJsonFile<SteadfastConfig>(STEADFAST_CONFIG_FILE, defaultSteadfastConfig);
+// Ensure apiKey and secretKey are populated if empty in disk
+if (!steadfastConfig.apiKey || !steadfastConfig.apiKey.trim()) {
+  steadfastConfig.apiKey = 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl';
+}
+if (!steadfastConfig.secretKey || !steadfastConfig.secretKey.trim()) {
+  steadfastConfig.secretKey = 'crjccez7uboye8w81jcyza7k';
+}
+if (!steadfastConfig.baseUrl || steadfastConfig.baseUrl.includes('portal.steadfast.com.bd')) {
+  steadfastConfig.baseUrl = 'https://portal.packzy.com/api/v1';
+}
+saveJsonFile(STEADFAST_CONFIG_FILE, steadfastConfig);
+
+// Initialize images store
 const imageStore = new Map<string, StoredImage>();
+const rawImages = loadJsonFile<Record<string, StoredImage>>(IMAGES_FILE, {});
+for (const [k, v] of Object.entries(rawImages)) {
+  imageStore.set(k, v);
+}
+
+function persistImages() {
+  const obj: Record<string, StoredImage> = {};
+  for (const [k, v] of imageStore.entries()) {
+    obj[k] = v;
+  }
+  saveJsonFile(IMAGES_FILE, obj);
+}
 
 async function startServer() {
   const app = express();
@@ -91,6 +180,7 @@ async function startServer() {
       ...siteSettings,
       ...req.body
     };
+    saveJsonFile(SETTINGS_FILE, siteSettings);
     res.json({ success: true, settings: siteSettings });
   });
 
@@ -99,6 +189,7 @@ async function startServer() {
       ...siteSettings,
       ...req.body
     };
+    saveJsonFile(SETTINGS_FILE, siteSettings);
     res.json({ success: true, settings: siteSettings });
   });
 
@@ -111,6 +202,7 @@ async function startServer() {
     const body = req.body;
     if (Array.isArray(body)) {
       categoryItems = body;
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
       return res.json({ success: true, categories: categoryItems });
     } else if (body && body.id && body.name) {
       const idx = categoryItems.findIndex(c => c.id === body.id);
@@ -119,6 +211,7 @@ async function startServer() {
       } else {
         categoryItems.push(body);
       }
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
       return res.status(201).json({ success: true, categories: categoryItems, category: body });
     }
     res.status(400).json({ success: false, message: 'Invalid category payload' });
@@ -131,12 +224,14 @@ async function startServer() {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
     categoryItems[idx] = { ...categoryItems[idx], ...req.body };
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
     res.json({ success: true, category: categoryItems[idx], categories: categoryItems });
   });
 
   app.delete('/api/categories/:id', (req: Request, res: Response) => {
     const id = req.params.id;
     categoryItems = categoryItems.filter(c => c.id !== id);
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
     res.json({ success: true, message: 'Category deleted', categories: categoryItems });
   });
 
@@ -235,6 +330,7 @@ async function startServer() {
     };
 
     products.unshift(newProduct);
+    saveJsonFile(PRODUCTS_FILE, products);
     res.status(201).json({ success: true, product: newProduct });
   });
 
@@ -260,6 +356,7 @@ async function startServer() {
     };
 
     products[index] = updated;
+    saveJsonFile(PRODUCTS_FILE, products);
     res.json({ success: true, product: updated });
   });
 
@@ -270,6 +367,7 @@ async function startServer() {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
     const deleted = products.splice(index, 1)[0];
+    saveJsonFile(PRODUCTS_FILE, products);
     res.json({ success: true, message: 'Product deleted', product: deleted });
   });
 
@@ -305,6 +403,7 @@ async function startServer() {
         filename: filename || key,
         uploadedAt: new Date().toISOString()
       });
+      persistImages();
 
       const imageUrl = `/api/images/${encodeURIComponent(key)}`;
 
@@ -407,6 +506,7 @@ async function startServer() {
     };
 
     orders.unshift(newOrder);
+    saveJsonFile(ORDERS_FILE, orders);
 
     // Deduct stock
     for (const item of items) {
@@ -418,6 +518,7 @@ async function startServer() {
         }
       }
     }
+    saveJsonFile(PRODUCTS_FILE, products);
 
     res.status(201).json({
       success: true,
@@ -431,13 +532,35 @@ async function startServer() {
     res.json({ success: true, orders, count: orders.length });
   });
 
-  // Bulk Save Orders (Admin Order Process)
+  // Bulk Save / Sync Orders (Admin Order Process)
+  app.post('/api/orders/bulk-sync', (req: Request, res: Response) => {
+    const { orders: incomingOrders } = req.body;
+    if (Array.isArray(incomingOrders) && incomingOrders.length > 0) {
+      for (const ord of incomingOrders) {
+        const idx = orders.findIndex(o => o.id === ord.id);
+        if (idx >= 0) {
+          orders[idx] = { ...orders[idx], ...ord };
+        } else {
+          orders.unshift(ord);
+        }
+      }
+      saveJsonFile(ORDERS_FILE, orders);
+    }
+    res.json({ success: true, count: orders.length, orders });
+  });
+
   app.post('/api/orders/bulk', (req: Request, res: Response) => {
     const { orders: newBulkOrders } = req.body;
     if (Array.isArray(newBulkOrders) && newBulkOrders.length > 0) {
       for (const ord of newBulkOrders) {
-        orders.unshift(ord);
+        const idx = orders.findIndex(o => o.id === ord.id);
+        if (idx >= 0) {
+          orders[idx] = { ...orders[idx], ...ord };
+        } else {
+          orders.unshift(ord);
+        }
       }
+      saveJsonFile(ORDERS_FILE, orders);
     }
     res.json({ success: true, count: orders.length, orders });
   });
@@ -453,6 +576,7 @@ async function startServer() {
       ...req.body,
       id: orders[index].id
     };
+    saveJsonFile(ORDERS_FILE, orders);
     res.json({ success: true, order: orders[index] });
   });
 
@@ -463,51 +587,14 @@ async function startServer() {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
     const deleted = orders.splice(index, 1)[0];
+    saveJsonFile(ORDERS_FILE, orders);
     res.json({ success: true, message: 'Order deleted', order: deleted });
   });
 
   // --- Steadfast Courier Integration Endpoints ---
-  interface SteadfastConfig {
-    apiKey: string;
-    secretKey: string;
-    baseUrl: string;
-    senderName: string;
-    senderPhone: string;
-    senderAddress: string;
-    isLiveMode: boolean;
-  }
-
-  const STEADFAST_CONFIG_FILE = path.join(process.cwd(), 'data_steadfast_config.json');
-
-  let steadfastConfig: SteadfastConfig = {
-    apiKey: process.env.STEADFAST_API_KEY || '',
-    secretKey: process.env.STEADFAST_SECRET_KEY || '',
-    baseUrl: process.env.STEADFAST_BASE_URL || 'https://portal.steadfast.com.bd/api/v1',
-    senderName: 'Spidey Jersey Store',
-    senderPhone: '01700000000',
-    senderAddress: 'Dhaka, Bangladesh',
-    isLiveMode: true
-  };
-
-  // Load persisted config from disk on startup if present
-  try {
-    if (fs.existsSync(STEADFAST_CONFIG_FILE)) {
-      const diskData = fs.readFileSync(STEADFAST_CONFIG_FILE, 'utf-8');
-      const parsed = JSON.parse(diskData);
-      if (parsed && typeof parsed === 'object') {
-        steadfastConfig = { ...steadfastConfig, ...parsed };
-      }
-    }
-  } catch (e) {
-    console.warn('Could not read persisted steadfast config from disk:', e);
-  }
 
   const saveSteadfastConfigToDisk = () => {
-    try {
-      fs.writeFileSync(STEADFAST_CONFIG_FILE, JSON.stringify(steadfastConfig, null, 2), 'utf-8');
-    } catch (e) {
-      console.warn('Could not save steadfast config to disk:', e);
-    }
+    saveJsonFile(STEADFAST_CONFIG_FILE, steadfastConfig);
   };
 
   // Get Steadfast Settings
@@ -547,12 +634,72 @@ async function startServer() {
     });
   });
 
+  // Robust Steadfast API fetch with automatic URL fallback
+  async function callSteadfastApi(
+    endpointPath: string,
+    method: 'GET' | 'POST',
+    apiKey: string,
+    secretKey: string,
+    body?: any,
+    preferredBaseUrl?: string
+  ): Promise<{ ok: boolean; status: number; data: any; rawText: string; error?: string; usedUrl?: string }> {
+    const candidateUrls = [
+      preferredBaseUrl,
+      steadfastConfig.baseUrl,
+      'https://portal.packzy.com/api/v1',
+      'https://portal.steadfast.com.bd/api/v1'
+    ]
+      .filter(Boolean)
+      .map(u => (u as string).trim().replace(/\/+$/, ''));
+
+    const uniqueUrls = Array.from(new Set(candidateUrls));
+    let lastError = '';
+
+    for (const base of uniqueUrls) {
+      try {
+        const cleanPath = endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`;
+        const url = `${base}${cleanPath}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Api-Key': apiKey,
+            'Secret-Key': secretKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const rawText = await res.text();
+        let data: any = null;
+        try {
+          data = rawText ? JSON.parse(rawText) : null;
+        } catch (e) {
+          data = null;
+        }
+
+        if (res.ok || (res.status >= 200 && res.status < 500 && data)) {
+          return { ok: res.ok, status: res.status, data, rawText, usedUrl: base };
+        }
+        lastError = `HTTP ${res.status}: ${rawText || res.statusText}`;
+      } catch (e: any) {
+        lastError = e.message || 'Fetch failed';
+      }
+    }
+
+    return { ok: false, status: 0, data: null, rawText: '', error: lastError };
+  }
+
   // Test Steadfast API Credentials & Balance
   app.post('/api/courier/steadfast/test-connection', async (req: Request, res: Response) => {
     const apiKey = (req.body.apiKey || steadfastConfig.apiKey || '').trim();
     const secretKey = (req.body.secretKey || steadfastConfig.secretKey || '').trim();
-    const rawBaseUrl = (req.body.baseUrl || steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
-    const baseUrl = rawBaseUrl.replace(/\/+$/, '');
+    const preferredBaseUrl = (req.body.baseUrl || steadfastConfig.baseUrl || 'https://portal.packzy.com/api/v1').trim();
 
     if (!apiKey || !secretKey) {
       return res.json({
@@ -562,63 +709,37 @@ async function startServer() {
     }
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const result = await callSteadfastApi('get_balance', 'GET', apiKey, secretKey, undefined, preferredBaseUrl);
 
-      const response = await fetch(`${baseUrl}/get_balance`, {
-        method: 'GET',
-        headers: {
-          'Api-Key': apiKey,
-          'Secret-Key': secretKey,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        data = null;
-      }
-
-      if (response.ok && data && (data.status === 200 || data.current_balance !== undefined)) {
+      if (result.ok && result.data && (result.data.status === 200 || result.data.current_balance !== undefined)) {
         return res.json({
           success: true,
-          status: data.status || 200,
-          currentBalance: data.current_balance !== undefined ? data.current_balance : 0,
-          message: `Steadfast API কানেক্টেড! বর্তমান ব্যালেন্স: ৳${data.current_balance ?? 0}`,
-          data
+          status: result.data.status || 200,
+          currentBalance: result.data.current_balance !== undefined ? result.data.current_balance : 0,
+          message: `Steadfast API সফলভাবে কানেক্টেড! বর্তমান ব্যালেন্স: ৳${result.data.current_balance ?? 0}`,
+          data: result.data
         });
       } else {
-        const errorMsg = (data && (data.message || data.error)) || (response.status === 401 ? 'Invalid API Key or Secret Key' : `Steadfast API Response Status: ${response.status}`);
+        const errorMsg = (result.data && (result.data.message || result.data.error)) || (result.status === 401 ? 'Invalid API Key or Secret Key' : result.error || `Steadfast API Response: ${result.status}`);
         return res.json({
           success: false,
           message: errorMsg,
-          data
+          data: result.data
         });
       }
     } catch (err: any) {
-      const isTimeout = err.name === 'AbortError' || err.code === 'ETIMEDOUT';
       return res.json({
         success: false,
-        message: isTimeout 
-          ? 'Steadfast সার্ভার রিকোয়েস্ট টাইমআউট হয়েছে (7s)। আপনার ক্রেডেনশিয়াল সেভ করা রয়েছে।'
-          : `কানেকশন মেসেজ: ${err.message || 'Steadfast সার্ভারে সংযোগ করা সম্ভব হয়নি'}। ক্রেডেনশিয়াল সেভ করা রয়েছে।`
+        message: `কানেকশন মেসেজ: ${err.message || 'সংযোগ করা সম্ভব হয়নি'}`
       });
     }
   });
 
   // Dispatch Orders to Steadfast Courier (Real Consignment Creation)
   app.post('/api/courier/steadfast/dispatch', async (req: Request, res: Response) => {
-    const { orderIds, customApiKey, customSecretKey } = req.body;
+    const { orders: incomingOrders, orderIds, customApiKey, customSecretKey } = req.body;
     const apiKey = (customApiKey || steadfastConfig.apiKey || '').trim();
     const secretKey = (customSecretKey || steadfastConfig.secretKey || '').trim();
-    const rawBaseUrl = (steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
-    const baseUrl = rawBaseUrl.replace(/\/+$/, '');
 
     if (!apiKey || !secretKey) {
       return res.json({
@@ -628,11 +749,29 @@ async function startServer() {
       });
     }
 
-    const targetIds = Array.isArray(orderIds) && orderIds.length > 0
-      ? orderIds
-      : orders.map(o => o.id);
+    // Upsert any incoming orders from client into server orders
+    if (Array.isArray(incomingOrders) && incomingOrders.length > 0) {
+      for (const ord of incomingOrders) {
+        const idx = orders.findIndex(o => o.id === ord.id);
+        if (idx >= 0) {
+          orders[idx] = { ...orders[idx], ...ord };
+        } else {
+          orders.unshift(ord);
+        }
+      }
+      saveJsonFile(ORDERS_FILE, orders);
+    }
 
-    const targetOrders = orders.filter(o => targetIds.includes(o.id));
+    // Determine target orders
+    let targetOrders: Order[] = [];
+    if (Array.isArray(incomingOrders) && incomingOrders.length > 0) {
+      targetOrders = incomingOrders;
+    } else {
+      const targetIds = Array.isArray(orderIds) && orderIds.length > 0
+        ? orderIds
+        : orders.map(o => o.id);
+      targetOrders = orders.filter(o => targetIds.includes(o.id));
+    }
 
     if (targetOrders.length === 0) {
       return res.json({ success: false, message: 'No matching orders found to dispatch' });
@@ -642,48 +781,38 @@ async function startServer() {
     const updatedOrdersList: Order[] = [];
 
     for (const order of targetOrders) {
-      const codAmt = order.codAmount !== undefined ? order.codAmount : order.totalAmount;
-      const cleanPhone = (order.phoneNumber || '').replace(/[^0-9]/g, '');
+      const codAmt = Number(order.codAmount !== undefined ? order.codAmount : order.totalAmount) || 0;
+      let cleanPhone = (order.phoneNumber || '').replace(/[^0-9]/g, '');
+      if (cleanPhone.startsWith('880')) {
+        cleanPhone = cleanPhone.substring(2);
+      }
+      if (!cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+        cleanPhone = '0' + cleanPhone;
+      }
+      if (!cleanPhone || cleanPhone.length < 11) {
+        cleanPhone = '01715123766';
+      }
+
       const noteText = order.isExchange 
         ? `[EXCHANGE PARCEL] ${order.orderNote || 'Please collect exchange item'}`
         : (order.orderNote || 'Spidey Jersey Kit');
 
+      const invoiceNum = order.invoiceNumber || order.id || `SJ-${Date.now()}`;
+
       const payload = {
-        invoice: order.id,
+        invoice: invoiceNum,
         recipient_name: order.customerName || 'Customer',
-        recipient_phone: cleanPhone || '01700000000',
-        recipient_address: order.shippingAddress || 'Bangladesh',
+        recipient_phone: cleanPhone,
+        recipient_address: order.shippingAddress || 'Dhaka, Bangladesh',
         cod_amount: codAmt,
         note: noteText
       };
 
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const sfRes = await callSteadfastApi('create_order', 'POST', apiKey, secretKey, payload);
 
-        const sfRes = await fetch(`${baseUrl}/create_order`, {
-          method: 'POST',
-          headers: {
-            'Api-Key': apiKey,
-            'Secret-Key': secretKey,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        const sfText = await sfRes.text();
-        let sfData: any = null;
-        try {
-          sfData = sfText ? JSON.parse(sfText) : null;
-        } catch (e) {
-          sfData = null;
-        }
-
-        if (sfRes.ok && sfData && (sfData.status === 200 || sfData.consignment)) {
-          const consignment = sfData.consignment || {};
+        if (sfRes.ok && sfRes.data && (sfRes.data.status === 200 || sfRes.data.consignment)) {
+          const consignment = sfRes.data.consignment || {};
           const trackingCode = String(consignment.tracking_code || (849000000 + Math.floor(Math.random() * 900000)));
           const consignmentId = String(consignment.consignment_id || `CID-${Date.now()}`);
 
@@ -694,6 +823,14 @@ async function startServer() {
           order.courierProcessedAt = new Date().toISOString();
           order.status = 'processing';
 
+          // Update in server array
+          const sIdx = orders.findIndex(o => o.id === order.id);
+          if (sIdx >= 0) {
+            orders[sIdx] = { ...orders[sIdx], ...order };
+          } else {
+            orders.unshift({ ...order });
+          }
+
           results.push({
             orderId: order.id,
             success: true,
@@ -702,8 +839,9 @@ async function startServer() {
           });
           updatedOrdersList.push({ ...order });
         } else {
-          // If Steadfast rejected with specific error or mock fallback
-          const errMsg = (sfData && sfData.message) || (sfData && sfData.errors ? JSON.stringify(sfData.errors) : `HTTP ${sfRes.status}`);
+          // Check if Steadfast gave an error message
+          const errMsg = (sfRes.data && (sfRes.data.message || sfRes.data.error)) || (sfRes.data && sfRes.data.errors ? JSON.stringify(sfRes.data.errors) : sfRes.error || `HTTP ${sfRes.status}`);
+          
           results.push({
             orderId: order.id,
             success: false,
@@ -718,6 +856,9 @@ async function startServer() {
         });
       }
     }
+
+    // Persist updated orders
+    saveJsonFile(ORDERS_FILE, orders);
 
     const successfulCount = results.filter(r => r.success).length;
 
@@ -737,22 +878,14 @@ async function startServer() {
     const code = req.params.code;
     const apiKey = (steadfastConfig.apiKey || '').trim();
     const secretKey = (steadfastConfig.secretKey || '').trim();
-    const baseUrl = (steadfastConfig.baseUrl || 'https://portal.steadfast.com.bd/api/v1').trim();
 
     if (!apiKey || !secretKey) {
       return res.status(400).json({ success: false, message: 'Steadfast API Key not configured' });
     }
 
     try {
-      const response = await fetch(`${baseUrl}/status_by_trackingcode/${code}`, {
-        headers: {
-          'Api-Key': apiKey,
-          'Secret-Key': secretKey,
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await response.json().catch(() => null);
-      res.json({ success: true, trackingCode: code, data });
+      const result = await callSteadfastApi(`status_by_trackingcode/${code}`, 'GET', apiKey, secretKey);
+      res.json({ success: result.ok, trackingCode: code, data: result.data, status: result.status });
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Tracking lookup failed' });
     }

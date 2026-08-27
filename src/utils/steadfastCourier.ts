@@ -13,16 +13,18 @@ export interface SteadfastSettings {
 }
 
 export const DEFAULT_STEADFAST_SETTINGS: SteadfastSettings = {
-  apiKey: '',
-  secretKey: '',
-  baseUrl: 'https://portal.steadfast.com.bd/api/v1',
+  apiKey: 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl',
+  secretKey: 'crjccez7uboye8w81jcyza7k',
+  baseUrl: 'https://portal.packzy.com/api/v1',
   senderName: 'Spidey Jersey Store',
-  senderPhone: '01700000000',
+  senderPhone: '01715123766',
   senderAddress: 'Dhaka, Bangladesh',
   isLiveMode: true
 };
 
 const LOCAL_STORAGE_KEY = 'spidey_steadfast_settings_v1';
+const API_KEY_STORAGE = 'spidey_steadfast_api_key';
+const SECRET_KEY_STORAGE = 'spidey_steadfast_secret_key';
 
 /**
  * Safely parse JSON from fetch Response without throwing Unexpected end of JSON input
@@ -44,12 +46,17 @@ async function parseResponseSafe(res: Response): Promise<any> {
  */
 export async function getSteadfastSettings(): Promise<SteadfastSettings> {
   // First load from localStorage for instant display
-  let cached: SteadfastSettings = DEFAULT_STEADFAST_SETTINGS;
+  let cached: SteadfastSettings = { ...DEFAULT_STEADFAST_SETTINGS };
   try {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const directApiKey = localStorage.getItem(API_KEY_STORAGE);
+    const directSecretKey = localStorage.getItem(SECRET_KEY_STORAGE);
+
     if (local) {
-      cached = { ...DEFAULT_STEADFAST_SETTINGS, ...JSON.parse(local) };
+      cached = { ...cached, ...JSON.parse(local) };
     }
+    if (directApiKey) cached.apiKey = directApiKey;
+    if (directSecretKey) cached.secretKey = directSecretKey;
   } catch (e) {}
 
   try {
@@ -59,11 +66,13 @@ export async function getSteadfastSettings(): Promise<SteadfastSettings> {
       const merged: SteadfastSettings = {
         ...cached,
         ...data.settings,
-        apiKey: data.settings.apiKey || cached.apiKey || '',
-        secretKey: data.settings.secretKey || cached.secretKey || ''
+        apiKey: data.settings.apiKey || cached.apiKey || DEFAULT_STEADFAST_SETTINGS.apiKey,
+        secretKey: data.settings.secretKey || cached.secretKey || DEFAULT_STEADFAST_SETTINGS.secretKey
       };
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+        localStorage.setItem(API_KEY_STORAGE, merged.apiKey);
+        localStorage.setItem(SECRET_KEY_STORAGE, merged.secretKey);
       } catch (e) {}
       return merged;
     }
@@ -81,6 +90,8 @@ export async function saveSteadfastSettings(settings: SteadfastSettings): Promis
   // Always persist in localStorage first
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
+    if (settings.apiKey) localStorage.setItem(API_KEY_STORAGE, settings.apiKey);
+    if (settings.secretKey) localStorage.setItem(SECRET_KEY_STORAGE, settings.secretKey);
   } catch (e) {}
 
   try {
@@ -187,6 +198,7 @@ export async function processOrdersWithSteadfast(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        orders: ordersToProcess,
         orderIds,
         customApiKey: settings?.apiKey,
         customSecretKey: settings?.secretKey
