@@ -61,6 +61,8 @@ export interface Order {
   courierName?: string;
   courierProcessedAt?: string;
   invoiceNumber?: string;
+  barcodeScanned?: boolean;
+  scannedAt?: string;
   createdAt: string;
 }
 

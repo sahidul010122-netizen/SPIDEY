@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Order } from '../../types';
-import { Printer, ArrowLeft, Download, CheckCircle2, Sliders, RefreshCw, ZoomIn, ZoomOut, AlertCircle } from 'lucide-react';
+import { Printer, ArrowLeft, Download, CheckCircle2, Sliders, RefreshCw, ZoomIn, ZoomOut, AlertCircle, Sparkles } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 
 interface CompactInvoicePrintViewProps {
@@ -32,11 +32,11 @@ export function getSteadfastParcelId(order: Order): string {
   return order.invoiceNumber || order.id || 'PENDING';
 }
 
-// Scannable SVG Barcode Renderer using JsBarcode
+// Scannable SVG Barcode Renderer using JsBarcode with enlarged dimensions for rapid camera auto-detection
 const ScannableBarcode: React.FC<{ code: string; height?: number; width?: number }> = ({ 
   code, 
-  height = 20, 
-  width = 1.1 
+  height = 32, 
+  width = 1.6 
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -48,8 +48,8 @@ const ScannableBarcode: React.FC<{ code: string; height?: number; width?: number
           width: width,
           height: height,
           displayValue: false,
-          margin: 0,
-          background: 'transparent',
+          margin: 2,
+          background: '#ffffff',
           lineColor: '#000000'
         });
       } catch (err) {
@@ -61,13 +61,80 @@ const ScannableBarcode: React.FC<{ code: string; height?: number; width?: number
   return (
     <svg 
       ref={svgRef} 
-      className="max-h-[22px] w-auto inline-block print:max-h-[20px]" 
+      className="max-h-[38px] w-auto inline-block print:max-h-[36px]" 
       style={{ display: 'block' }}
     />
   );
 };
 
-// Single Compact Invoice Slip Component (Snug fitted container, tight image padding, dynamic font scaling)
+// Helper to parse customization into player name and number cleanly
+export function parseJerseyCustomization(rawText: string) {
+  const trimmed = (rawText || '').trim();
+  // Match trailing number (e.g. "DAVID 40", "TASIN 5", "LAMINE YAMAL 19", "RONALDO #7")
+  const match = trimmed.match(/^(.*?)(?:\s+|#)(\d{1,3})$/);
+  if (match && match[1].trim()) {
+    return {
+      name: match[1].trim(),
+      number: match[2].trim(),
+      hasNumber: true,
+      original: trimmed
+    };
+  }
+  return {
+    name: trimmed,
+    number: '',
+    hasNumber: false,
+    original: trimmed
+  };
+}
+
+// Reusable Vertical Pill with smart text-wrapping, separate number slot & black size badge
+const JerseyCustomPill: React.FC<{
+  size: string;
+  customText: string;
+  heightClass?: string;
+  widthClass?: string;
+}> = ({ size, customText, heightClass = 'h-[96px]', widthClass = 'w-[38px]' }) => {
+  const parsed = parseJerseyCustomization(customText);
+  const namePart = parsed.name;
+  const numPart = parsed.number;
+  const nameLen = namePart.length;
+  const sizeVal = size || 'L';
+
+  return (
+    <div className={`${widthClass} ${heightClass} bg-white rounded-xl py-1.5 px-0.5 border border-neutral-300 shadow-xs flex flex-col justify-between items-center shrink-0 box-border`}>
+      {/* 1. Name Section with dynamic scaling, auto text wrapping, never overlaps */}
+      <div className="flex-1 flex items-center justify-center overflow-hidden w-full py-0.5 min-h-0">
+        <span 
+          className="font-mono font-black text-neutral-950 uppercase tracking-tight select-none block text-center"
+          style={{
+            writingMode: 'vertical-rl',
+            transform: 'rotate(180deg)',
+            fontSize: nameLen > 16 ? '8px' : nameLen > 11 ? '9px' : nameLen > 6 ? '10px' : '11.5px',
+            maxHeight: numPart ? '48px' : '62px',
+            lineHeight: 1.05
+          }}
+        >
+          {namePart || 'PRO'}
+        </span>
+      </div>
+
+      {/* 2. Number Badge (if present) - positioned cleanly above size badge */}
+      {numPart && (
+        <div className="text-[10px] font-mono font-black text-neutral-950 bg-neutral-100 rounded px-1 py-0.5 border border-neutral-300 leading-none shrink-0 mb-1">
+          {numPart}
+        </div>
+      )}
+
+      {/* 3. Black Size Badge at Bottom - high contrast, guaranteed no overlap */}
+      <div className={`bg-neutral-950 text-white font-mono font-black ${sizeVal.length > 2 ? 'text-[9.5px]' : 'text-[11px]'} w-[26px] h-[22px] flex items-center justify-center rounded-md leading-none shrink-0 shadow-xs`}>
+        {sizeVal}
+      </div>
+    </div>
+  );
+};
+
+// Single Compact Invoice Slip Component (4-inch width, enlarged image box, vertical pill layout matching reference)
 const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }) => {
   const parcelId = getSteadfastParcelId(order);
   const codAmt = order.codAmount !== undefined ? order.codAmount : order.totalAmount;
@@ -87,14 +154,14 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
   ];
   const itemCount = items.length;
   const isMultiItem = itemCount > 1;
-  const useTwoColSubgrid = itemCount >= 3;
 
   return (
     <article
-      className="compact-thermal-slip relative bg-white text-neutral-900 rounded-2xl overflow-hidden border border-neutral-300 shadow-sm print:shadow-none print:border-neutral-900 flex flex-col justify-between break-inside-avoid print:break-inside-avoid print:page-break-inside-avoid w-full max-w-[340px] mx-auto select-none box-border"
+      className="compact-thermal-slip relative bg-white text-neutral-900 rounded-2xl overflow-hidden border border-neutral-300 shadow-sm print:shadow-none print:border-neutral-900 flex flex-col justify-between break-inside-avoid print:break-inside-avoid print:page-break-inside-avoid select-none box-border"
       style={{
-        width: '100%',
-        maxWidth: '340px',
+        width: '4in',
+        maxWidth: '4in',
+        minWidth: '4in',
         height: 'auto',
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         boxSizing: 'border-box'
@@ -103,7 +170,7 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
       {/* Red Left Accent Indicator Strip */}
       <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-600 z-10" />
 
-      {/* SLIP INNER CONTENT - SNUG FLUSH CONTAINER */}
+      {/* SLIP INNER CONTENT */}
       <div className="pl-3 pr-2.5 pt-2 pb-2 flex flex-col justify-between h-full w-full box-border gap-1.5">
         
         {/* =========================================================================
@@ -129,19 +196,19 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
                 )}
               </div>
 
-              {/* High-density Compact Scannable Barcode SVG */}
-              <div className="bg-white px-1 py-0.5 rounded border border-neutral-200/90 inline-block leading-none mb-0.5">
-                <ScannableBarcode code={parcelId} height={16} width={1.05} />
+              {/* High-visibility Enlarged Scannable Barcode SVG */}
+              <div className="bg-white px-1.5 py-0.5 rounded-md border border-neutral-300 inline-block leading-none mb-1 shadow-2xs">
+                <ScannableBarcode code={parcelId} height={30} width={1.55} />
               </div>
 
               {/* 9-Digit Steadfast Parcel ID */}
-              <div className="font-mono font-black text-[13px] tracking-wider text-neutral-950 leading-none">
+              <div className="font-mono font-black text-[14px] tracking-wider text-neutral-950 leading-none">
                 #{parcelId}
               </div>
             </div>
 
             {/* Right: Coral/Red COLLECT COD Badge */}
-            <div className="shrink-0 bg-rose-600 text-white rounded-xl px-2.5 py-1.5 text-center shadow-xs min-w-[70px]">
+            <div className="shrink-0 bg-rose-600 text-white rounded-xl px-2.5 py-1.5 text-center shadow-xs min-w-[72px]">
               <span className="text-[8px] font-bold uppercase tracking-wider block opacity-95 text-rose-100 leading-tight">
                 COLLECT
               </span>
@@ -154,102 +221,94 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
         </div>
 
         {/* =========================================================================
-            2. ITEM DETAILS: ENLARGED PROPORTIONATE IMAGE BOXES & HIGH-VISIBILITY BADGES
+            2. ITEM DETAILS CONTAINER (DARK GRAY BACKGROUND AS IN REFERENCE IMAGE)
+               - True 1:1 (5:5) Square Image Frames with increased size & clarity
+               - Single order: Large 1:1 square image (98px x 98px) + vertical pill + product info
+               - Multi order (2, 3, 4, 5, 6+): 2-Column Grid with 1:1 square images (96px x 96px) + vertical pills
             ========================================================================= */}
-        <div className={`flex-1 ${useTwoColSubgrid ? 'grid grid-cols-2 gap-1.5' : 'flex flex-col gap-1.5'}`}>
-          {items.map((item, itemIdx) => {
-            const imgUrl = item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80';
-            const sizeVal = item.selectedSize || 'L';
-            const customText = item.customName || (item.product?.code ? `[${item.product.code}]` : item.product?.title || 'STANDARD PRO');
-            
-            // Dynamic text scaling for long names (e.g. LAMINE YAMAL 19)
-            const textLen = customText.trim().length;
-            const fontClass = textLen > 15 
-              ? 'text-[10px]' 
-              : textLen > 10 
-                ? 'text-[11px]' 
-                : 'text-[12.5px]';
+        <div className="bg-[#2d2d31] rounded-2xl p-2.5 border border-neutral-700/80 shadow-inner">
+          {itemCount === 1 ? (
+            /* Single Jersey Layout: Large 1:1 Square Image + Vertical Pill + Product Title */
+            (() => {
+              const item = items[0];
+              const imgUrl = item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80';
+              const sizeVal = item.selectedSize || 'L';
+              const customText = item.customName || (item.product?.code ? `[${item.product.code}]` : item.product?.title || 'STANDARD PRO');
 
-            if (useTwoColSubgrid) {
-              // High-visibility 2-column item card inside multi-jersey slip (3+ items) with enlarged image box and larger text
               return (
-                <div 
-                  key={item.itemKey || itemIdx}
-                  className="bg-[#343438] text-white rounded-xl p-1.5 shadow-inner border border-neutral-700 flex items-center gap-2 box-border min-h-[58px]"
-                >
-                  {/* Significantly enlarged image box for 3+ items */}
-                  <div className="w-[52px] h-[52px] bg-white rounded-lg p-0.5 border border-neutral-300 shrink-0 overflow-hidden flex items-center justify-center shadow-xs">
+                <div className="flex items-center gap-3 h-[98px]">
+                  {/* True 1:1 (5:5) Square White Image Box - Full Fit */}
+                  <div className="w-[98px] h-[98px] aspect-square bg-white rounded-xl border-2 border-neutral-200 shrink-0 overflow-hidden flex items-center justify-center shadow-xs box-border p-0">
                     <img
                       src={imgUrl}
                       alt={item.product?.title || 'Jersey'}
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-cover"
                     />
                   </div>
-                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[9px] font-bold text-amber-300 font-mono leading-none">#{itemIdx + 1}</span>
-                      <span className="text-[9px] font-bold text-neutral-300 uppercase tracking-tight">SIZE</span>
-                      <span className="bg-neutral-950 text-white font-black text-[10.5px] font-mono px-1.5 py-0.5 rounded border border-neutral-600 leading-none shadow-xs">
-                        {sizeVal}
-                      </span>
+
+                  {/* White Vertical Pill Beside Image */}
+                  <JerseyCustomPill
+                    size={sizeVal}
+                    customText={customText}
+                    widthClass="w-[40px]"
+                    heightClass="h-[98px]"
+                  />
+
+                  {/* Product Title & Code Info on Dark Container */}
+                  <div className="flex-1 min-w-0 pl-1 flex flex-col justify-center gap-1.5 text-white">
+                    <div className="text-xs font-bold text-neutral-100 line-clamp-2 leading-snug uppercase tracking-tight">
+                      {item.product?.title || 'PREMIUM FOOTBALL JERSEY'}
                     </div>
-                    <div className="w-full">
-                      <div className={`inline-block bg-white text-neutral-950 font-black ${textLen > 12 ? 'text-[9.5px]' : 'text-[10.5px]'} font-mono px-1.5 py-0.5 rounded shadow-xs tracking-tight uppercase truncate max-w-full border border-neutral-200 leading-snug`}>
-                        {customText}
+                    {item.product?.code && (
+                      <div className="text-[11px] font-mono text-amber-300 font-bold tracking-wide">
+                        #{item.product.code}
                       </div>
-                    </div>
+                    )}
+                    {item.quantity && item.quantity > 1 && (
+                      <div className="text-[10px] font-mono font-bold text-rose-300">
+                        QTY: {item.quantity}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
-            }
+            })()
+          ) : (
+            /* Multi-Jersey Layout (2, 3, 4, 5, 6+ jerseys): 2-Column Grid with 1:1 (5:5) Square Image Boxes */
+            <div className="grid grid-cols-2 gap-2.5">
+              {items.map((item, itemIdx) => {
+                const imgUrl = item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80';
+                const sizeVal = item.selectedSize || 'L';
+                const customText = item.customName || (item.product?.code ? `[${item.product.code}]` : item.product?.title || 'STANDARD PRO');
 
-            // Snug, flush container for 1 or 2 items
-            const isSingleItem = itemCount === 1;
-            return (
-              <div 
-                key={item.itemKey || itemIdx}
-                className={`bg-[#343438] text-white rounded-xl p-1.5 shadow-inner border border-neutral-700 flex items-center gap-2.5 box-border ${
-                  isSingleItem ? 'min-h-[76px]' : 'min-h-[64px]'
-                }`}
-              >
-                {/* Snug White Rounded Box for Jersey Image Thumbnail */}
-                <div className={`${isSingleItem ? 'w-[74px] h-[74px]' : 'w-[58px] h-[58px]'} bg-white rounded-xl p-0.5 border border-neutral-300 shrink-0 overflow-hidden flex items-center justify-center shadow-xs`}>
-                  <img
-                    src={imgUrl}
-                    alt={item.product?.title || 'Jersey'}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-
-                {/* Right: Size & Custom Name/Number integrated row */}
-                <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5">
-                  <div className="flex items-center gap-1.5">
-                    {isMultiItem && (
-                      <span className="text-[9px] font-bold text-amber-300 uppercase tracking-tight font-mono">
-                        #{itemIdx + 1}
-                      </span>
-                    )}
-                    <span className="text-[9.5px] font-bold text-neutral-300 uppercase tracking-wider">
-                      SIZE
-                    </span>
-                    <span className="bg-neutral-950 text-white font-black text-xs font-mono px-2 py-0.5 rounded-md border border-neutral-600 shadow-xs leading-none">
-                      {sizeVal}
-                    </span>
-                  </div>
-
-                  {/* Auto-Scaled Custom Name & Number Badge Pill */}
-                  <div className="w-full">
-                    <div className={`inline-block bg-white text-neutral-950 font-black ${fontClass} font-mono px-2.5 py-0.5 rounded-lg shadow-xs tracking-tight uppercase truncate max-w-full border border-neutral-200 leading-normal`}>
-                      {customText}
+                return (
+                  <div 
+                    key={item.itemKey || itemIdx}
+                    className="flex items-center justify-between gap-1.5 h-[96px] min-w-0"
+                  >
+                    {/* True 1:1 (5:5) Square Proportioned White Image Box - Full Fit */}
+                    <div className="w-[96px] h-[96px] aspect-square bg-white rounded-xl border-2 border-neutral-200 shrink-0 overflow-hidden flex items-center justify-center shadow-xs box-border p-0">
+                      <img
+                        src={imgUrl}
+                        alt={item.product?.title || 'Jersey'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
-                  </div>
-                </div>
 
-              </div>
-            );
-          })}
+                    {/* White Rounded Vertical Pill (Player Name Rotated + Number + Black Size Badge at Bottom) */}
+                    <JerseyCustomPill
+                      size={sizeVal}
+                      customText={customText}
+                      widthClass="w-[38px]"
+                      heightClass="h-[96px]"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* =========================================================================
@@ -303,11 +362,11 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
 
     const getOrderHeightMm = (order: Order): number => {
       const count = order.items?.length || 1;
-      if (count === 1) return 59;
-      if (count === 2) return 75;
-      if (count <= 4) return 73; // 3 or 4 items in 2-col subgrid take 2 rows
-      if (count <= 6) return 96; // 5 or 6 items in 2-col subgrid take 3 rows
-      return 96 + Math.ceil((count - 6) / 2) * 23;
+      if (count === 1) return 66;
+      if (count === 2) return 66;
+      if (count <= 4) return 96; // 2 rows in 2-column grid
+      if (count <= 6) return 126; // 3 rows in 2-column grid
+      return 126 + Math.ceil((count - 6) / 2) * 30;
     };
 
     while (remainingOrders.length > 0) {
@@ -448,15 +507,17 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
               .a4-two-columns {
                 display: flex !important;
                 flex-direction: row !important;
-                gap: 12px !important;
+                gap: 8px !important;
                 align-items: flex-start !important;
+                justify-content: center !important;
                 width: 100% !important;
-                max-width: 200mm !important;
+                max-width: 210mm !important;
                 margin: 0 auto !important;
               }
               .a4-column-stack {
-                flex: 1 1 50% !important;
-                width: 50% !important;
+                flex: 0 0 4in !important;
+                width: 4in !important;
+                max-width: 4in !important;
                 display: flex !important;
                 flex-direction: column !important;
                 gap: 8px !important;
@@ -470,15 +531,16 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
                 background: #ffffff !important;
                 background-color: #ffffff !important;
                 box-shadow: none !important;
-                border-radius: 12px !important;
-                width: 100% !important;
-                max-width: 95mm !important;
+                border-radius: 14px !important;
+                width: 4in !important;
+                max-width: 4in !important;
+                min-width: 4in !important;
                 box-sizing: border-box !important;
               }
             </style>
           </head>
           <body>
-            <div style="width: 100%; max-width: 200mm; margin: 0 auto;">
+            <div style="width: 100%; max-width: 210mm; margin: 0 auto;">
               ${contentHtml}
             </div>
           </body>
@@ -571,15 +633,17 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
               .a4-two-columns {
                 display: flex !important;
                 flex-direction: row !important;
-                gap: 12px !important;
+                gap: 8px !important;
                 align-items: flex-start !important;
+                justify-content: center !important;
                 width: 100% !important;
-                max-width: 200mm !important;
+                max-width: 210mm !important;
                 margin: 0 auto !important;
               }
               .a4-column-stack {
-                flex: 1 1 50% !important;
-                width: 50% !important;
+                flex: 0 0 4in !important;
+                width: 4in !important;
+                max-width: 4in !important;
                 display: flex !important;
                 flex-direction: column !important;
                 gap: 8px !important;
@@ -591,14 +655,16 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
                 margin: 0 auto !important;
                 border: 1.5px solid #171717 !important;
                 background-color: #ffffff !important;
-                border-radius: 12px !important;
-                width: 100% !important;
-                max-width: 95mm !important;
+                border-radius: 14px !important;
+                width: 4in !important;
+                max-width: 4in !important;
+                min-width: 4in !important;
+                box-sizing: border-box !important;
               }
             </style>
           </head>
           <body>
-            <div style="width: 100%; max-width: 200mm; margin: 0 auto; padding: 4px;">
+            <div style="width: 100%; max-width: 210mm; margin: 0 auto; padding: 2px;">
               ${contentHtml}
             </div>
             <script>
@@ -647,7 +713,7 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
           min-height: 290mm;
           margin: 0 auto 24px auto;
           background: #ffffff;
-          padding: 16px 14px;
+          padding: 12px 6px;
           border-radius: 12px;
           box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
           box-sizing: border-box;
@@ -655,22 +721,24 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
         .a4-two-columns {
           display: flex;
           flex-direction: row;
-          gap: 14px;
+          gap: 8px;
+          justify-content: center;
           align-items: flex-start;
           width: 100%;
         }
         .a4-column-stack {
-          flex: 1 1 50%;
-          width: 50%;
+          flex: 0 0 4in;
+          width: 4in;
+          max-width: 4in;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 8px;
           align-items: stretch;
         }
         @media print {
           .a4-print-page {
             margin: 0 auto !important;
-            padding: 4px !important;
+            padding: 2px !important;
             border-radius: 0 !important;
             box-shadow: none !important;
             page-break-after: always !important;
@@ -680,13 +748,15 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
           .a4-two-columns {
             display: flex !important;
             flex-direction: row !important;
-            gap: 12px !important;
+            gap: 8px !important;
+            justify-content: center !important;
             align-items: flex-start !important;
             width: 100% !important;
           }
           .a4-column-stack {
-            flex: 1 1 50% !important;
-            width: 50% !important;
+            flex: 0 0 4in !important;
+            width: 4in !important;
+            max-width: 4in !important;
             display: flex !important;
             flex-direction: column !important;
             gap: 8px !important;
@@ -710,28 +780,23 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
           </button>
           
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-extrabold tracking-tight text-white">
-                Invoice Print Center ({orders.length} {orders.length === 1 ? 'Parcel' : 'Parcels'})
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-sm font-extrabold tracking-tight text-white flex items-center gap-2">
+                <span>Invoice Print Center</span>
+                <span className="text-xs font-semibold text-neutral-400">
+                  ({orders.length} {orders.length === 1 ? 'Parcel' : 'Parcels'})
+                </span>
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-mono font-bold">
                 {orderPages.length} {orderPages.length === 1 ? 'A4 Sheet' : 'A4 Sheets'}
               </span>
-              {autoOptimizeOrder && (
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
-                  ⚡ Auto-Optimized A4 Packing
-                </span>
-              )}
             </div>
-            <p className="text-[11px] text-neutral-400">
-              মাল্টিপল জার্সি পার্সেল সাপোর্টসহ অটো-অপ্টিমাইজড A4 প্রিন্ট লেআউট
-            </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Auto-Optimized Sorting Toggle */}
+          {/* Smart Packing Mode Toggle */}
           <button
             onClick={() => setAutoOptimizeOrder(!autoOptimizeOrder)}
             className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
@@ -739,10 +804,11 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
                 ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300' 
                 : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200'
             }`}
-            title="স্মার্ট পেজ স্পেস সেভিং: সিঙ্গেল অর্ডার আগে, মাল্টি-অর্ডার পরে সাজানো"
+            title="Auto-arrange parcel order to fit maximum slips on A4 pages"
           >
-            <span>⚡ স্মার্ট স্পেস অপ্টিমাইজেশন</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${autoOptimizeOrder ? 'bg-emerald-600 text-white' : 'bg-neutral-700 text-neutral-300'}`}>
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Smart Packing</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${autoOptimizeOrder ? 'bg-emerald-600 text-white' : 'bg-neutral-700 text-neutral-300'}`}>
               {autoOptimizeOrder ? 'ON' : 'OFF'}
             </span>
           </button>
@@ -790,25 +856,14 @@ export const CompactInvoicePrintView: React.FC<CompactInvoicePrintViewProps> = (
             </button>
           </div>
 
-          {/* New Window Quick Popout Button */}
+          {/* Redesigned Primary Print Button (Direct Standalone Window Print) */}
           <button
             onClick={handlePrintInNewWindow}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white text-xs font-semibold transition-all border border-neutral-700 hover:scale-105 active:scale-95"
-            title="Open in a standalone clean window to print without iframe restrictions"
-          >
-            <Download className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">New Window Print</span>
-          </button>
-
-          {/* Primary Print Button */}
-          <button
-            onClick={handlePrint}
-            disabled={isPrinting}
-            className="flex items-center gap-2 px-5 py-2 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50"
-            title="Open browser print dialogue (Ctrl+P)"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all hover:scale-105 active:scale-95 cursor-pointer border border-rose-400/30"
+            title="Open clean print preview dialog"
           >
             <Printer className="w-4 h-4 text-white" />
-            <span>{isPrinting ? 'Opening...' : `Print ${orders.length} Invoices`}</span>
+            <span>Print {orders.length} {orders.length === 1 ? 'Invoice' : 'Invoices'}</span>
           </button>
         </div>
       </header>

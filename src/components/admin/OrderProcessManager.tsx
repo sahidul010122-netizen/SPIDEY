@@ -30,7 +30,8 @@ import {
   Coins,
   CheckCircle,
   XCircle,
-  HelpCircle
+  HelpCircle,
+  ScanLine
 } from 'lucide-react';
 import { JerseyProduct, Order, CartItem } from '../../types';
 import { SiteSettings } from '../../types/settings';
@@ -56,6 +57,7 @@ interface OrderProcessManagerProps {
   siteSettings: SiteSettings;
   onRefreshStats?: () => void;
   onNavigateToSteadfastApi?: () => void;
+  onNavigateToBarcodeScanner?: () => void;
 }
 
 const SAMPLE_BULK_TEXT = `Name: YASIN
@@ -92,7 +94,8 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   products,
   siteSettings,
   onRefreshStats,
-  onNavigateToSteadfastApi
+  onNavigateToSteadfastApi,
+  onNavigateToBarcodeScanner
 }) => {
   // Master persistent saved orders list
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
@@ -980,6 +983,19 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                 Print Invoices ({selectedOrderIds.size > 0 ? selectedOrderIds.size : savedOrders.length})
               </span>
             </button>
+
+            {/* Barcode Scanner View Button */}
+            {onNavigateToBarcodeScanner && (
+              <button
+                type="button"
+                onClick={onNavigateToBarcodeScanner}
+                className="px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                title="Open Live Camera Barcode Scanner & Auto-Matching System"
+              >
+                <ScanLine className="w-4 h-4" />
+                <span>Barcode Scanner</span>
+              </button>
+            )}
 
             {/* Courier Settings Icon */}
             <button

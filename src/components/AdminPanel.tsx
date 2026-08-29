@@ -6,13 +6,15 @@ import {
   Sliders, Type, Layout, Tag, ShieldCheck, LogOut, ArrowLeft, Mail,
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
-  PackageCheck, Truck
+  PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
 import { CurrencyCode, formatPrice, CURRENCY_RATES } from '../utils/currency';
 import { OrderProcessManager } from './admin/OrderProcessManager';
 import { SteadfastApiSection } from './admin/SteadfastApiSection';
+import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
 
 interface AdminPanelProps {
   products: JerseyProduct[];
@@ -49,8 +51,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   // Active Sidebar Menu Tab
   const [activeMenu, setActiveMenu] = useState<
-    'order_process' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
+    'order_process' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
   >('order_process');
+
+  // Mobile Collapsible Sidebar State (Default to closed on mobile for maximum workspace)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
+    setActiveMenu(menu);
+    // Auto-collapse sidebar on mobile after selecting a menu
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+  };
 
   // Category Sub-filter Tab
   const [catFilter, setCatFilter] = useState<'all' | 'active' | 'custom'>('all');
@@ -103,6 +116,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const catFileInputRef = useRef<HTMLInputElement>(null);
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
   const headerLogoFileInputRef = useRef<HTMLInputElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Backup & Persistent Sync states
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
+  const [isForceSyncing, setIsForceSyncing] = useState(false);
+  const [syncStatusNote, setSyncStatusNote] = useState<string | null>(null);
 
   // Search in Admin
   const [searchQuery, setSearchQuery] = useState('');
@@ -330,6 +350,100 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setSettingsSavedToast(false), 2500);
   };
 
+  // 1-Click Export Full Backup JSON
+  const handleExportFullBackup = async () => {
+    setIsExportingBackup(true);
+    setSyncStatusNote(null);
+    try {
+      const res = await fetch('/api/sync/backup');
+      const data = await res.json();
+      if (data.success && data.backup) {
+        const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(data.backup, null, 2))}`;
+        const downloadAnchor = document.createElement('a');
+        const dateStr = new Date().toISOString().split('T')[0];
+        downloadAnchor.setAttribute('href', jsonString);
+        downloadAnchor.setAttribute('download', `spidey_full_backup_${dateStr}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        setSyncStatusNote('✓ Full store backup file downloaded successfully!');
+      } else {
+        setSyncStatusNote('✕ Failed to generate backup file.');
+      }
+    } catch (err: any) {
+      setSyncStatusNote(`✕ Backup export error: ${err.message || 'Network error'}`);
+    } finally {
+      setIsExportingBackup(false);
+      setTimeout(() => setSyncStatusNote(null), 5000);
+    }
+  };
+
+  // 1-Click Import / Restore Backup JSON
+  const handleImportFullBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingBackup(true);
+    setSyncStatusNote(null);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const backupData = JSON.parse(content);
+
+        const res = await fetch('/api/sync/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ backup: backupData })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          setSyncStatusNote('✓ Catalog & media restored successfully! Refreshing view...');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1200);
+        } else {
+          setSyncStatusNote(`✕ Restore failed: ${result.message || 'Invalid format'}`);
+        }
+      } catch (err: any) {
+        setSyncStatusNote(`✕ Invalid JSON backup file: ${err.message || 'Could not parse'}`);
+      } finally {
+        setIsImportingBackup(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Force Push All Live Data to Server Persistent Disk
+  const handleForceSyncAll = async () => {
+    setIsForceSyncing(true);
+    setSyncStatusNote(null);
+    try {
+      const res = await fetch('/api/sync/rehydrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientProducts: products,
+          clientCategories: categories,
+          clientSettings: localSettings
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSyncStatusNote('✓ Live products, banners & categories synchronized to server disk!');
+      } else {
+        setSyncStatusNote('✕ Server synchronization issue.');
+      }
+    } catch (err: any) {
+      setSyncStatusNote(`✕ Sync error: ${err.message || 'Network error'}`);
+    } finally {
+      setIsForceSyncing(false);
+      setTimeout(() => setSyncStatusNote(null), 5000);
+    }
+  };
+
   // Filter Categories
   const filteredCategories = categories.filter((c) => {
     if (!searchQuery.trim()) return true;
@@ -349,27 +463,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const totalInventoryValue = products.reduce((acc, p) => acc + p.price * p.stockCount, 0);
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] text-neutral-900 flex p-3 sm:p-5 lg:p-6 gap-5 font-sans">
+    <div className="min-h-screen bg-[#f3f4f6] text-neutral-900 flex flex-col lg:flex-row p-2 sm:p-4 lg:p-6 gap-4 sm:gap-5 font-sans relative">
       
-      {/* 1. DARK ROUNDED FLOATING SIDEBAR (Inspired by Drivery design) */}
-      <aside className="w-64 sm:w-72 bg-[#0d0f12] text-white rounded-3xl p-5 flex flex-col justify-between shrink-0 shadow-2xl border border-white/5 select-none">
-        
-        <div className="space-y-7">
-          {/* Top Brand Logo */}
-          <div className="flex items-center justify-between px-2 pt-1">
+      {/* MOBILE BACKDROP OVERLAY (When sidebar is opened on mobile/tablet) */}
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300 animate-fadeIn"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* FLOATING MINI SIDEBAR TOGGLE ON MOBILE (When sidebar is collapsed) */}
+      <button
+        type="button"
+        onClick={() => setIsSidebarOpen(true)}
+        className={`lg:hidden fixed bottom-6 left-5 z-30 p-3 rounded-full bg-[#0d0f12] text-white shadow-2xl border border-white/20 flex items-center gap-2.5 transition-all active:scale-95 ${
+          isSidebarOpen ? 'hidden' : 'flex'
+        }`}
+        title="Open Admin Menu"
+      >
+        <div className="w-6 h-6 rounded-full bg-[#e50914] flex items-center justify-center text-white font-mono font-black text-xs">
+          S
+        </div>
+        <span className="text-xs font-extrabold pr-1">Menu</span>
+      </button>
+
+      {/* 1. DARK ROUNDED FLOATING SIDEBAR (Collapsible Drawer on Mobile, Fixed on Desktop) */}
+      <aside 
+        className={`
+          bg-[#0d0f12] text-white rounded-3xl p-5 flex flex-col justify-between shrink-0 shadow-2xl border border-white/5 select-none transition-all duration-300 ease-in-out
+          fixed lg:relative inset-y-0 left-0 z-50 lg:z-auto w-72 sm:w-80 lg:w-64 xl:w-72 max-h-screen lg:max-h-none overflow-y-auto
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 hidden lg:flex'}
+        `}
+      >
+        <div className="space-y-6">
+          {/* Top Brand Logo & Mobile Collapse Button */}
+          <div className="flex items-center justify-between px-1 pt-1">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-2xl bg-[#e50914] flex items-center justify-center shadow-lg shadow-red-600/30">
-                <span className="font-mono font-black text-white text-base tracking-tighter">O</span>
+                <span className="font-mono font-black text-white text-base tracking-tighter">S</span>
               </div>
               <div>
-                <span className="text-base font-extrabold tracking-tight font-sans text-white block">
-                  {localSettings.brandName || 'orifake'}
+                <span className="text-base font-extrabold tracking-tight font-sans text-white block capitalize">
+                  {localSettings.brandName || 'Spidey'}
                 </span>
                 <span className="text-[10px] text-neutral-400 font-mono tracking-wider uppercase block">
                   Control Center
                 </span>
               </div>
             </div>
+
+            {/* Mobile Close Button */}
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="lg:hidden p-2 rounded-xl bg-white/10 hover:bg-white/20 text-neutral-300 hover:text-white transition-all"
+              title="Close Menu"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Nav Items Group */}
@@ -377,7 +529,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             
             {/* 1. Order Process & Management (Top of Sidebar) */}
             <button
-              onClick={() => setActiveMenu('order_process')}
+              onClick={() => handleSelectMenu('order_process')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'order_process'
                   ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 font-extrabold'
@@ -395,9 +547,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </button>
 
-            {/* 2. Steadfast Courier API Configuration (Dedicated Sidebar Section) */}
+            {/* 2. Barcode Scanner & Continuous Auto-Matching */}
             <button
-              onClick={() => setActiveMenu('steadfast_api')}
+              onClick={() => handleSelectMenu('barcode_scanner')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'barcode_scanner'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 font-extrabold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ScanLine className="w-4 h-4 text-red-400" />
+                <span className="font-extrabold tracking-tight">Barcode Scanner</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'barcode_scanner' ? 'bg-white text-red-900 font-black' : 'bg-red-500/20 text-red-300 font-bold'
+              }`}>
+                Live Match
+              </span>
+            </button>
+
+            {/* 3. Steadfast Courier API Configuration (Dedicated Sidebar Section) */}
+            <button
+              onClick={() => handleSelectMenu('steadfast_api')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'steadfast_api'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -417,7 +589,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Overview / Reports */}
             <button
-              onClick={() => setActiveMenu('overview')}
+              onClick={() => handleSelectMenu('overview')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'overview'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -437,7 +609,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Category & Slider Links */}
             <button
-              onClick={() => setActiveMenu('categories')}
+              onClick={() => handleSelectMenu('categories')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'categories'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -457,7 +629,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Products & Drops */}
             <button
-              onClick={() => setActiveMenu('products')}
+              onClick={() => handleSelectMenu('products')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'products'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -477,7 +649,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Banner & Hero Studio */}
             <button
-              onClick={() => setActiveMenu('banner')}
+              onClick={() => handleSelectMenu('banner')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'banner'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -497,7 +669,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Store Texts & Headings A-to-Z */}
             <button
-              onClick={() => setActiveMenu('cms_texts')}
+              onClick={() => handleSelectMenu('cms_texts')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'cms_texts'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -515,9 +687,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </button>
 
-            {/* Cloudflare R2 Storage */}
+            {/* Cloud Media Storage */}
             <button
-              onClick={() => setActiveMenu('r2_storage')}
+              onClick={() => handleSelectMenu('r2_storage')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'r2_storage'
                   ? 'bg-white text-neutral-950 shadow-lg shadow-white/10 font-extrabold'
@@ -526,7 +698,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Database className="w-4 h-4" />
-                <span>Cloudflare R2 Bucket</span>
+                <span>Cloud Media Storage</span>
               </div>
               <span className={`w-2 h-2 rounded-full ${
                 activeMenu === 'r2_storage' ? 'bg-emerald-600' : 'bg-emerald-400'
@@ -558,42 +730,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </aside>
 
       {/* 2. MAIN DASHBOARD CONTENT AREA */}
-      <main className="flex-1 bg-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-sm border border-neutral-200/80 overflow-y-auto flex flex-col justify-between">
+      <main className="flex-1 bg-white rounded-3xl p-4 sm:p-6 lg:p-10 shadow-sm border border-neutral-200/80 overflow-y-auto flex flex-col justify-between min-w-0">
         
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           
-          {/* Top Title Bar & Time Selector */}
+          {/* Top Title Bar & Time Selector with Mobile Menu Toggle */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight">
-                {activeMenu === 'order_process' && 'Order Process & Management System'}
-                {activeMenu === 'steadfast_api' && 'Steadfast Courier API Settings & Credentials'}
-                {activeMenu === 'overview' && 'Storefront Reports & Analytics'}
-                {activeMenu === 'categories' && 'Category Carousel & Logos Manager'}
-                {activeMenu === 'products' && 'Product Catalog & Inventory'}
-                {activeMenu === 'banner' && 'Hero FRAGMENT Banner Studio'}
-                {activeMenu === 'cms_texts' && 'Site Headings, Texts & Slogans (A to Z)'}
-                {activeMenu === 'r2_storage' && 'Cloudflare R2 Storage Engine'}
-              </h1>
-              <p className="text-xs text-neutral-500 mt-1 font-medium">
-                {activeMenu === 'order_process' && 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'}
-                {activeMenu === 'steadfast_api' && 'Configure and permanently save your Steadfast Courier Merchant API credentials for automated one-click order dispatching.'}
-                {activeMenu !== 'order_process' && activeMenu !== 'steadfast_api' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
+              {/* Mobile Sidebar Hamburger Toggle Button */}
               <button
-                onClick={onLogoutAdmin}
-                className="px-4 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-2 transition-all"
+                type="button"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="lg:hidden p-2.5 rounded-2xl bg-neutral-900 text-white hover:bg-black transition-all shrink-0 mt-0.5 shadow-md flex items-center justify-center"
+                title="Toggle Menu"
               >
-                <Eye className="w-3.5 h-3.5 text-neutral-600" />
-                <span>View Public Store</span>
+                <Menu className="w-5 h-5" />
               </button>
 
-              <div className="px-3.5 py-1.5 rounded-2xl bg-neutral-100 text-neutral-700 text-xs font-semibold flex items-center gap-2">
+              <div>
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-neutral-900 tracking-tight">
+                  {activeMenu === 'order_process' && 'Order Process & Management System'}
+                  {activeMenu === 'barcode_scanner' && 'Barcode Scanner & Auto-Matching System'}
+                  {activeMenu === 'steadfast_api' && 'Steadfast Courier API Settings & Credentials'}
+                  {activeMenu === 'overview' && 'Storefront Reports & Analytics'}
+                  {activeMenu === 'categories' && 'Category Carousel & Logos Manager'}
+                  {activeMenu === 'products' && 'Product Catalog & Inventory'}
+                  {activeMenu === 'banner' && 'Hero FRAGMENT Banner Studio'}
+                  {activeMenu === 'cms_texts' && 'Site Headings, Texts & Slogans (A to Z)'}
+                  {activeMenu === 'r2_storage' && 'Cloud Storage & Media Assets'}
+                </h1>
+                <p className="text-xs text-neutral-500 mt-1 font-medium line-clamp-2">
+                  {activeMenu === 'order_process' && 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'}
+                  {activeMenu === 'barcode_scanner' && 'Continuous live camera scanning, automatic parcel barcode matching, instant status updates, and permanent database storage.'}
+                  {activeMenu === 'steadfast_api' && 'Configure and permanently save your Steadfast Courier Merchant API credentials for automated one-click order dispatching.'}
+                  {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
+              <button
+                onClick={onLogoutAdmin}
+                className="px-3.5 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-2 transition-all"
+              >
+                <Eye className="w-3.5 h-3.5 text-neutral-600" />
+                <span className="hidden sm:inline">View Public Store</span>
+                <span className="sm:hidden">Store</span>
+              </button>
+
+              <div className="px-3 py-1.5 rounded-2xl bg-neutral-100 text-neutral-700 text-xs font-semibold flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Live Synchronized</span>
+                <span className="hidden sm:inline">Live Synchronized</span>
+                <span className="sm:hidden">Live</span>
               </div>
             </div>
           </div>
@@ -605,6 +793,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               siteSettings={localSettings}
               onRefreshStats={onResetCatalog}
               onNavigateToSteadfastApi={() => setActiveMenu('steadfast_api')}
+              onNavigateToBarcodeScanner={() => setActiveMenu('barcode_scanner')}
+            />
+          )}
+
+          {/* TAB: BARCODE SCANNER & CONTINUOUS AUTO-MATCHING */}
+          {activeMenu === 'barcode_scanner' && (
+            <BarcodeScannerSection 
+              onGoToOrderProcess={() => setActiveMenu('order_process')}
             />
           )}
 
@@ -616,7 +812,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           )}
 
           {/* 3. FOUR METRIC SUMMARY CARDS (Shown on other tabs) */}
-          {activeMenu !== 'order_process' && activeMenu !== 'steadfast_api' && (
+          {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* Card 1: Dark Solid Card with Sparkline */}
@@ -679,16 +875,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {products.length}
                 </div>
                 <span className="text-[11px] text-neutral-600 font-bold">
-                  Instant R2 photo upload
+                  Instant photo upload
                 </span>
               </div>
             </div>
 
-            {/* Card 4: Clean White Card (R2 Cloud Storage) */}
+            {/* Card 4: Clean White Card (Cloud Storage) */}
             <div className="p-5 rounded-3xl bg-[#f8f9fa] border border-neutral-200/60 shadow-sm flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-neutral-500 font-bold">
-                  R2 Cloud Storage
+                  Cloud Media Storage
                 </span>
                 <div className="w-7 h-7 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
                   <Database className="w-4 h-4" />
@@ -699,7 +895,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Active
                 </div>
                 <span className="text-[11px] text-emerald-600 font-bold">
-                  Zero Egress Fees
+                  Synchronized & Fast
                 </span>
               </div>
             </div>
@@ -959,7 +1155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <div className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 -rotate-90 origin-center pointer-events-none select-none">
                     <span className="text-[8px] sm:text-[10px] font-mono tracking-[0.25em] text-white/70 uppercase">
-                      {localSettings.heroUrlText || 'WWW.ORIFAKE.COM'}
+                      {localSettings.heroUrlText || 'WWW.SPIDEY.COM'}
                     </span>
                   </div>
 
@@ -1296,41 +1492,156 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           )}
 
-          {/* TAB 5: CLOUDFLARE R2 */}
+          {/* TAB 5: STORAGE & MEDIA */}
           {activeMenu === 'r2_storage' && (
-            <div className="p-6 sm:p-8 rounded-3xl bg-[#f8f9fa] border border-neutral-200/80 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-2xl bg-neutral-900 text-white">
-                    <Database className="w-6 h-6" />
+            <div className="space-y-6">
+              {/* Main Storage Status Header Card */}
+              <div className="p-6 sm:p-8 rounded-3xl bg-[#f8f9fa] border border-neutral-200/80 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-neutral-900 text-white">
+                      <Database className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-neutral-900">
+                        Cloud Storage & Persistent Media Engine
+                      </h3>
+                      <p className="text-xs text-neutral-500">
+                        Zero-Data-Loss Architecture: Disk Storage (`store_data/`), Media Folder (`public/uploads/`), and Client Cache are unified.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-base font-extrabold text-neutral-900">
-                      Cloudflare R2 Bucket (MY_BUCKET)
-                    </h3>
-                    <p className="text-xs text-neutral-500">
-                      Active Object Storage for all product pictures and category logos.
-                    </p>
+
+                  <span className="px-3 py-1 rounded-full text-xs font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Persistent & Protected
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
+                    <span className="text-xs text-neutral-400 font-bold block">Persistent Disk Store</span>
+                    <div className="text-sm font-mono font-extrabold text-neutral-900 mt-1">/store_data/*.json</div>
+                    <span className="text-[10px] text-emerald-600 font-bold block mt-1">Active JSON DB</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
+                    <span className="text-xs text-neutral-400 font-bold block">Media Uploads Folder</span>
+                    <div className="text-sm font-mono font-extrabold text-neutral-900 mt-1">/public/uploads/</div>
+                    <span className="text-[10px] text-emerald-600 font-bold block mt-1">Static Asset Storage</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
+                    <span className="text-xs text-neutral-400 font-bold block">Browser Rehydration</span>
+                    <div className="text-sm font-mono font-extrabold text-neutral-900 mt-1">LocalStorage Cache</div>
+                    <span className="text-[10px] text-emerald-600 font-bold block mt-1">Instant Recovery On Deploy</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
+                    <span className="text-xs text-neutral-400 font-bold block">Total Stored Assets</span>
+                    <div className="text-sm font-mono font-extrabold text-neutral-900 mt-1">
+                      {products.length} Items • {categories.length} Categories
+                    </div>
+                    <span className="text-[10px] text-emerald-600 font-bold block mt-1">Fully Synchronized</span>
                   </div>
                 </div>
 
-                <span className="px-3 py-1 rounded-full text-xs font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
-                  ● Status: Active
-                </span>
+                {/* Status Feedback Note */}
+                {syncStatusNote && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold flex items-center justify-between animate-fadeIn">
+                    <span>{syncStatusNote}</span>
+                    <button onClick={() => setSyncStatusNote(null)} className="text-emerald-500 hover:text-emerald-800">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
-                  <span className="text-xs text-neutral-400">R2 Binding Name</span>
-                  <div className="text-sm font-mono font-bold text-neutral-900 mt-1">MY_BUCKET</div>
+              {/* Data Protection & One-Click Backup/Restore Card */}
+              <div className="p-6 sm:p-8 rounded-3xl bg-white border border-neutral-200/80 shadow-sm space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4 border-b border-neutral-100 pb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <HardDrive className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-neutral-900">
+                        Deployment Protection & One-Click Backup System
+                      </h4>
+                      <p className="text-xs text-neutral-500">
+                        Export an offline JSON snapshot or restore all products, images, categories, and banners instantly anytime.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {/* Force Cloud Sync Button */}
+                    <button
+                      onClick={handleForceSyncAll}
+                      disabled={isForceSyncing}
+                      className="px-4 py-2.5 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-extrabold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isForceSyncing ? 'animate-spin' : ''}`} />
+                      <span>{isForceSyncing ? 'Syncing to Disk...' : 'Force Sync to Server'}</span>
+                    </button>
+
+                    {/* Download Full Backup Button */}
+                    <button
+                      onClick={handleExportFullBackup}
+                      disabled={isExportingBackup}
+                      className="px-5 py-2.5 rounded-2xl bg-[#0d0f12] hover:bg-neutral-800 text-white text-xs font-extrabold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>{isExportingBackup ? 'Preparing Backup...' : 'Download Full Backup (.json)'}</span>
+                    </button>
+
+                    {/* Restore from File Hidden Input & Trigger */}
+                    <input
+                      type="file"
+                      ref={backupFileInputRef}
+                      onChange={handleImportFullBackup}
+                      accept=".json,application/json"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => backupFileInputRef.current?.click()}
+                      disabled={isImportingBackup}
+                      className="px-4 py-2.5 rounded-2xl border border-neutral-300 hover:bg-neutral-50 text-neutral-700 text-xs font-extrabold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5 text-neutral-500" />
+                      <span>{isImportingBackup ? 'Restoring...' : 'Restore from Backup'}</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
-                  <span className="text-xs text-neutral-400">Target Bucket</span>
-                  <div className="text-sm font-mono font-bold text-neutral-900 mt-1">spidey-jersey-images</div>
-                </div>
-                <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm">
-                  <span className="text-xs text-neutral-400">Egress Cost</span>
-                  <div className="text-sm font-mono font-bold text-emerald-600 mt-1">$0.00 (Zero Egress)</div>
+
+                {/* Deployment Safety Guarantees Notice */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="p-4 rounded-2xl bg-[#fbfbfb] border border-neutral-200/60">
+                    <div className="flex items-center gap-2 font-bold text-neutral-900 mb-1">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>1. Dual-Layer Storage</span>
+                    </div>
+                    <p className="text-neutral-500 leading-relaxed">
+                      All new products, banner photos, and category entries are permanently saved to disk files (`store_data/` & `public/uploads/`) and client cache.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-[#fbfbfb] border border-neutral-200/60">
+                    <div className="flex items-center gap-2 font-bold text-neutral-900 mb-1">
+                      <RefreshCw className="w-4 h-4 text-blue-600" />
+                      <span>2. Auto Rehydrate on Deploy</span>
+                    </div>
+                    <p className="text-neutral-500 leading-relaxed">
+                      Whenever you redeploy code or restart the container, the client and server automatically re-link and merge without resetting custom items.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-[#fbfbfb] border border-neutral-200/60">
+                    <div className="flex items-center gap-2 font-bold text-neutral-900 mb-1">
+                      <Download className="w-4 h-4 text-purple-600" />
+                      <span>3. Offline Portable Snapshot</span>
+                    </div>
+                    <p className="text-neutral-500 leading-relaxed">
+                      Click "Download Full Backup" before major server migrations to keep a timestamped complete copy of all products, media, and configurations.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1340,8 +1651,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* Footer Note inside Main Container */}
         <div className="pt-8 border-t border-neutral-200/80 flex items-center justify-between text-xs text-neutral-400">
-          <span>ORIFAKE Master Management Engine</span>
-          <span className="font-mono">v2.5 • Live Synchronized</span>
+          <span>Spidey Master Management Engine</span>
+          <span className="font-mono">Live Synchronized</span>
         </div>
 
       </main>

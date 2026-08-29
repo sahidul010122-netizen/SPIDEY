@@ -1,6 +1,6 @@
 {
   "name": "Spidey Jersey",
   "description": "Futuristic high-end sports jersey showcase with floating glassmorphism UI, interactive product zoom gallery, dynamic admin panel, and Cloudflare R2/Worker asset support.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

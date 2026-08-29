@@ -10,7 +10,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onExplore, siteSettings 
   const bgImage = siteSettings?.heroBgImage || '/images/fragment_hero_banner_1787668127629.jpg';
   const headline = siteSettings?.heroHeadline || 'FRAGMENT';
   const tag = siteSettings?.heroTag || 'FRAGMENT / 2025';
-  const urlText = siteSettings?.heroUrlText || 'WWW.ORIFAKE.COM';
+  const urlText = siteSettings?.heroUrlText || 'WWW.SPIDEY.COM';
   const timestamps = siteSettings?.heroTimestamps || '3.23 / 3.22 / 3.03 / 2.04';
   const subtext = siteSettings?.heroSubtext || 'WITH THE TOUCH OF OUR FASHION DESIGNER AND THE EMPIRE WHO STRENGTHENS THE SOUL OF EVERY CONCEPT, COBRA THE COURAGE TO PLAY BEYOND LIMITS, THROUGH ASYMMETRIC CUTS, AND RETRO SILHOUETTES AND UNCONVENTIONAL DETAILS.';
 

@@ -8,11 +8,21 @@ import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './src/types/s
 
 // Persistent data store directory and file paths
 const DATA_DIR = path.join(process.cwd(), 'store_data');
+const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+
 if (!fs.existsSync(DATA_DIR)) {
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   } catch (e) {
     console.warn('Could not create store_data dir:', e);
+  }
+}
+
+if (!fs.existsSync(UPLOADS_DIR)) {
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  } catch (e) {
+    console.warn('Could not create public/uploads dir:', e);
   }
 }
 
@@ -392,9 +402,18 @@ async function startServer() {
 
       const extension = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
       const cleanFilename = (filename || 'image').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const key = `uploads/${Date.now()}-${cleanFilename}.${extension}`;
+      const uniqueBaseName = `${Date.now()}-${cleanFilename}.${extension}`;
+      const key = `uploads/${uniqueBaseName}`;
 
       const buffer = Buffer.from(cleanData, 'base64');
+
+      // Save directly to disk in public/uploads for instant static availability
+      try {
+        const diskFilePath = path.join(UPLOADS_DIR, uniqueBaseName);
+        fs.writeFileSync(diskFilePath, buffer);
+      } catch (writeErr) {
+        console.warn('Could not write image to public/uploads disk:', writeErr);
+      }
 
       imageStore.set(key, {
         data: cleanData,
@@ -411,6 +430,7 @@ async function startServer() {
         success: true,
         key,
         url: imageUrl,
+        staticUrl: `/uploads/${uniqueBaseName}`,
         size: buffer.length,
         contentType: mime,
         bucket: 'spidey-jersey-images',
@@ -422,20 +442,149 @@ async function startServer() {
     }
   });
 
-  // Serve Stored Image (Emulating Cloudflare R2 bucket binding MY_BUCKET.get)
+  // Serve Stored Image (Emulating Cloudflare R2 bucket binding MY_BUCKET.get with disk fallback)
   app.get('/api/images/:key(*)', (req: Request, res: Response) => {
     const key = req.params.key;
     const item = imageStore.get(key);
 
-    if (!item) {
-      return res.status(404).send('Image not found in R2 bucket store');
+    if (item) {
+      const buffer = Buffer.from(item.data, 'base64');
+      res.setHeader('Content-Type', item.mime);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(buffer);
     }
 
-    const buffer = Buffer.from(item.data, 'base64');
-    res.setHeader('Content-Type', item.mime);
-    res.setHeader('Content-Length', buffer.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.send(buffer);
+    // Check disk fallback in public/uploads
+    const baseName = path.basename(key);
+    const diskPath = path.join(UPLOADS_DIR, baseName);
+    if (fs.existsSync(diskPath)) {
+      const mimeType = baseName.endsWith('.png') ? 'image/png' : baseName.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.sendFile(diskPath);
+    }
+
+    return res.status(404).send('Image not found');
+  });
+
+  // Full Catalog Snapshot Backup Export
+  app.get('/api/sync/backup', (req: Request, res: Response) => {
+    const rawImgs: Record<string, StoredImage> = {};
+    for (const [k, v] of imageStore.entries()) {
+      rawImgs[k] = v;
+    }
+    const backupData = {
+      timestamp: new Date().toISOString(),
+      version: '2.5.0',
+      products,
+      categories: categoryItems,
+      siteSettings,
+      orders,
+      steadfastConfig,
+      images: rawImgs
+    };
+    res.json({ success: true, backup: backupData });
+  });
+
+  // Full Catalog Snapshot Restore
+  app.post('/api/sync/restore', (req: Request, res: Response) => {
+    const { backup } = req.body;
+    if (!backup || typeof backup !== 'object') {
+      return res.status(400).json({ success: false, message: 'Valid backup payload required' });
+    }
+
+    if (Array.isArray(backup.products) && backup.products.length > 0) {
+      products = backup.products;
+      saveJsonFile(PRODUCTS_FILE, products);
+    }
+
+    if (Array.isArray(backup.categories) && backup.categories.length > 0) {
+      categoryItems = backup.categories;
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
+    }
+
+    if (backup.siteSettings && typeof backup.siteSettings === 'object') {
+      siteSettings = { ...DEFAULT_SITE_SETTINGS, ...backup.siteSettings };
+      saveJsonFile(SETTINGS_FILE, siteSettings);
+    }
+
+    if (Array.isArray(backup.orders)) {
+      orders = backup.orders;
+      saveJsonFile(ORDERS_FILE, orders);
+    }
+
+    if (backup.steadfastConfig) {
+      steadfastConfig = { ...steadfastConfig, ...backup.steadfastConfig };
+      saveJsonFile(STEADFAST_CONFIG_FILE, steadfastConfig);
+    }
+
+    if (backup.images && typeof backup.images === 'object') {
+      for (const [k, v] of Object.entries(backup.images)) {
+        imageStore.set(k, v as StoredImage);
+      }
+      persistImages();
+    }
+
+    res.json({
+      success: true,
+      message: 'Store state successfully restored from persistent backup!',
+      productsCount: products.length,
+      categoriesCount: categoryItems.length
+    });
+  });
+
+  // Intelligent Client-Server Rehydration (Non-destructive merge)
+  app.post('/api/sync/rehydrate', (req: Request, res: Response) => {
+    const { clientProducts, clientCategories, clientSettings, clientOrders } = req.body;
+    let productsUpdated = false;
+    let categoriesUpdated = false;
+    let settingsUpdated = false;
+
+    // Merge client products that aren't on the server
+    if (Array.isArray(clientProducts) && clientProducts.length > 0) {
+      for (const cp of clientProducts) {
+        const exists = products.find(p => p.id === cp.id || p.code === cp.code);
+        if (!exists && cp.title) {
+          products.unshift(cp);
+          productsUpdated = true;
+        }
+      }
+      if (productsUpdated) {
+        saveJsonFile(PRODUCTS_FILE, products);
+      }
+    }
+
+    // Merge client categories that aren't on the server
+    if (Array.isArray(clientCategories) && clientCategories.length > 0) {
+      for (const cc of clientCategories) {
+        const exists = categoryItems.find(c => c.id === cc.id);
+        if (!exists && cc.name) {
+          categoryItems.push(cc);
+          categoriesUpdated = true;
+        }
+      }
+      if (categoriesUpdated) {
+        saveJsonFile(CATEGORIES_FILE, categoryItems);
+      }
+    }
+
+    // Preserve custom site settings if server still has defaults
+    if (clientSettings && typeof clientSettings === 'object' && clientSettings.heroHeadline) {
+      if (siteSettings.heroHeadline === DEFAULT_SITE_SETTINGS.heroHeadline && clientSettings.heroHeadline !== DEFAULT_SITE_SETTINGS.heroHeadline) {
+        siteSettings = { ...siteSettings, ...clientSettings };
+        saveJsonFile(SETTINGS_FILE, siteSettings);
+        settingsUpdated = true;
+      }
+    }
+
+    res.json({
+      success: true,
+      products,
+      categories: categoryItems,
+      siteSettings,
+      rehydrated: { productsUpdated, categoriesUpdated, settingsUpdated }
+    });
   });
 
   // Admin Stats
@@ -580,7 +729,7 @@ async function startServer() {
     res.json({ success: true, order: orders[index] });
   });
 
-  // Delete Order (Admin)
+  // Delete Order Permanently (Admin)
   app.delete('/api/orders/:id', (req: Request, res: Response) => {
     const index = orders.findIndex((o) => o.id === req.params.id);
     if (index === -1) {
@@ -588,7 +737,46 @@ async function startServer() {
     }
     const deleted = orders.splice(index, 1)[0];
     saveJsonFile(ORDERS_FILE, orders);
-    res.json({ success: true, message: 'Order deleted', order: deleted });
+    res.json({ success: true, message: 'Order permanently deleted from database & storage', order: deleted, remainingCount: orders.length });
+  });
+
+  // Bulk Delete Orders Permanently (Admin)
+  app.post('/api/orders/bulk-delete', (req: Request, res: Response) => {
+    const { ids, deleteAll } = req.body;
+    if (deleteAll === true) {
+      const deletedCount = orders.length;
+      orders = [];
+      saveJsonFile(ORDERS_FILE, orders);
+      return res.json({ success: true, message: `All ${deletedCount} orders permanently deleted from database & storage`, remainingCount: 0 });
+    }
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      const idSet = new Set(ids);
+      const initialCount = orders.length;
+      orders = orders.filter(o => !idSet.has(o.id));
+      const deletedCount = initialCount - orders.length;
+      saveJsonFile(ORDERS_FILE, orders);
+      return res.json({ success: true, message: `${deletedCount} orders permanently deleted from database & storage`, remainingCount: orders.length });
+    }
+
+    res.status(400).json({ success: false, message: 'Invalid bulk delete payload' });
+  });
+
+  // Update Order Barcode Scan Status
+  app.patch('/api/orders/:id/scan-status', (req: Request, res: Response) => {
+    const index = orders.findIndex((o) => o.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    const { barcodeScanned, scannedAt, status } = req.body;
+    orders[index] = {
+      ...orders[index],
+      barcodeScanned: barcodeScanned !== undefined ? barcodeScanned : true,
+      scannedAt: scannedAt || new Date().toISOString(),
+      status: status || orders[index].status
+    };
+    saveJsonFile(ORDERS_FILE, orders);
+    res.json({ success: true, message: 'Order scan status updated', order: orders[index] });
   });
 
   // --- Steadfast Courier Integration Endpoints ---

@@ -74,7 +74,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 rounded bg-[#e50914] text-white text-[11px] font-bold tracking-wider font-mono uppercase">
-                orifake
+                spidey
               </span>
             </div>
             <button
@@ -193,7 +193,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <div className="pt-2 text-center">
             <p className="text-[11px] text-neutral-400">
-              By continuing, you agree to ORIFAKE terms and privacy policy.
+              By continuing, you agree to Spidey terms and privacy policy.
             </p>
           </div>
         </div>

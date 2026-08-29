@@ -18,7 +18,7 @@ export interface SiteSettings {
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
-  brandName: 'orifake',
+  brandName: 'spidey',
   brandTagline: 'DIFFERENTIATE, DON’T COMPARE',
   headerLogoImage: '',
   headerSloganTop: 'DIFFERENTIATE,',
@@ -26,13 +26,13 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   heroTag: 'FRAGMENT / 2025',
   heroHeadline: 'FRAGMENT',
   heroSubtext: 'WITH THE TOUCH OF OUR FASHION DESIGNER AND THE EMPIRE WHO STRENGTHENS THE SOUL OF EVERY CONCEPT, COBRA THE COURAGE TO PLAY BEYOND LIMITS, THROUGH ASYMMETRIC CUTS, AND RETRO SILHOUETTES AND UNCONVENTIONAL DETAILS.',
-  heroUrlText: 'WWW.ORIFAKE.COM',
+  heroUrlText: 'WWW.SPIDEY.COM',
   heroTimestamps: '3.23 / 3.22 / 3.03 / 2.04',
   heroBgImage: '/images/fragment_hero_banner_1787668127629.jpg',
   categoryHeading: 'Shop by Category',
   bestsellerHeading: 'Bestsellers',
   footerText: 'DIFFERENTIATE, DON’T COMPARE',
-  footerQuote: 'Official ORIFAKE Master Catalog & R2 Cloud Storage',
+  footerQuote: 'Official Spidey Master Catalog',
   adminGmail: 'sahidul010122@gmail.com'
 };
 

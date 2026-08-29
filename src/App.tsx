@@ -59,7 +59,20 @@ export default function App() {
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
       const saved = localStorage.getItem('orifake_site_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_SITE_SETTINGS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.brandName === 'orifake' || !parsed.brandName) {
+          parsed.brandName = 'spidey';
+        }
+        if (parsed.heroUrlText === 'WWW.ORIFAKE.COM') {
+          parsed.heroUrlText = 'WWW.SPIDEY.COM';
+        }
+        if (parsed.footerQuote && parsed.footerQuote.includes('ORIFAKE')) {
+          parsed.footerQuote = 'Official Spidey Master Catalog';
+        }
+        return { ...DEFAULT_SITE_SETTINGS, ...parsed };
+      }
+      return DEFAULT_SITE_SETTINGS;
     } catch {
       return DEFAULT_SITE_SETTINGS;
     }
@@ -94,15 +107,35 @@ export default function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Product Data
-  const [products, setProducts] = useState<JerseyProduct[]>(INITIAL_JERSEYS);
+  // Product Data with LocalStorage Persistence
+  const [products, setProducts] = useState<JerseyProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem('spidey_products') || localStorage.getItem('orifake_products');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return INITIAL_JERSEYS;
+    } catch {
+      return INITIAL_JERSEYS;
+    }
+  });
   const [stats, setStats] = useState<StoreStats | null>(null);
 
   // Selected Modal State for Zoom & Swipe
   const [inspectedJersey, setInspectedJersey] = useState<JerseyProduct | null>(null);
 
   // Wishlist / Saved Favorites
-  const [wishlist, setWishlist] = useState<JerseyProduct[]>([]);
+  const [wishlist, setWishlist] = useState<JerseyProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem('spidey_wishlist');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isWishlistOpen, setIsWishlistOpen] = useState<boolean>(false);
   const [isR2GuideOpen, setIsR2GuideOpen] = useState<boolean>(false);
 
@@ -116,10 +149,27 @@ export default function App() {
     }, 3000);
   };
 
-  // Persist siteSettings and categoryItems
+  // Persist products, siteSettings, categoryItems, and wishlist
+  useEffect(() => {
+    try {
+      localStorage.setItem('spidey_products', JSON.stringify(products));
+    } catch (e) {
+      console.warn('Storage error for products', e);
+    }
+  }, [products]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('spidey_wishlist', JSON.stringify(wishlist));
+    } catch (e) {
+      console.warn('Storage error for wishlist', e);
+    }
+  }, [wishlist]);
+
   useEffect(() => {
     try {
       localStorage.setItem('orifake_site_settings', JSON.stringify(siteSettings));
+      localStorage.setItem('spidey_site_settings', JSON.stringify(siteSettings));
     } catch (e) {
       console.warn('Storage error', e);
     }
@@ -128,6 +178,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem('orifake_categories', JSON.stringify(categoryItems));
+      localStorage.setItem('spidey_categories', JSON.stringify(categoryItems));
     } catch (e) {
       console.warn('Storage error', e);
     }
@@ -166,18 +217,32 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch Products, Settings, and Categories from Backend API if available
+  // Fetch Products, Settings, and Categories from Backend API with Persistent Rehydration
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
       if (res.ok) {
         const data = await res.json();
         if (data.products && Array.isArray(data.products)) {
-          setProducts(data.products);
+          setProducts((prev) => {
+            // Merge server products with any local custom products
+            const serverIds = new Set(data.products.map((p: any) => p.id));
+            const localOnly = prev.filter((p) => !serverIds.has(p.id) && !p.id.startsWith('orifake-'));
+            if (localOnly.length > 0) {
+              // Trigger background rehydrate to server
+              fetch('/api/sync/rehydrate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientProducts: localOnly })
+              }).catch(() => {});
+              return [...localOnly, ...data.products];
+            }
+            return data.products;
+          });
         }
       }
     } catch (err) {
-      console.warn('Using mock dataset:', err);
+      console.warn('Using local/cached dataset:', err);
     }
   };
 
@@ -187,7 +252,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.settings && typeof data.settings === 'object') {
-          setSiteSettings(data.settings);
+          setSiteSettings((prev) => ({ ...prev, ...data.settings }));
         }
       }
     } catch (err) {
@@ -201,7 +266,19 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.categories && Array.isArray(data.categories)) {
-          setCategoryItems(data.categories);
+          setCategoryItems((prev) => {
+            const serverCatIds = new Set(data.categories.map((c: any) => c.id));
+            const localOnlyCats = prev.filter((c) => !serverCatIds.has(c.id));
+            if (localOnlyCats.length > 0) {
+              fetch('/api/sync/rehydrate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientCategories: localOnlyCats })
+              }).catch(() => {});
+              return [...data.categories, ...localOnlyCats];
+            }
+            return data.categories;
+          });
         }
       }
     } catch (err) {
@@ -636,13 +713,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsR2GuideOpen(true)}
-              className="hover:text-neutral-900 font-mono transition-colors"
-            >
-              Cloudflare R2
-            </button>
-            <span>•</span>
             <button
               onClick={() => {
                 if (currentView === 'showcase') {

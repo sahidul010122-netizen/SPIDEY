@@ -187,9 +187,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="nav-brand-badge-btn"
             onClick={handleBrandPillClick}
             className="px-3 sm:px-4 py-1 sm:py-1.5 rounded-md bg-[#e50914] hover:bg-[#cc0812] active:scale-95 text-white font-bold text-xs sm:text-sm tracking-tight transition-all shadow-sm flex items-center gap-1.5"
-            title={currentView === 'admin' ? 'Back to Storefront' : (siteSettings.brandName || 'orifake')}
+            title={currentView === 'admin' ? 'Back to Storefront' : (siteSettings.brandName || 'spidey')}
           >
-            <span>{currentView === 'admin' ? 'store' : (siteSettings.brandName || 'orifake')}</span>
+            <span>{currentView === 'admin' ? 'store' : (siteSettings.brandName || 'spidey')}</span>
             {currentView === 'admin' ? (
               <ShieldCheck className="w-3 h-3 text-white" />
             ) : isAdminAuthenticated ? (
