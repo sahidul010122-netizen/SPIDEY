@@ -6,25 +6,23 @@ import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './src/data/mockJerseys
 import { JerseyProduct, Order, StoreStats } from './src/types.ts';
 import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './src/types/settings.ts';
 
-// Persistent data store directory and file paths
-const DATA_DIR = path.join(process.cwd(), 'store_data');
-const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+// Persistent data store directory and volume mounting paths
+const PERSISTENT_ROOT = process.env.PERSISTENT_STORAGE_DIR || process.env.DATA_DIR || (fs.existsSync('/data') ? '/data' : path.join(process.cwd(), 'store_data'));
+const DATA_DIR = PERSISTENT_ROOT;
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(DATA_DIR, 'uploads');
+const PUBLIC_UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 
-if (!fs.existsSync(DATA_DIR)) {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  } catch (e) {
-    console.warn('Could not create store_data dir:', e);
+// Ensure all persistent storage directories exist
+[DATA_DIR, UPLOADS_DIR, PUBLIC_UPLOADS_DIR, BACKUPS_DIR].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.warn(`Could not create directory ${dir}:`, e);
+    }
   }
-}
-
-if (!fs.existsSync(UPLOADS_DIR)) {
-  try {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  } catch (e) {
-    console.warn('Could not create public/uploads dir:', e);
-  }
-}
+});
 
 const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'site_settings.json');
@@ -33,8 +31,9 @@ const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const STEADFAST_CONFIG_FILE = path.join(DATA_DIR, 'steadfast_config.json');
 const IMAGES_FILE = path.join(DATA_DIR, 'images.json');
 
-// Helper to safely load JSON
+// Helper to safely load JSON with backup recovery to prevent data loss across deployments
 function loadJsonFile<T>(filePath: string, defaultValue: T): T {
+  const backupPath = `${filePath}.bak`;
   try {
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, 'utf-8');
@@ -43,17 +42,49 @@ function loadJsonFile<T>(filePath: string, defaultValue: T): T {
       }
     }
   } catch (e) {
-    console.warn(`Could not load ${filePath}:`, e);
+    console.warn(`Error reading ${filePath}, attempting backup recovery:`, e);
   }
+
+  // Backup recovery fallback
+  try {
+    if (fs.existsSync(backupPath)) {
+      const backupData = fs.readFileSync(backupPath, 'utf-8');
+      if (backupData && backupData.trim()) {
+        console.log(`✓ Recovered data for ${path.basename(filePath)} from backup file`);
+        return JSON.parse(backupData);
+      }
+    }
+  } catch (backupErr) {
+    console.warn(`Could not load backup ${backupPath}:`, backupErr);
+  }
+
   return defaultValue;
 }
 
-// Helper to safely save JSON
+// Helper to atomically save JSON with automatic backup rotation
 function saveJsonFile(filePath: string, data: any) {
+  const backupPath = `${filePath}.bak`;
+  const tempPath = `${filePath}.tmp.${Date.now()}`;
   try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    const jsonString = JSON.stringify(data, null, 2);
+    // 1. Write to temp file first
+    fs.writeFileSync(tempPath, jsonString, 'utf-8');
+    // 2. Rotate current file to backup if it exists
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.copyFileSync(filePath, backupPath);
+      } catch {}
+    }
+    // 3. Atomically replace target file
+    fs.renameSync(tempPath, filePath);
   } catch (e) {
-    console.warn(`Could not save ${filePath}:`, e);
+    console.warn(`Atomic save failed for ${filePath}, falling back to direct write:`, e);
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (writeErr) {
+      console.error(`Fatal: Could not save ${filePath}:`, writeErr);
+    }
   }
 }
 
@@ -66,7 +97,7 @@ interface StoredImage {
   uploadedAt: string;
 }
 
-// Initialize persistent state
+// Initialize persistent state - Protects existing data against overwrite on deployment
 let products: JerseyProduct[] = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, [...INITIAL_JERSEYS]);
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
@@ -95,7 +126,6 @@ const defaultSteadfastConfig: SteadfastConfig = {
 };
 
 let steadfastConfig: SteadfastConfig = loadJsonFile<SteadfastConfig>(STEADFAST_CONFIG_FILE, defaultSteadfastConfig);
-// Ensure apiKey and secretKey are populated if empty in disk
 if (!steadfastConfig.apiKey || !steadfastConfig.apiKey.trim()) {
   steadfastConfig.apiKey = 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl';
 }
@@ -113,6 +143,35 @@ const rawImages = loadJsonFile<Record<string, StoredImage>>(IMAGES_FILE, {});
 for (const [k, v] of Object.entries(rawImages)) {
   imageStore.set(k, v);
 }
+
+// Self-Healing Image Restorer: Reconstruct any physical disk images if missing after new deployment
+function restorePhysicalImagesOnStartup() {
+  let restoredCount = 0;
+  for (const [key, item] of imageStore.entries()) {
+    if (!item.data) continue;
+    const baseName = path.basename(key);
+    const targetPaths = [
+      path.join(UPLOADS_DIR, baseName),
+      path.join(PUBLIC_UPLOADS_DIR, baseName)
+    ];
+
+    for (const p of targetPaths) {
+      if (!fs.existsSync(p)) {
+        try {
+          const buffer = Buffer.from(item.data, 'base64');
+          fs.writeFileSync(p, buffer);
+          restoredCount++;
+        } catch (e) {
+          // ignore individual write error
+        }
+      }
+    }
+  }
+  if (restoredCount > 0) {
+    console.log(`✓ Self-healing storage: Restored ${restoredCount} image files across persistent uploads directory.`);
+  }
+}
+restorePhysicalImagesOnStartup();
 
 function persistImages() {
   const obj: Record<string, StoredImage> = {};
@@ -407,12 +466,18 @@ async function startServer() {
 
       const buffer = Buffer.from(cleanData, 'base64');
 
-      // Save directly to disk in public/uploads for instant static availability
-      try {
-        const diskFilePath = path.join(UPLOADS_DIR, uniqueBaseName);
-        fs.writeFileSync(diskFilePath, buffer);
-      } catch (writeErr) {
-        console.warn('Could not write image to public/uploads disk:', writeErr);
+      // Save directly to disk in both persistent UPLOADS_DIR and PUBLIC_UPLOADS_DIR
+      const targetPaths = [
+        path.join(UPLOADS_DIR, uniqueBaseName),
+        path.join(PUBLIC_UPLOADS_DIR, uniqueBaseName)
+      ];
+
+      for (const diskPath of targetPaths) {
+        try {
+          fs.writeFileSync(diskPath, buffer);
+        } catch (writeErr) {
+          console.warn(`Could not write image to ${diskPath}:`, writeErr);
+        }
       }
 
       imageStore.set(key, {
@@ -442,30 +507,81 @@ async function startServer() {
     }
   });
 
-  // Serve Stored Image (Emulating Cloudflare R2 bucket binding MY_BUCKET.get with disk fallback)
-  app.get('/api/images/:key(*)', (req: Request, res: Response) => {
-    const key = req.params.key;
-    const item = imageStore.get(key);
+  // Serve Static Uploads from Persistent Directories
+  app.use('/uploads', express.static(UPLOADS_DIR));
+  app.use('/uploads', express.static(PUBLIC_UPLOADS_DIR));
+  app.use('/uploads', express.static(path.join(DATA_DIR, 'uploads')));
 
-    if (item) {
+  // Fallback handler for /uploads/:filename if not yet physically flushed
+  app.get('/uploads/:filename', (req: Request, res: Response) => {
+    const filename = req.params.filename;
+    const key = `uploads/${filename}`;
+    const item = imageStore.get(key) || imageStore.get(filename);
+
+    if (item && item.data) {
       const buffer = Buffer.from(item.data, 'base64');
-      res.setHeader('Content-Type', item.mime);
+      res.setHeader('Content-Type', item.mime || 'image/jpeg');
       res.setHeader('Content-Length', buffer.length);
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       return res.send(buffer);
     }
 
-    // Check disk fallback in public/uploads
-    const baseName = path.basename(key);
-    const diskPath = path.join(UPLOADS_DIR, baseName);
-    if (fs.existsSync(diskPath)) {
-      const mimeType = baseName.endsWith('.png') ? 'image/png' : baseName.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-      res.setHeader('Content-Type', mimeType);
+    res.status(404).send('Uploaded image not found');
+  });
+
+  // Serve Stored Image (Emulating Cloudflare R2 bucket binding MY_BUCKET.get with multi-path disk fallback)
+  app.get('/api/images/:key(*)', (req: Request, res: Response) => {
+    const key = req.params.key;
+    const item = imageStore.get(key) || imageStore.get(decodeURIComponent(key));
+
+    if (item && item.data) {
+      const buffer = Buffer.from(item.data, 'base64');
+      res.setHeader('Content-Type', item.mime || 'image/jpeg');
+      res.setHeader('Content-Length', buffer.length);
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      return res.sendFile(diskPath);
+      return res.send(buffer);
+    }
+
+    // Check disk fallbacks in UPLOADS_DIR, PUBLIC_UPLOADS_DIR, and DATA_DIR/uploads
+    const baseName = path.basename(key);
+    const candidatePaths = [
+      path.join(UPLOADS_DIR, baseName),
+      path.join(PUBLIC_UPLOADS_DIR, baseName),
+      path.join(DATA_DIR, 'uploads', baseName)
+    ];
+
+    for (const diskPath of candidatePaths) {
+      if (fs.existsSync(diskPath)) {
+        const mimeType = baseName.endsWith('.png') ? 'image/png' : baseName.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.sendFile(diskPath);
+      }
     }
 
     return res.status(404).send('Image not found');
+  });
+
+  // Storage Health & Diagnostics Endpoint
+  app.get('/api/storage/status', (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      persistentRoot: DATA_DIR,
+      uploadsDir: UPLOADS_DIR,
+      publicUploadsDir: PUBLIC_UPLOADS_DIR,
+      backupsDir: BACKUPS_DIR,
+      isCustomVolumeMounted: DATA_DIR.startsWith('/data') || process.env.DATA_DIR !== undefined || process.env.PERSISTENT_STORAGE_DIR !== undefined,
+      stats: {
+        totalProducts: products.length,
+        totalCategories: categoryItems.length,
+        totalOrders: orders.length,
+        totalStoredImages: imageStore.size,
+        hasBackupProducts: fs.existsSync(`${PRODUCTS_FILE}.bak`),
+        hasBackupOrders: fs.existsSync(`${ORDERS_FILE}.bak`),
+        hasBackupSettings: fs.existsSync(`${SETTINGS_FILE}.bak`),
+        hasBackupCategories: fs.existsSync(`${CATEGORIES_FILE}.bak`)
+      }
+    });
   });
 
   // Full Catalog Snapshot Backup Export
