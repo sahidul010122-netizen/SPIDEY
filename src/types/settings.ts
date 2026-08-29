@@ -15,6 +15,8 @@ export interface SiteSettings {
   footerText: string;
   footerQuote: string;
   adminGmail: string;
+  whatsappNumber?: string;
+  whatsappMessageTemplate?: string;
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -33,7 +35,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   bestsellerHeading: 'Bestsellers',
   footerText: 'DIFFERENTIATE, DON’T COMPARE',
   footerQuote: 'Official Spidey Master Catalog',
-  adminGmail: 'sahidul010122@gmail.com'
+  adminGmail: 'sahidul010122@gmail.com',
+  whatsappNumber: '+8801715123766',
+  whatsappMessageTemplate: 'হ্যালো! আমি এই জার্সিটি নিতে চাচ্ছি।\n\nপ্রোডাক্ট: {PRODUCT_NAME}\n\nসাইজ: {SIZE}\n\nছবি: {IMAGE_URL}'
 };
 
 export interface CategoryItem {

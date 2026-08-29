@@ -1633,6 +1633,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       className="w-full px-3 py-2 text-xs bg-white border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none uppercase font-mono"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-700 mb-1 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      WhatsApp Order Number (হোয়াটসঅ্যাপ নম্বর)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="+8801715123766"
+                      value={localSettings.whatsappNumber || ''}
+                      onChange={(e) => setLocalSettings({ ...localSettings, whatsappNumber: e.target.value })}
+                      className="w-full px-3 py-2 text-xs bg-white border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none font-bold"
+                    />
+                    <p className="text-[10px] text-neutral-500 mt-1">
+                      মোবাইলে বা পপআপে "অর্ডার করুন (WhatsApp)" চাপলে এই নম্বরে অটোমেটিক প্রোডাক্ট নাম, সাইজ ও লিঙ্ক সহ মেসেজ চলে যাবে।
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 pt-2">

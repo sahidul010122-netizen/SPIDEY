@@ -47,13 +47,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       setCurrentView('showcase');
       window.history.pushState({}, '', '/');
     } else {
-      if (isAdminAuthenticated) {
-        setCurrentView('admin');
-        window.history.pushState({}, '', '/admin');
-      } else {
-        // Open Auth modal for Gmail/Password login
-        onOpenAuthModal();
-      }
+      // Normal brand logo behavior - return to showcase/home (Admin shortcut disabled for visitors)
+      setCurrentView('showcase');
+      window.history.pushState({}, '', '/');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -197,19 +194,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {/* Admin Toggle / Red Brand Badge */}
+          {/* Brand Badge / Store Switcher */}
           <button
             id="nav-brand-badge-btn"
             onClick={handleBrandPillClick}
-            className="px-3 sm:px-4 py-1 sm:py-1.5 rounded-md bg-[#e50914] hover:bg-[#cc0812] active:scale-95 text-white font-bold text-xs sm:text-sm tracking-tight transition-all shadow-sm flex items-center gap-1.5"
+            className="px-3 sm:px-4 py-1 sm:py-1.5 rounded-md bg-[#e50914] hover:bg-[#cc0812] active:scale-95 text-white font-bold text-xs sm:text-sm tracking-tight transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
             title={currentView === 'admin' ? 'Back to Storefront' : (siteSettings.brandName || 'spidey')}
           >
             <span>{currentView === 'admin' ? 'store' : (siteSettings.brandName || 'spidey')}</span>
-            {currentView === 'admin' ? (
-              <ShieldCheck className="w-3 h-3 text-white" />
-            ) : isAdminAuthenticated ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
-            ) : null}
+            {currentView === 'admin' && (
+              <ShieldCheck className="w-3.5 h-3.5 text-white" />
+            )}
           </button>
         </div>
 

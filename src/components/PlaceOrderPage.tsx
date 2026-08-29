@@ -34,6 +34,7 @@ interface PlaceOrderPageProps {
   onBackToStore: () => void;
   onOrderPlaced?: (order: Order) => void;
   initialProductId?: string;
+  initialSize?: string;
 }
 
 const AVAILABLE_SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
@@ -44,9 +45,10 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   currency,
   onBackToStore,
   onOrderPlaced,
-  initialProductId
+  initialProductId,
+  initialSize
 }) => {
-  // Initialize items: Size is intentionally EMPTY by default
+  // Initialize items: Use initialSize if provided, otherwise default empty
   const [items, setItems] = useState<OrderItemForm[]>(() => {
     let initialProd: JerseyProduct | null = null;
     if (initialProductId) {
@@ -57,7 +59,7 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
         id: `item-${Date.now()}-1`,
         product: initialProd,
         searchQuery: initialProd ? `${initialProd.code ? `[${initialProd.code}] ` : ''}${initialProd.title}` : '',
-        selectedSize: '', // Default EMPTY as requested
+        selectedSize: initialSize || '',
         customNameNumber: ''
       }
     ];
@@ -95,7 +97,7 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
 
   // Sync initial product if loaded
   useEffect(() => {
-    if (initialProductId && items.length === 1 && !items[0].product) {
+    if (initialProductId) {
       const prod = products.find(p => p.id === initialProductId);
       if (prod) {
         setItems([
@@ -103,13 +105,13 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
             id: `item-${Date.now()}-1`,
             product: prod,
             searchQuery: `${prod.code ? `[${prod.code}] ` : ''}${prod.title}`,
-            selectedSize: '', // Default empty
+            selectedSize: initialSize || '',
             customNameNumber: ''
           }
         ]);
       }
     }
-  }, [initialProductId, products]);
+  }, [initialProductId, initialSize, products]);
 
   // Handle Combined Text Parsing in Box 1
   const handleCombinedDetailsChange = (text: string) => {

@@ -72,6 +72,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedOrderProductId, setSelectedOrderProductId] = useState<string | undefined>(undefined);
+  const [selectedOrderSize, setSelectedOrderSize] = useState<string | undefined>(undefined);
   const [currency, setCurrency] = useState<CurrencyCode>(() => {
     try {
       const saved = localStorage.getItem('orifake_currency') as CurrencyCode;
@@ -268,14 +269,18 @@ export default function App() {
     }
   }, [currency]);
 
-  // Listen to browser popstate for routes
+  // Listen to browser popstate and hashchange for direct URL navigation (e.g. /admin, #/admin)
   useEffect(() => {
-    const handlePopState = () => {
+    const handleUrlChange = () => {
       const view = getInitialView();
       setCurrentView(view);
     };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
   }, []);
 
   // Fetch Products, Settings, and Categories from Backend API with Persistent Rehydration
@@ -633,6 +638,7 @@ export default function App() {
         }}
         onOpenPlaceOrder={() => {
           setSelectedOrderProductId(undefined);
+          setSelectedOrderSize(undefined);
           setCurrentView('order');
           window.history.pushState({}, '', '/place-order');
         }}
@@ -657,9 +663,12 @@ export default function App() {
           <PlaceOrderPage
             products={products}
             initialProductId={selectedOrderProductId}
+            initialSize={selectedOrderSize}
             currency={currency}
             siteSettings={siteSettings}
             onBackToStore={() => {
+              setSelectedOrderProductId(undefined);
+              setSelectedOrderSize(undefined);
               setCurrentView('showcase');
               window.history.pushState({}, '', '/');
             }}
@@ -934,6 +943,14 @@ export default function App() {
         isWishlisted={inspectedJersey ? isWishlisted(inspectedJersey.id) : false}
         onToggleWishlist={handleToggleWishlist}
         currency={currency}
+        siteSettings={siteSettings}
+        onOrderProduct={(jersey, size) => {
+          setSelectedOrderProductId(jersey.id);
+          setSelectedOrderSize(size);
+          setInspectedJersey(null);
+          setCurrentView('order');
+          window.history.pushState({}, '', '/place-order');
+        }}
       />
 
       {/* Wishlist Modal */}
