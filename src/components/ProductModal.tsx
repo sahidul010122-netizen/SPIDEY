@@ -222,12 +222,7 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
         {/* Modal Top Header Bar */}
         <div className="px-4 sm:px-6 py-3 border-b border-neutral-100 flex items-center justify-between gap-2 bg-white shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            {jersey.code && (
-              <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-neutral-900 text-white shadow-xs">
-                {jersey.code}
-              </span>
-            )}
-            <span className="text-xs font-semibold text-neutral-500 truncate">
+            <span className="text-xs font-bold text-neutral-600 truncate bg-neutral-100 px-2.5 py-0.5 rounded-md">
               {jersey.category}
             </span>
           </div>
