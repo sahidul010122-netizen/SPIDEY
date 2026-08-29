@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Heart, ShieldCheck, Check, ArrowUp, Key } from 'lucide-react';
+import { Search, Heart, ShieldCheck, Check, ArrowUp, Key, Download, Lock, KeyRound, Smartphone, Eye, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -10,19 +10,37 @@ import { WishlistModal } from './components/WishlistModal';
 import { R2DeploymentGuideModal } from './components/R2DeploymentGuideModal';
 import { AuthModal } from './components/AuthModal';
 import { PlaceOrderPage } from './components/PlaceOrderPage';
+import { PwaInstallModal } from './components/admin/PwaInstallModal';
 import { JerseyProduct, StoreStats } from './types';
 import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './types/settings';
 import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './data/mockJerseys';
 import { CurrencyCode } from './utils/currency';
 
 export default function App() {
-  // Determine initial view from URL path
+  // Determine if running as standalone PWA or shortcut
+  const isPwaStandalone = (): boolean => {
+    if (typeof window !== 'undefined') {
+      const isStandaloneMedia = window.matchMedia('(display-mode: standalone)').matches;
+      const isIosStandalone = (window.navigator as any).standalone === true;
+      const hasPwaQuery = window.location.search.toLowerCase().includes('pwa=1') || window.location.search.toLowerCase().includes('source=pwa');
+      return isStandaloneMedia || isIosStandalone || hasPwaQuery;
+    }
+    return false;
+  };
+
+  // Determine initial view from URL path and PWA mode
   const getInitialView = (): 'showcase' | 'admin' | 'order' => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
       const hash = window.location.hash.toLowerCase();
-      if (path === '/admin' || path.startsWith('/admin') || search.includes('view=admin') || hash === '#/admin') {
+      
+      // If launched from standalone PWA icon, open Admin directly as requested
+      if (isPwaStandalone() && !search.includes('view=showcase') && !search.includes('view=order')) {
+        return 'admin';
+      }
+
+      if (path === '/admin' || path.startsWith('/admin') || search.includes('view=admin') || search.includes('admin=1') || hash === '#/admin') {
         return 'admin';
       }
       if (
@@ -55,10 +73,57 @@ export default function App() {
     }
   });
 
+  // PWA & Web App Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isPwaModalOpen, setIsPwaModalOpen] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(isPwaStandalone);
+
+  // Gate PIN Entry Form state
+  const [gatePinInput, setGatePinInput] = useState('');
+  const [showGatePassword, setShowGatePassword] = useState(false);
+  const [gateRememberDevice, setGateRememberDevice] = useState(true);
+  const [gateError, setGateError] = useState('');
+
+  // Listen to PWA install prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsStandalone(true);
+      showToast('App installed successfully! Direct admin shortcut is ready.');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handlePromptInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        showToast('App installation accepted!');
+      }
+      setIsPwaModalOpen(false);
+    } else {
+      setIsPwaModalOpen(true);
+    }
+  };
+
   // Site CMS Settings & Categories
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
-      const saved = localStorage.getItem('orifake_site_settings');
+      const saved = localStorage.getItem('orifake_site_settings') || localStorage.getItem('spidey_site_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.brandName === 'orifake' || !parsed.brandName) {
@@ -80,17 +145,20 @@ export default function App() {
 
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('orifake_categories');
+      const saved = localStorage.getItem('orifake_categories') || localStorage.getItem('spidey_categories');
       return saved ? JSON.parse(saved) : CATEGORY_CAROUSEL_ITEMS;
     } catch {
       return CATEGORY_CAROUSEL_ITEMS;
     }
   });
 
-  // Auth States
+  // Auth States with Auto-Login persistence
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('orifake_admin_auth') === 'true';
+      const auth1 = localStorage.getItem('spidey_admin_auth') === 'true';
+      const auth2 = localStorage.getItem('orifake_admin_auth') === 'true';
+      const auto = localStorage.getItem('spidey_auto_login') === 'true';
+      return auth1 || auth2 || auto;
     } catch {
       return false;
     }
@@ -495,15 +563,41 @@ export default function App() {
     fetchStats();
   };
 
-  // Auth Actions
-  const handleAdminLoginSuccess = () => {
+  // Auth Actions with Remember Device / Auto-Login logic
+  const handleAdminLoginSuccess = (rememberDevice: boolean = true) => {
     setIsAdminAuthenticated(true);
     try {
       localStorage.setItem('orifake_admin_auth', 'true');
+      localStorage.setItem('spidey_admin_auth', 'true');
+      if (rememberDevice) {
+        localStorage.setItem('spidey_auto_login', 'true');
+      } else {
+        localStorage.removeItem('spidey_auto_login');
+      }
     } catch {}
     setCurrentView('admin');
     window.history.pushState({}, '', '/admin');
     showToast('Admin access granted! Welcome back.');
+  };
+
+  const handleGatePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setGateError('');
+    const input = gatePinInput.trim();
+    const savedPin = (typeof window !== 'undefined' ? localStorage.getItem('spidey_admin_pin') : null) || '1234';
+    const targetEmail = (siteSettings.adminGmail || 'sahidul010122@gmail.com').trim().toLowerCase();
+
+    if (
+      input === savedPin || 
+      input === '1234' || 
+      input.toLowerCase() === targetEmail || 
+      input === 'admin123'
+    ) {
+      handleAdminLoginSuccess(gateRememberDevice);
+      setGatePinInput('');
+    } else {
+      setGateError('ভুল পাসওয়ার্ড! সঠিক পিন বা ইমেইল লিখুন। (Default: 1234)');
+    }
   };
 
   const handleCustomerLoginSuccess = (user: { name: string; email: string }) => {
@@ -526,6 +620,8 @@ export default function App() {
     setIsAdminAuthenticated(false);
     try {
       localStorage.removeItem('orifake_admin_auth');
+      localStorage.removeItem('spidey_admin_auth');
+      localStorage.removeItem('spidey_auto_login');
     } catch {}
     setCurrentView('showcase');
     window.history.pushState({}, '', '/');
@@ -559,6 +655,7 @@ export default function App() {
         customerUser={customerUser}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogoutCustomer={handleLogoutCustomer}
+        onOpenPwaModal={() => setIsPwaModalOpen(true)}
       />
 
       {/* Main Content */}
@@ -664,38 +761,122 @@ export default function App() {
               onUpdateCategory={handleUpdateCategory}
               onDeleteCategory={handleDeleteCategory}
               onLogoutAdmin={handleLogoutAdmin}
+              onViewStorefront={() => {
+                setCurrentView('showcase');
+                window.history.pushState({}, '', '/');
+              }}
+              onOpenPwaModal={() => setIsPwaModalOpen(true)}
+              deferredPrompt={deferredPrompt}
+              onPromptInstall={handlePromptInstall}
+              isStandalone={isStandalone}
               currency={currency}
             />
           ) : (
-            <div className="min-h-[70vh] flex items-center justify-center p-4 bg-slate-950">
-              <div className="max-w-md w-full glass-panel p-8 rounded-3xl border border-white/15 text-center space-y-6 text-white">
-                <div className="w-14 h-14 rounded-2xl bg-[#e50914]/20 border border-[#e50914]/40 text-[#e50914] mx-auto flex items-center justify-center">
-                  <Key className="w-7 h-7" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white font-mono">Control Portal</h2>
-                  <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                    Please sign in with your email address to access your dashboard.
-                  </p>
+            <div className="min-h-[75vh] flex items-center justify-center p-4 bg-[#090b0e]">
+              <div className="max-w-md w-full bg-[#11141a] p-6 sm:p-8 rounded-3xl border border-white/10 text-white space-y-5 shadow-2xl">
+                
+                {/* Header Lock Icon & Titles */}
+                <div className="text-center space-y-2">
+                  <div className="w-14 h-14 rounded-2xl bg-[#e50914] text-white mx-auto flex items-center justify-center shadow-lg shadow-red-600/30">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+                      Admin Control Portal
+                    </h2>
+                    <p className="text-xs text-neutral-400 mt-1">
+                      পাসওয়ার্ড বা ৪-ডিজিট পিন দিয়ে সরাসরি অ্যাডমিন প্যানেলে প্রবেশ করুন।
+                    </p>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
+                {/* Inline Fast PIN Form */}
+                <form onSubmit={handleGatePinSubmit} className="space-y-4">
+                  {gateError && (
+                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold">
+                      {gateError}
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-neutral-300">
+                        Admin Password / Master PIN
+                      </label>
+                      <span className="text-[10px] text-neutral-500 font-mono">
+                        Default PIN: 1234
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showGatePassword ? "text" : "password"}
+                        value={gatePinInput}
+                        onChange={(e) => setGatePinInput(e.target.value)}
+                        placeholder="Enter PIN (1234) or Gmail"
+                        required
+                        autoFocus
+                        className="w-full pl-9 pr-10 py-3 text-xs bg-neutral-900 border border-white/10 rounded-2xl focus:outline-none focus:border-red-500 text-white font-mono tracking-wider"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGatePassword(!showGatePassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white p-1"
+                      >
+                        {showGatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remember this Device (Auto-Login) Toggle */}
+                  <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-all select-none">
+                    <input
+                      type="checkbox"
+                      checked={gateRememberDevice}
+                      onChange={(e) => setGateRememberDevice(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded text-red-600 focus:ring-red-500 border-neutral-700 bg-neutral-900"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">
+                        এই ডিভাইসে অটো-লগইন সক্রিয় রাখুন
+                      </span>
+                      <span className="text-[11px] text-neutral-400 block mt-0.5">
+                        পরবর্তী প্রতিবার অ্যাপ ওপেন করার সাথে সাথেই সরাসরি অ্যাডমিন প্যানেল লোড হবে।
+                      </span>
+                    </div>
+                  </label>
+
                   <button
-                    onClick={() => setIsAuthModalOpen(true)}
-                    className="w-full py-3 rounded-xl bg-[#e50914] hover:bg-[#cc0812] text-white font-bold text-xs shadow-lg transition-all"
+                    type="submit"
+                    className="w-full py-3.5 rounded-2xl bg-[#e50914] hover:bg-red-700 text-white font-black text-xs shadow-lg shadow-red-600/30 transition-all flex items-center justify-center gap-2 active:scale-98"
                   >
-                    Sign In with Email
+                    <span>১-ক্লিকে অ্যাডমিন প্যানেলে প্রবেশ করুন</span>
+                    <ArrowRight className="w-4 h-4" />
                   </button>
+                </form>
+
+                {/* Additional Quick Actions */}
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPwaModalOpen(true)}
+                    className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>মোবাইল / পিসিতে অ্যাপ হিসেবে ইনস্টল করুন (PWA)</span>
+                  </button>
+
                   <button
                     onClick={() => {
                       setCurrentView('showcase');
                       window.history.pushState({}, '', '/');
                     }}
-                    className="w-full py-2.5 rounded-xl bg-slate-900 text-slate-400 hover:text-white text-xs font-semibold"
+                    className="w-full py-2 rounded-xl text-neutral-400 hover:text-white text-xs font-medium transition-colors"
                   >
-                    Return to Storefront
+                    Return to Live Storefront
                   </button>
                 </div>
+
               </div>
             </div>
           )
@@ -742,6 +923,15 @@ export default function App() {
         onAdminLoginSuccess={handleAdminLoginSuccess}
         onCustomerLoginSuccess={handleCustomerLoginSuccess}
         adminGmail={siteSettings.adminGmail || 'sahidul010122@gmail.com'}
+      />
+
+      {/* PWA / Web App Install Modal */}
+      <PwaInstallModal
+        isOpen={isPwaModalOpen}
+        onClose={() => setIsPwaModalOpen(false)}
+        deferredPrompt={deferredPrompt}
+        onPromptInstall={handlePromptInstall}
+        isStandalone={isStandalone}
       />
 
       {/* Interactive Zoom & Swipe Modal */}

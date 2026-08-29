@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Heart, ShieldCheck, X, User, LogIn, LogOut, Globe, ShoppingBag } from 'lucide-react';
+import { Search, Heart, ShieldCheck, X, User, LogIn, LogOut, Globe, ShoppingBag, Download } from 'lucide-react';
 import { CurrencyCode, CURRENCY_RATES } from '../utils/currency';
 import { SiteSettings } from '../types/settings';
 
@@ -19,6 +19,7 @@ interface NavbarProps {
   onOpenAuthModal: () => void;
   onLogoutCustomer: () => void;
   onOpenPlaceOrder: () => void;
+  onOpenPwaModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -36,7 +37,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   customerUser,
   onOpenAuthModal,
   onLogoutCustomer,
-  onOpenPlaceOrder
+  onOpenPlaceOrder,
+  onOpenPwaModal
 }) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -143,6 +145,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Search className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
+
+          {/* PWA App Install Button */}
+          {onOpenPwaModal && (
+            <button
+              id="nav-pwa-install-btn"
+              onClick={onOpenPwaModal}
+              aria-label="Install App"
+              title="Install Web App (PWA) / অ্যাপ ইনস্টল"
+              className="p-1.5 text-neutral-700 hover:text-neutral-950 hover:bg-neutral-100 rounded-full transition-colors hidden xs:flex items-center justify-center"
+            >
+              <Download className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-emerald-600" />
+            </button>
+          )}
 
           {/* Customer Profile / Sign In */}
           {customerUser ? (

@@ -30,6 +30,11 @@ interface AdminPanelProps {
   onUpdateCategory: (id: string, cat: Partial<CategoryItem>) => void;
   onDeleteCategory: (id: string) => void;
   onLogoutAdmin: () => void;
+  onViewStorefront?: () => void;
+  onOpenPwaModal?: () => void;
+  deferredPrompt?: any;
+  onPromptInstall?: () => void;
+  isStandalone?: boolean;
   currency: CurrencyCode;
 }
 
@@ -47,6 +52,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onUpdateCategory,
   onDeleteCategory,
   onLogoutAdmin,
+  onViewStorefront,
+  onOpenPwaModal,
+  deferredPrompt,
+  onPromptInstall,
+  isStandalone,
   currency
 }) => {
   // Active Sidebar Menu Tab
@@ -56,6 +66,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Mobile Collapsible Sidebar State (Default to closed on mobile for maximum workspace)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Admin Master PIN & Auto-login state
+  const [adminPinInput, setAdminPinInput] = useState<string>(() => {
+    try {
+      return localStorage.getItem('spidey_admin_pin') || '1234';
+    } catch {
+      return '1234';
+    }
+  });
+  const [autoLoginEnabled, setAutoLoginEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('spidey_auto_login') === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [pinSavedToast, setPinSavedToast] = useState(false);
+
+  const handleSavePinSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem('spidey_admin_pin', adminPinInput);
+      if (autoLoginEnabled) {
+        localStorage.setItem('spidey_auto_login', 'true');
+        localStorage.setItem('spidey_admin_auth', 'true');
+      } else {
+        localStorage.removeItem('spidey_auto_login');
+      }
+      setPinSavedToast(true);
+      setTimeout(() => setPinSavedToast(false), 3000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
     setActiveMenu(menu);
@@ -709,7 +753,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
 
         {/* Bottom Sidebar Actions */}
-        <div className="pt-6 border-t border-white/10 space-y-1.5">
+        <div className="pt-6 border-t border-white/10 space-y-2">
+          {/* PWA / Web App Install Button */}
+          {onOpenPwaModal && (
+            <button
+              onClick={onOpenPwaModal}
+              className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-950/40 transition-all active:scale-95"
+            >
+              <div className="flex items-center gap-2.5">
+                <Download className="w-4 h-4 text-emerald-200" />
+                <span>Install Web App</span>
+              </div>
+              <span className="text-[10px] font-mono bg-white/20 px-2 py-0.5 rounded-full font-bold">
+                PWA
+              </span>
+            </button>
+          )}
+
           <button
             onClick={onResetCatalog}
             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-semibold text-neutral-400 hover:text-white hover:bg-white/5 transition-all"
@@ -769,9 +829,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             <div className="flex items-center gap-2.5 self-end sm:self-auto flex-wrap">
+              {/* Install PWA Button */}
+              {onOpenPwaModal && (
+                <button
+                  type="button"
+                  onClick={onOpenPwaModal}
+                  className="px-3.5 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                  title="Install Web App on Mobile or Desktop"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Install App</span>
+                </button>
+              )}
+
               <button
-                onClick={onLogoutAdmin}
+                onClick={onViewStorefront || onLogoutAdmin}
                 className="px-3.5 py-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-2 transition-all"
+                title="View live customer storefront"
               >
                 <Eye className="w-3.5 h-3.5 text-neutral-600" />
                 <span className="hidden sm:inline">View Public Store</span>
@@ -1384,7 +1458,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
 
                 {/* Admin Gmail Address */}
-                <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-2">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-2">
                   <label className="block text-xs font-bold text-neutral-900 flex items-center gap-1.5">
                     <Mail className="w-4 h-4 text-red-600" />
                     <span>Designated Admin Gmail Address</span>
@@ -1399,6 +1473,92 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <p className="text-[11px] text-neutral-500">
                     Entering this Gmail in the sign-in modal opens the Admin Panel. All other emails stay as standard customer logins.
                   </p>
+                </div>
+
+                {/* Admin Master Password, PIN & PWA Auto-Login Security */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#0f1218] to-[#1a1f2c] border border-neutral-800 text-white space-y-4 shadow-md">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-white/10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center border border-red-500/30">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">
+                          অ্যাডমিন পাসওয়ার্ড ও PWA অটো-লগইন সিকিউরিটি
+                        </h4>
+                        <p className="text-[11px] text-neutral-400">
+                          ইনস্টল করা অ্যাপে ক্লিক করলে সরাসরি অ্যাডমিন প্যানেলে প্রবেশ করবে এবং বারবার লগইন করার প্রয়োজন হবে না।
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Direct PWA Shortcut Ready
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-neutral-300 mb-1">
+                        Admin Master PIN / Password (পাসওয়ার্ড পরিবর্তন)
+                      </label>
+                      <input
+                        type="text"
+                        value={adminPinInput}
+                        onChange={(e) => setAdminPinInput(e.target.value)}
+                        placeholder="1234"
+                        className="w-full px-3.5 py-2.5 text-xs bg-neutral-900 border border-white/15 rounded-xl text-white font-mono tracking-wider focus:outline-none focus:border-red-500"
+                      />
+                      <span className="text-[10px] text-neutral-400 mt-1 block">
+                        ডিফল্ট পিন: 1234 (যে কোনো সংখ্যা বা পাসওয়ার্ড সেট করতে পারেন)
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col justify-between">
+                      <label className="block text-xs font-bold text-neutral-300 mb-1">
+                        Auto-Login on This Device
+                      </label>
+                      <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-all select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoLoginEnabled}
+                          onChange={(e) => setAutoLoginEnabled(e.target.checked)}
+                          className="w-4 h-4 rounded text-red-600 focus:ring-red-500 border-neutral-700 bg-neutral-900"
+                        />
+                        <span className="text-xs font-semibold text-neutral-200">
+                          এই ডিভাইসে প্রতিবার পাসওয়ার্ড ছাড়া সরাসরি ওপেন হবে
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between flex-wrap gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSavePinSettings}
+                      className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 flex items-center gap-2"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>পাসওয়ার্ড ও অটো-লগইন সেটিংস সেভ করুন</span>
+                    </button>
+
+                    {pinSavedToast && (
+                      <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 animate-fadeIn">
+                        <CheckCircle2 className="w-4 h-4" /> সেটিংস সফলভাবে আপডেট ও সেভ হয়েছে!
+                      </span>
+                    )}
+
+                    {onOpenPwaModal && (
+                      <button
+                        type="button"
+                        onClick={onOpenPwaModal}
+                        className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all flex items-center gap-2"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>অ্যাপ ইনস্টল নির্দেশিকা খুলুন</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,0 +1,41 @@
+{
+  "name": "Spidey Admin Dashboard",
+  "short_name": "Spidey Admin",
+  "description": "Direct One-Click Access to Spidey Order Management, Barcode Scanner, and Store CMS.",
+  "start_url": "/admin?pwa=1",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0d0f12",
+  "theme_color": "#e50914",
+  "categories": ["business", "shopping", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Admin Panel",
+      "short_name": "Admin",
+      "description": "Open Admin Panel directly",
+      "url": "/admin?pwa=1",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Public Storefront",
+      "short_name": "Store",
+      "description": "Browse live jersey drops",
+      "url": "/?pwa=1",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    }
+  ]
+}

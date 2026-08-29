@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14171c"/>
+      <stop offset="100%" stop-color="#07080a"/>
+    </linearGradient>
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff2a3a"/>
+      <stop offset="100%" stop-color="#cc0812"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#e50914" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)"/>
+  <rect width="504" height="504" x="4" y="4" rx="124" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+
+  <!-- Glowing Emblem Box -->
+  <rect x="96" y="96" width="320" height="320" rx="72" fill="url(#redGrad)" filter="url(#glow)"/>
+
+  <!-- Stylized Monogram S / Web Texture -->
+  <path d="M336 184 C336 152, 308 136, 256 136 C200 136, 172 160, 172 196 C172 232, 196 248, 252 264 C304 280, 340 296, 340 340 C340 384, 300 416, 248 416 C188 416, 156 384, 152 336 L212 336 C216 358, 230 370, 252 370 C274 370, 290 358, 290 340 C290 320, 274 308, 226 294 C174 278, 128 258, 128 200 C128 152, 170 112, 252 112 C330 112, 384 148, 384 204 Z" fill="#ffffff" opacity="0.96"/>
+
+  <!-- Small Admin Badge Indicator -->
+  <circle cx="390" cy="122" r="28" fill="#10b981" stroke="#0d0f12" stroke-width="8"/>
+</svg>
