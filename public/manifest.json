@@ -2,7 +2,8 @@
   "name": "Spidey Admin Dashboard",
   "short_name": "Spidey Admin",
   "description": "Direct One-Click Access to Spidey Order Management, Barcode Scanner, and Store CMS.",
-  "start_url": "/admin?pwa=1",
+  "start_url": "/?view=admin&pwa=1",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0d0f12",
@@ -27,7 +28,7 @@
       "name": "Admin Panel",
       "short_name": "Admin",
       "description": "Open Admin Panel directly",
-      "url": "/admin?pwa=1",
+      "url": "/?view=admin&pwa=1",
       "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
     },
     {

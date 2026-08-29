@@ -761,9 +761,20 @@ export default {
         });
       }
 
-      // 17. Static Assets fallback for Cloudflare Pages / Workers
+      // 17. Static Assets fallback with SPA routing for Cloudflare Pages / Workers
       if (env.ASSETS) {
-        return env.ASSETS.fetch(request);
+        const assetResponse = await env.ASSETS.fetch(request);
+        if (assetResponse.status !== 404) {
+          return assetResponse;
+        }
+
+        // If route is not found and not an API call (e.g. /admin, /order, /place-order), serve index.html
+        if (!pathname.startsWith('/api/')) {
+          const indexUrl = new URL('/', request.url);
+          return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+        }
+
+        return assetResponse;
       }
 
       return new Response('Spidey Jersey Store Worker is Running', { headers: corsHeaders });

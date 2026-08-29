@@ -40,7 +40,15 @@ export default function App() {
         return 'admin';
       }
 
-      if (path === '/admin' || path.startsWith('/admin') || search.includes('view=admin') || search.includes('admin=1') || hash === '#/admin') {
+      if (
+        path === '/admin' || 
+        path.startsWith('/admin') || 
+        search.includes('view=admin') || 
+        search.includes('admin=1') || 
+        search.includes('admin') || 
+        hash === '#/admin' ||
+        hash.includes('admin')
+      ) {
         return 'admin';
       }
       if (
@@ -263,23 +271,8 @@ export default function App() {
   // Listen to browser popstate for routes
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname.toLowerCase();
-      const search = window.location.search.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      if (path === '/admin' || search.includes('view=admin') || hash === '#/admin') {
-        setCurrentView('admin');
-      } else if (
-        path === '/place-order' || 
-        path === '/order' || 
-        search.includes('view=order') || 
-        search.includes('page=order') ||
-        hash === '#/order' ||
-        hash === '#/place-order'
-      ) {
-        setCurrentView('order');
-      } else {
-        setCurrentView('showcase');
-      }
+      const view = getInitialView();
+      setCurrentView(view);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);

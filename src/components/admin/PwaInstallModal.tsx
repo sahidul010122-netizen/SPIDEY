@@ -50,8 +50,8 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
   if (!isOpen) return null;
 
   const adminDirectUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/admin?pwa=1`
-    : 'https://.../admin?pwa=1';
+    ? `${window.location.origin}/?view=admin&pwa=1`
+    : 'https://.../?view=admin&pwa=1';
 
   const handleCopyLink = () => {
     if (navigator.clipboard) {

@@ -154,10 +154,10 @@ bucket_name = "spidey-jersey-images"`;
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-white/10 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-200">
-                Step 3: Deploy Frontend & Worker to Cloudflare Pages
+                Step 3: Deploy to Cloudflare Workers (Backend + R2 + Frontend SPA)
               </span>
               <button
-                onClick={() => copyText('npx wrangler pages deploy dist', 4)}
+                onClick={() => copyText('npx wrangler deploy', 4)}
                 className="text-xs text-slate-400 hover:text-cyan-300 flex items-center gap-1"
               >
                 {copiedStep === 4 ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -165,8 +165,11 @@ bucket_name = "spidey-jersey-images"`;
               </button>
             </div>
             <code className="block p-2.5 rounded-xl bg-slate-950 text-cyan-300 font-mono text-xs overflow-x-auto">
-              npx wrangler pages deploy dist
+              npx wrangler deploy
             </code>
+            <p className="text-[11px] text-slate-400">
+              এটি <code>worker.ts</code> এবং <code>./dist</code> ফ্রন্টএন্ড অ্যাসেট একসাথে ডেপ্লয় করবে এবং <code>spidey.&lt;user&gt;.workers.dev</code> লিংক তৈরি করবে (404-ফ্রি SPA রাউটিং সহ)।
+            </p>
           </div>
         </div>
 
