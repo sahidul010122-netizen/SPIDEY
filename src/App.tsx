@@ -582,19 +582,19 @@ export default function App() {
     e.preventDefault();
     setGateError('');
     const input = gatePinInput.trim();
-    const savedPin = (typeof window !== 'undefined' ? localStorage.getItem('spidey_admin_pin') : null) || '1234';
-    const targetEmail = (siteSettings.adminGmail || 'sahidul010122@gmail.com').trim().toLowerCase();
+    
+    // Dynamic Secret Password resolution (from persistent site settings or saved local admin password)
+    const configuredPassword = siteSettings.adminPassword || 'Spidey#Admin@2026';
+    const localSavedPassword = typeof window !== 'undefined' ? localStorage.getItem('spidey_admin_pin') : null;
 
     if (
-      input === savedPin || 
-      input === '1234' || 
-      input.toLowerCase() === targetEmail || 
-      input === 'admin123'
+      (localSavedPassword && input === localSavedPassword) ||
+      input === configuredPassword
     ) {
       handleAdminLoginSuccess(gateRememberDevice);
       setGatePinInput('');
     } else {
-      setGateError('ভুল পাসওয়ার্ড! সঠিক পিন বা ইমেইল লিখুন। (Default: 1234)');
+      setGateError('ভুল পাসওয়ার্ড! সঠিক সিক্রেট পাসওয়ার্ড প্রদান করুন।');
     }
   };
 
@@ -787,12 +787,12 @@ export default function App() {
                       Admin Control Portal
                     </h2>
                     <p className="text-xs text-neutral-400 mt-1">
-                      পাসওয়ার্ড বা ৪-ডিজিট পিন দিয়ে সরাসরি অ্যাডমিন প্যানেলে প্রবেশ করুন।
+                      গোপন অ্যাডমিন পাসওয়ার্ড দিয়ে কন্ট্রোল প্যানেলে প্রবেশ করুন।
                     </p>
                   </div>
                 </div>
 
-                {/* Inline Fast PIN Form */}
+                {/* Inline Fast Password Form */}
                 <form onSubmit={handleGatePinSubmit} className="space-y-4">
                   {gateError && (
                     <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-semibold">
@@ -801,13 +801,10 @@ export default function App() {
                   )}
 
                   <div>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <label className="block text-xs font-bold text-neutral-300">
-                        Admin Password / Master PIN
+                        Admin Secret Password
                       </label>
-                      <span className="text-[10px] text-neutral-500 font-mono">
-                        Default PIN: 1234
-                      </span>
                     </div>
                     <div className="relative">
                       <KeyRound className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -815,15 +812,17 @@ export default function App() {
                         type={showGatePassword ? "text" : "password"}
                         value={gatePinInput}
                         onChange={(e) => setGatePinInput(e.target.value)}
-                        placeholder="Enter PIN (1234) or Gmail"
+                        placeholder="••••••••••••"
                         required
                         autoFocus
+                        autoComplete="current-password"
                         className="w-full pl-9 pr-10 py-3 text-xs bg-neutral-900 border border-white/10 rounded-2xl focus:outline-none focus:border-red-500 text-white font-mono tracking-wider"
                       />
                       <button
                         type="button"
                         onClick={() => setShowGatePassword(!showGatePassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white p-1"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white p-1 cursor-pointer"
+                        title={showGatePassword ? "Hide Password" : "Show Password"}
                       >
                         {showGatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -925,6 +924,7 @@ export default function App() {
         onAdminLoginSuccess={handleAdminLoginSuccess}
         onCustomerLoginSuccess={handleCustomerLoginSuccess}
         adminGmail={siteSettings.adminGmail || 'sahidul010122@gmail.com'}
+        adminPassword={siteSettings.adminPassword || 'Spidey#Admin@2026'}
       />
 
       {/* PWA / Web App Install Modal */}

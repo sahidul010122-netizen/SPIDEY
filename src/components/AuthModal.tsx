@@ -7,6 +7,7 @@ interface AuthModalProps {
   onAdminLoginSuccess: (rememberDevice?: boolean) => void;
   onCustomerLoginSuccess: (user: { name: string; email: string }) => void;
   adminGmail: string;
+  adminPassword?: string;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -14,7 +15,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onAdminLoginSuccess,
   onCustomerLoginSuccess,
-  adminGmail
+  adminGmail,
+  adminPassword
 }) => {
   const [authMode, setAuthMode] = useState<'admin_pin' | 'customer_email'>('admin_pin');
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
@@ -32,10 +34,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const targetAdminEmail = (adminGmail || 'sahidul010122@gmail.com').trim().toLowerCase();
-  const savedMasterPin = typeof window !== 'undefined' 
-    ? (localStorage.getItem('spidey_admin_pin') || '1234')
-    : '1234';
+  const configuredPassword = adminPassword || 'Spidey#Admin@2026';
+  const savedMasterPassword = typeof window !== 'undefined' 
+    ? localStorage.getItem('spidey_admin_pin')
+    : null;
 
   const handleAdminAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,16 +46,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     const inputTrimmed = adminInput.trim();
     if (!inputTrimmed) {
-      setErrorMsg('অনুগ্রহ করে অ্যাডমিন পাসওয়ার্ড বা ইমেইল লিখুন।');
+      setErrorMsg('অনুগ্রহ করে অ্যাডমিন পাসওয়ার্ড লিখুন।');
       return;
     }
 
-    // Match either master PIN/password OR admin email
+    // Match strictly with the secret admin password or updated master password
     if (
-      inputTrimmed === savedMasterPin || 
-      inputTrimmed === '1234' || 
-      inputTrimmed.toLowerCase() === targetAdminEmail ||
-      inputTrimmed === 'admin123'
+      (savedMasterPassword && inputTrimmed === savedMasterPassword) ||
+      inputTrimmed === configuredPassword
     ) {
       setSuccessMsg('অ্যাডমিন এক্সেস নিশ্চিত হয়েছে! ড্যাশবোর্ডে রিডাইরেক্ট হচ্ছে...');
       setTimeout(() => {
@@ -63,7 +63,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    setErrorMsg('ভুল পাসওয়ার্ড বা ইমেইল! অনুগ্রহ করে সঠিক তথ্য প্রদান করুন।');
+    setErrorMsg('ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক সিক্রেট পাসওয়ার্ড প্রদান করুন।');
   };
 
   const handleCustomerSubmit = (e: React.FormEvent) => {
@@ -76,16 +76,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (!trimmedEmail) {
       setErrorMsg('Please enter your email address.');
-      return;
-    }
-
-    // Check if the entered email matches the admin's secret Gmail
-    if (trimmedEmail === targetAdminEmail) {
-      setSuccessMsg('Connecting to Admin Master Account...');
-      setTimeout(() => {
-        onAdminLoginSuccess(rememberDevice);
-        onClose();
-      }, 500);
       return;
     }
 
@@ -132,7 +122,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </h2>
           <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
             {authMode === 'admin_pin' 
-              ? 'Enter Admin Master Password/PIN or Gmail to open management dashboard.'
+              ? 'গোপন অ্যাডমিন পাসওয়ার্ড প্রদান করে ড্যাশবোর্ডে প্রবেশ করুন।'
               : 'Sign in to track orders, saved drops, and personal profile.'}
           </p>
 
@@ -195,13 +185,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             /* ADMIN MASTER PIN / PASSWORD FORM */
             <form onSubmit={handleAdminAuthSubmit} className="space-y-4">
               <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-neutral-700">
-                    Admin Password / Master PIN
+                    Admin Secret Password
                   </label>
-                  <span className="text-[10px] text-neutral-400 font-mono">
-                    Default: 1234
-                  </span>
                 </div>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -209,15 +196,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type={showPassword ? "text" : "password"}
                     value={adminInput}
                     onChange={(e) => setAdminInput(e.target.value)}
-                    placeholder="Enter PIN (e.g. 1234) or Gmail"
+                    placeholder="••••••••••••"
                     required
                     autoFocus
+                    autoComplete="current-password"
                     className="w-full pl-9 pr-10 py-2.5 text-xs bg-neutral-50 border border-neutral-200 rounded-xl focus:bg-white focus:outline-none focus:border-neutral-900 text-neutral-900 font-mono tracking-wider"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 p-1"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 p-1 cursor-pointer"
+                    title={showPassword ? "Hide Password" : "Show Password"}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>

@@ -7,7 +7,7 @@ import {
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
-  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -67,12 +67,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Mobile Collapsible Sidebar State (Default to closed on mobile for maximum workspace)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Admin Master PIN & Auto-login state
+  // Admin Master Password & Auto-login state
   const [adminPinInput, setAdminPinInput] = useState<string>(() => {
     try {
-      return localStorage.getItem('spidey_admin_pin') || '1234';
+      return localStorage.getItem('spidey_admin_pin') || siteSettings?.adminPassword || 'Spidey#Admin@2026';
     } catch {
-      return '1234';
+      return siteSettings?.adminPassword || 'Spidey#Admin@2026';
     }
   });
   const [autoLoginEnabled, setAutoLoginEnabled] = useState<boolean>(() => {
@@ -87,12 +87,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleSavePinSettings = (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      localStorage.setItem('spidey_admin_pin', adminPinInput);
+      const newPassword = adminPinInput.trim() || 'Spidey#Admin@2026';
+      localStorage.setItem('spidey_admin_pin', newPassword);
       if (autoLoginEnabled) {
         localStorage.setItem('spidey_auto_login', 'true');
         localStorage.setItem('spidey_admin_auth', 'true');
       } else {
         localStorage.removeItem('spidey_auto_login');
+      }
+      // Also update site settings if onUpdateSiteSettings is available
+      if (onUpdateSiteSettings) {
+        onUpdateSiteSettings({
+          ...localSettings,
+          adminPassword: newPassword
+        });
       }
       setPinSavedToast(true);
       setTimeout(() => setPinSavedToast(false), 3000);
@@ -1500,17 +1508,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div>
                       <label className="block text-xs font-bold text-neutral-300 mb-1">
-                        Admin Master PIN / Password (পাসওয়ার্ড পরিবর্তন)
+                        Admin Secret Password (পাসওয়ার্ড পরিবর্তন)
                       </label>
                       <input
                         type="text"
                         value={adminPinInput}
                         onChange={(e) => setAdminPinInput(e.target.value)}
-                        placeholder="1234"
+                        placeholder="সিক্রেট পাসওয়ার্ড লিখুন"
                         className="w-full px-3.5 py-2.5 text-xs bg-neutral-900 border border-white/15 rounded-xl text-white font-mono tracking-wider focus:outline-none focus:border-red-500"
                       />
                       <span className="text-[10px] text-neutral-400 mt-1 block">
-                        ডিফল্ট পিন: 1234 (যে কোনো সংখ্যা বা পাসওয়ার্ড সেট করতে পারেন)
+                        নিরাপদ আলফানিউমেরিক বা স্ট্রং পাসওয়ার্ড ব্যবহার করুন।
                       </span>
                     </div>
 
@@ -1650,6 +1658,165 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       মোবাইলে বা পপআপে "অর্ডার করুন (WhatsApp)" চাপলে এই নম্বরে অটোমেটিক প্রোডাক্ট নাম, সাইজ ও লিঙ্ক সহ মেসেজ চলে যাবে।
                     </p>
                   </div>
+                </div>
+
+                {/* 5. DYNAMIC PRODUCT SIZE GUIDE CONTROL (ADMIN ON/OFF & MEASUREMENTS EDITOR) */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-neutral-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20">
+                        <Ruler className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-bold text-neutral-900 flex items-center gap-2">
+                          <span>প্রোডাক্ট সাইজ গাইড কন্ট্রোল (Size Guide Settings)</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            localSettings.enableSizeGuide !== false 
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
+                              : 'bg-neutral-100 text-neutral-500 border border-neutral-200'
+                          }`}>
+                            {localSettings.enableSizeGuide !== false ? 'Active' : 'Disabled'}
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-neutral-500">
+                          প্রোডাক্ট ডিটেইলস পেজের সাইজ চার্ট অন/অফ করুন এবং সাইজের মাপ (Chest & Length) এডিট করুন।
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Enable / Disable 1-Click Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setLocalSettings({
+                        ...localSettings,
+                        enableSizeGuide: localSettings.enableSizeGuide === false ? true : false
+                      })}
+                      className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                        localSettings.enableSizeGuide !== false
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                          : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
+                      }`}
+                    >
+                      <Check className={`w-3.5 h-3.5 ${localSettings.enableSizeGuide !== false ? 'opacity-100' : 'opacity-0'}`} />
+                      <span>{localSettings.enableSizeGuide !== false ? 'সাইজ গাইড চালু আছে (ON)' : 'সাইজ গাইড বন্ধ (OFF)'}</span>
+                    </button>
+                  </div>
+
+                  {localSettings.enableSizeGuide !== false && (
+                    <div className="space-y-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">
+                          Fit / Quality Subtitle Note (ফিটিং নির্দেশিকা)
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettings.sizeGuideNote || ''}
+                          onChange={(e) => setLocalSettings({ ...localSettings, sizeGuideNote: e.target.value })}
+                          placeholder="Standard Thai Fit"
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-xs font-bold text-neutral-700">
+                            সাইজ মেজারমেন্ট চার্ট (Size Chart Data):
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentList = localSettings.sizeGuideMeasurements && localSettings.sizeGuideMeasurements.length > 0
+                                ? [...localSettings.sizeGuideMeasurements]
+                                : [
+                                    { size: 'S', chest: '36 - 38"', length: '27"' },
+                                    { size: 'M', chest: '38 - 40"', length: '28"' },
+                                    { size: 'L', chest: '40 - 42"', length: '29"' },
+                                    { size: 'XL', chest: '42 - 44"', length: '30"' },
+                                    { size: 'XXL', chest: '44 - 46"', length: '31"' },
+                                    { size: '3XL', chest: '46 - 48"', length: '32"' },
+                                  ];
+                              currentList.push({ size: '4XL', chest: '48 - 50"', length: '33"' });
+                              setLocalSettings({ ...localSettings, sizeGuideMeasurements: currentList });
+                            }}
+                            className="text-[11px] font-bold text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add Size Row</span>
+                          </button>
+                        </div>
+
+                        {/* Editable Measurements Grid */}
+                        <div className="space-y-1.5">
+                          {(localSettings.sizeGuideMeasurements && localSettings.sizeGuideMeasurements.length > 0 
+                            ? localSettings.sizeGuideMeasurements 
+                            : [
+                                { size: 'S', chest: '36 - 38"', length: '27"' },
+                                { size: 'M', chest: '38 - 40"', length: '28"' },
+                                { size: 'L', chest: '40 - 42"', length: '29"' },
+                                { size: 'XL', chest: '42 - 44"', length: '30"' },
+                                { size: 'XXL', chest: '44 - 46"', length: '31"' },
+                                { size: '3XL', chest: '46 - 48"', length: '32"' },
+                              ]
+                          ).map((item, index, arr) => (
+                            <div key={index} className="flex items-center gap-2 p-1.5 rounded-xl bg-neutral-50 border border-neutral-200">
+                              <div className="w-16">
+                                <input
+                                  type="text"
+                                  value={item.size}
+                                  placeholder="Size"
+                                  onChange={(e) => {
+                                    const updated = [...arr];
+                                    updated[index] = { ...updated[index], size: e.target.value };
+                                    setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
+                                  }}
+                                  className="w-full px-2 py-1 text-xs font-bold text-center bg-white border border-neutral-200 rounded-lg text-amber-600 focus:outline-none"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={item.chest}
+                                  placeholder="Chest (e.g. 40 - 42&quot;)"
+                                  onChange={(e) => {
+                                    const updated = [...arr];
+                                    updated[index] = { ...updated[index], chest: e.target.value };
+                                    setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
+                                  }}
+                                  className="w-full px-2.5 py-1 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={item.length}
+                                  placeholder="Length (e.g. 29&quot;)"
+                                  onChange={(e) => {
+                                    const updated = [...arr];
+                                    updated[index] = { ...updated[index], length: e.target.value };
+                                    setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
+                                  }}
+                                  className="w-full px-2.5 py-1 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none"
+                                />
+                              </div>
+                              {arr.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = arr.filter((_, i) => i !== index);
+                                    setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
+                                  }}
+                                  className="p-1 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                  title="Delete Size"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 pt-2">
@@ -2093,14 +2260,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-neutral-700 mb-1">
-                  Product Description
+                <label className="block text-xs font-bold text-neutral-700 mb-1 flex items-center justify-between">
+                  <span>Product Description / নোটস (Optional - ফাঁকা রাখতে পারেন)</span>
+                  <span className="text-[10px] text-emerald-600 font-normal">স্টোরে অটো গ্যারান্টি ব্যাজ শো করবে</span>
                 </label>
                 <textarea
                   rows={2}
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900"
+                  placeholder="কিছু লেখার প্রয়োজন নেই, চাইলে বিশেষ কোনো নোট লিখতে পারেন..."
+                  className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none focus:bg-white"
                 />
               </div>
 
