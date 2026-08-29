@@ -91,6 +91,10 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
   const [searchQuery, setSearchQuery] = useState('');
   const [scanFilter, setScanFilter] = useState<'all' | 'pending' | 'done'>('all');
 
+  // Selection state for batch operations (Delete selected)
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+
   // Deletion confirm modal / toast
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -141,6 +145,17 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
 
   useEffect(() => {
     fetchOrders();
+
+    // Cross-panel live synchronization listener (Order Process <-> Barcode Scanner)
+    const handleOrdersSync = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && Array.isArray(customEvent.detail.orders)) {
+        setOrders(customEvent.detail.orders);
+      }
+    };
+
+    window.addEventListener('spidey-orders-updated', handleOrdersSync);
+    return () => window.removeEventListener('spidey-orders-updated', handleOrdersSync);
   }, []);
 
   // Enumerate cameras
@@ -394,23 +409,26 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
     const timestamp = new Date().toISOString();
 
     // 1. Optimistic local update
-    setOrders((prev) => {
-      const updated = prev.map((o) => {
-        if (o.id === order.id) {
-          return {
-            ...o,
-            barcodeScanned: true,
-            scannedAt: timestamp,
-            status: o.status === 'confirmed' ? 'shipped' : o.status
-          };
-        }
-        return o;
-      });
-      try {
-        localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
-      } catch {}
-      return updated;
+    const updated = orders.map((o) => {
+      if (o.id === order.id) {
+        return {
+          ...o,
+          barcodeScanned: true,
+          scannedAt: timestamp,
+          status: o.status === 'confirmed' ? 'shipped' : o.status
+        };
+      }
+      return o;
     });
+
+    setOrders(updated);
+    try {
+      localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: updated } }));
+    }
 
     // 2. Persist to server
     try {
@@ -433,22 +451,25 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
     const nextStatus = !currentStatus;
     const timestamp = nextStatus ? new Date().toISOString() : undefined;
 
-    setOrders((prev) => {
-      const updated = prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            barcodeScanned: nextStatus,
-            scannedAt: timestamp
-          };
-        }
-        return o;
-      });
-      try {
-        localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
-      } catch {}
-      return updated;
+    const updated = orders.map((o) => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          barcodeScanned: nextStatus,
+          scannedAt: timestamp
+        };
+      }
+      return o;
     });
+
+    setOrders(updated);
+    try {
+      localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
+    } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: updated } }));
+    }
 
     try {
       await fetch(`/api/orders/${orderId}/scan-status`, {
@@ -461,94 +482,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
       });
       showToast(nextStatus ? '✓ Order marked as Done' : 'Status reset to Pending Scan');
     } catch {}
-  };
-
-  // Permanent Single Order Deletion (Removes from list, DB and persistent storage)
-  const handleDeleteOrderPermanently = async (id: string) => {
-    setDeletingId(id);
-    try {
-      const res = await fetch(`/api/orders/${id}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        setOrders((prev) => {
-          const filtered = prev.filter((o) => o.id !== id);
-          try {
-            localStorage.setItem('spidey_master_orders', JSON.stringify(filtered));
-          } catch {}
-          return filtered;
-        });
-        showToast('✓ Order permanently deleted from database and storage.');
-      } else {
-        showToast(`✕ Deletion error: ${data.message}`);
-      }
-    } catch (err: any) {
-      showToast(`✕ Failed to delete: ${err.message}`);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // Delete All Orders Permanently
-  const handleDeleteAllPermanently = async () => {
-    if (!window.confirm('Are you sure you want to permanently delete ALL orders from the database and storage? This cannot be undone.')) {
-      return;
-    }
-
-    setIsDeletingAll(true);
-    try {
-      const res = await fetch('/api/orders/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deleteAll: true })
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        setOrders([]);
-        try {
-          localStorage.removeItem('spidey_master_orders');
-        } catch {}
-        showToast('✓ All orders permanently deleted. Database & storage is clean.');
-      } else {
-        showToast(`✕ Bulk delete failed: ${data.message}`);
-      }
-    } catch (err: any) {
-      showToast(`✕ Error during deletion: ${err.message}`);
-    } finally {
-      setIsDeletingAll(false);
-    }
-  };
-
-  // Clear Completed / Done Orders Permanently
-  const handleClearCompletedOrders = async () => {
-    const doneIds = orders.filter(o => o.barcodeScanned).map(o => o.id);
-    if (doneIds.length === 0) {
-      showToast('No completed orders to clear.');
-      return;
-    }
-
-    if (!window.confirm(`Permanently delete all ${doneIds.length} completed ("Done") orders from the database & storage?`)) {
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/orders/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: doneIds })
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        setOrders(prev => prev.filter(o => !o.barcodeScanned));
-        showToast(`✓ ${doneIds.length} completed orders removed from database & storage.`);
-      }
-    } catch (err: any) {
-      showToast(`✕ Error: ${err.message}`);
-    }
   };
 
   // Handle Manual Code Submit
@@ -576,6 +509,200 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
     if (scanFilter === 'done') return !!o.barcodeScanned;
     return true;
   });
+
+  // Toggle select all visible / all orders
+  const isAllSelected = filteredOrders.length > 0 && selectedOrderIds.size === filteredOrders.length;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedOrderIds(new Set());
+    } else {
+      setSelectedOrderIds(new Set(filteredOrders.map((o) => o.id)));
+    }
+  };
+
+  const handleToggleSelectOrder = (id: string) => {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Permanent Single Order Deletion (Removes from list, DB and persistent storage)
+  const handleDeleteOrderPermanently = async (id: string) => {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const filtered = orders.filter((o) => o.id !== id);
+        setOrders(filtered);
+        setSelectedOrderIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+
+        try {
+          localStorage.setItem('spidey_master_orders', JSON.stringify(filtered));
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: filtered } }));
+        }
+
+        showToast('✓ Order permanently deleted from database and storage.');
+      } else {
+        showToast(`✕ Deletion error: ${data.message}`);
+      }
+    } catch (err: any) {
+      showToast(`✕ Failed to delete: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Bulk Delete Selected Orders Permanently
+  const handleDeleteSelectedPermanently = async () => {
+    if (selectedOrderIds.size === 0) {
+      showToast('No orders selected to delete.');
+      return;
+    }
+
+    const count = selectedOrderIds.size;
+    if (!window.confirm(`Are you sure you want to permanently delete ${count} selected order(s) from database and storage? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeletingSelected(true);
+    const idsToDelete = Array.from(selectedOrderIds);
+
+    try {
+      const res = await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToDelete })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const filtered = orders.filter((o) => !selectedOrderIds.has(o.id));
+        setOrders(filtered);
+        setSelectedOrderIds(new Set());
+
+        try {
+          localStorage.setItem('spidey_master_orders', JSON.stringify(filtered));
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: filtered } }));
+        }
+
+        showToast(`✓ ${count} selected orders permanently deleted from database & storage.`);
+      } else {
+        showToast(`✕ Bulk delete error: ${data.message}`);
+      }
+    } catch (err: any) {
+      showToast(`✕ Error during deletion: ${err.message}`);
+    } finally {
+      setIsDeletingSelected(false);
+    }
+  };
+
+  // Delete All Orders Permanently
+  const handleDeleteAllPermanently = async () => {
+    if (orders.length === 0) {
+      showToast('Scanner queue is already empty.');
+      return;
+    }
+
+    const count = orders.length;
+    if (!window.confirm(`Are you sure you want to permanently delete ALL ${count} orders from the database and storage? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeletingAll(true);
+    try {
+      const res = await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteAll: true })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setOrders([]);
+        setSelectedOrderIds(new Set());
+        try {
+          localStorage.removeItem('spidey_master_orders');
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: [] } }));
+        }
+
+        showToast(`✓ All ${count} orders permanently deleted. Database & storage is clean.`);
+      } else {
+        showToast(`✕ Bulk delete failed: ${data.message}`);
+      }
+    } catch (err: any) {
+      showToast(`✕ Error during deletion: ${err.message}`);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  // Clear Completed / Done Orders Permanently
+  const handleClearCompletedOrders = async () => {
+    const doneIds = orders.filter((o) => o.barcodeScanned).map((o) => o.id);
+    if (doneIds.length === 0) {
+      showToast('No completed orders to clear.');
+      return;
+    }
+
+    if (!window.confirm(`Permanently delete all ${doneIds.length} completed ("Done") orders from the database & storage?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: doneIds })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        const filtered = orders.filter((o) => !o.barcodeScanned);
+        setOrders(filtered);
+        setSelectedOrderIds((prev) => {
+          const next = new Set(prev);
+          doneIds.forEach((id) => next.delete(id));
+          return next;
+        });
+
+        try {
+          localStorage.setItem('spidey_master_orders', JSON.stringify(filtered));
+        } catch {}
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: filtered } }));
+        }
+
+        showToast(`✓ ${doneIds.length} completed orders removed from database & storage.`);
+      }
+    } catch (err: any) {
+      showToast(`✕ Error: ${err.message}`);
+    }
+  };
 
   const totalCount = orders.length;
   const doneCount = orders.filter(o => o.barcodeScanned).length;
@@ -1104,16 +1231,30 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
             <button
               onClick={fetchOrders}
               disabled={isLoading}
-              className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold flex items-center gap-1.5 transition-all"
+              className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
               title="Refresh from database"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
 
+            {/* Delete Selected Button */}
+            {selectedOrderIds.size > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteSelectedPermanently}
+                disabled={isDeletingSelected}
+                className="px-3.5 py-2 rounded-2xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer animate-in fade-in"
+                title="Permanently delete selected orders from database and storage"
+              >
+                <Trash2 className={`w-3.5 h-3.5 ${isDeletingSelected ? 'animate-spin' : ''}`} />
+                <span>{isDeletingSelected ? 'Deleting...' : `Delete Selected (${selectedOrderIds.size})`}</span>
+              </button>
+            )}
+
             {doneCount > 0 && (
               <button
                 onClick={handleClearCompletedOrders}
-                className="px-3 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-all"
+                className="px-3 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Clear Completed ({doneCount})</span>
@@ -1124,7 +1265,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
               <button
                 onClick={handleDeleteAllPermanently}
                 disabled={isDeletingAll}
-                className="px-3 py-2 rounded-2xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                className="px-3 py-2 rounded-2xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{isDeletingAll ? 'Deleting...' : 'Delete All'}</span>
@@ -1134,7 +1275,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
             {onGoToOrderProcess && (
               <button
                 onClick={onGoToOrderProcess}
-                className="px-3.5 py-2 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all"
+                className="px-3.5 py-2 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 <Package className="w-3.5 h-3.5" />
                 <span>+ Push from Orders</span>
@@ -1148,6 +1289,15 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
           <table className="w-full text-left text-xs">
             <thead className="bg-neutral-50 text-neutral-500 font-mono uppercase text-[10px] tracking-wider border-b border-neutral-200">
               <tr>
+                <th className="py-3.5 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 rounded text-red-600 focus:ring-red-500 border-neutral-300 cursor-pointer"
+                    title="Select / Deselect All"
+                  />
+                </th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Steadfast Barcode / Tracking</th>
                 <th className="py-3.5 px-4">Customer Details</th>
@@ -1160,7 +1310,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
             <tbody className="divide-y divide-neutral-100">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-neutral-400">
+                  <td colSpan={7} className="py-12 text-center text-neutral-400">
                     <div className="max-w-xs mx-auto space-y-2">
                       <div className="w-10 h-10 rounded-2xl bg-neutral-100 text-neutral-400 flex items-center justify-center mx-auto">
                         <ScanLine className="w-5 h-5" />
@@ -1183,6 +1333,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
                   const parcelCode = getSteadfastParcelId(order);
                   const isDone = !!order.barcodeScanned;
                   const isRecentlyMatched = recentlyMatchedId === order.id;
+                  const isSelected = selectedOrderIds.has(order.id);
 
                   return (
                     <tr
@@ -1190,11 +1341,23 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({ on
                       className={`transition-colors ${
                         isRecentlyMatched
                           ? 'bg-emerald-50/80 ring-2 ring-emerald-500 ring-inset'
+                          : isSelected
+                          ? 'bg-red-50/30'
                           : isDone
                           ? 'bg-emerald-50/20 hover:bg-emerald-50/40'
                           : 'hover:bg-neutral-50/80'
                       }`}
                     >
+                      {/* Checkbox */}
+                      <td className="py-3.5 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectOrder(order.id)}
+                          className="w-4 h-4 rounded text-red-600 focus:ring-red-500 border-neutral-300 cursor-pointer"
+                        />
+                      </td>
+
                       {/* Scan Status Pill */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <button

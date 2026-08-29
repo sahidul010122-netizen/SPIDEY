@@ -713,6 +713,149 @@ export default {
         }
       }
 
+      // 14a. Bulk Save / Sync Orders (POST)
+      if ((pathname === '/api/orders/bulk' || pathname === '/api/orders/bulk-sync') && request.method === 'POST') {
+        const data: any = await request.json();
+        const incomingOrders: Order[] = data.orders || [];
+        const allOrders = await getStoredOrders(env);
+
+        if (Array.isArray(incomingOrders) && incomingOrders.length > 0) {
+          for (const ord of incomingOrders) {
+            const idx = allOrders.findIndex(o => o.id === ord.id);
+            if (idx >= 0) {
+              allOrders[idx] = { ...allOrders[idx], ...ord };
+            } else {
+              allOrders.unshift(ord);
+            }
+          }
+          await saveStoredOrders(env, allOrders);
+        }
+
+        return new Response(JSON.stringify({ success: true, count: allOrders.length, orders: allOrders }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 14b. Bulk Delete Orders Permanently (POST)
+      if (pathname === '/api/orders/bulk-delete' && request.method === 'POST') {
+        const { ids, deleteAll } = await request.json() as any;
+        let allOrders = await getStoredOrders(env);
+
+        if (deleteAll === true) {
+          const deletedCount = allOrders.length;
+          allOrders = [];
+          await saveStoredOrders(env, allOrders);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            message: `All ${deletedCount} orders permanently deleted from database and storage`, 
+            remainingCount: 0 
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        if (Array.isArray(ids) && ids.length > 0) {
+          const idSet = new Set(ids);
+          const initialCount = allOrders.length;
+          allOrders = allOrders.filter(o => !idSet.has(o.id));
+          const deletedCount = initialCount - allOrders.length;
+          await saveStoredOrders(env, allOrders);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            message: `${deletedCount} orders permanently deleted from database and storage`, 
+            remainingCount: allOrders.length 
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        return new Response(JSON.stringify({ success: false, message: 'Invalid bulk delete payload' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 14c. Update Order Scan Status (PATCH)
+      if (pathname.startsWith('/api/orders/') && pathname.endsWith('/scan-status') && request.method === 'PATCH') {
+        const orderId = pathname.replace('/api/orders/', '').replace('/scan-status', '');
+        const { barcodeScanned, scannedAt, status } = await request.json() as any;
+        const allOrders = await getStoredOrders(env);
+        const index = allOrders.findIndex(o => o.id === orderId);
+
+        if (index === -1) {
+          return new Response(JSON.stringify({ success: false, message: 'Order not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        allOrders[index] = {
+          ...allOrders[index],
+          barcodeScanned: barcodeScanned !== undefined ? barcodeScanned : true,
+          scannedAt: scannedAt || new Date().toISOString(),
+          status: status || allOrders[index].status
+        };
+
+        await saveStoredOrders(env, allOrders);
+
+        return new Response(JSON.stringify({ success: true, order: allOrders[index] }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 14d. Delete Single Order Permanently (DELETE)
+      if (pathname.startsWith('/api/orders/') && request.method === 'DELETE') {
+        const id = pathname.replace('/api/orders/', '');
+        const allOrders = await getStoredOrders(env);
+        const index = allOrders.findIndex(o => o.id === id);
+
+        if (index === -1) {
+          return new Response(JSON.stringify({ success: false, message: 'Order not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const deleted = allOrders.splice(index, 1)[0];
+        await saveStoredOrders(env, allOrders);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Order permanently deleted from database & storage', 
+          order: deleted, 
+          remainingCount: allOrders.length 
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 14e. Update Single Order (PUT)
+      if (pathname.startsWith('/api/orders/') && request.method === 'PUT') {
+        const id = pathname.replace('/api/orders/', '');
+        const updateData: any = await request.json();
+        const allOrders = await getStoredOrders(env);
+        const index = allOrders.findIndex(o => o.id === id);
+
+        if (index === -1) {
+          return new Response(JSON.stringify({ success: false, message: 'Order not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        allOrders[index] = {
+          ...allOrders[index],
+          ...updateData,
+          id: allOrders[index].id
+        };
+
+        await saveStoredOrders(env, allOrders);
+
+        return new Response(JSON.stringify({ success: true, order: allOrders[index] }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
       // 15. Admin Store Stats
       if (pathname === '/api/stats' && request.method === 'GET') {
         const products = await getStoredProducts(env);

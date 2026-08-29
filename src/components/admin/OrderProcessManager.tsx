@@ -100,6 +100,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   // Master persistent saved orders list
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   // Bulk Paste Textarea input
   const [rawBulkInput, setRawBulkInput] = useState('');
@@ -187,6 +190,17 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
   useEffect(() => {
     fetchOrders();
+
+    // Cross-panel live synchronization listener (Order Process <-> Barcode Scanner)
+    const handleOrdersSync = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && Array.isArray(customEvent.detail.orders)) {
+        setSavedOrders(customEvent.detail.orders);
+      }
+    };
+
+    window.addEventListener('spidey-orders-updated', handleOrdersSync);
+    return () => window.removeEventListener('spidey-orders-updated', handleOrdersSync);
   }, []);
 
   // Save master orders to localStorage when updated
@@ -331,15 +345,25 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     const nextSavedOrders = [...convertedOrders, ...savedOrders];
     setSavedOrders(nextSavedOrders);
 
+    // Update localStorage cache immediately
+    try {
+      localStorage.setItem('spidey_master_orders', JSON.stringify(nextSavedOrders));
+    } catch {}
+
     // Push to server API
     try {
-      await fetch('/api/orders/bulk', {
+      await fetch('/api/orders/bulk-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orders: convertedOrders })
       });
     } catch (e) {
       console.warn('Server bulk save sync:', e);
+    }
+
+    // Dispatch global two-way cross-panel sync event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: nextSavedOrders } }));
     }
 
     // Clear staging box
@@ -544,9 +568,11 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     setOrdersToPrint(tempOrders);
   };
 
-  // Delete saved order from master list
+  // Delete single saved order from master list & database & bucket storage
   const handleDeleteSavedOrder = async (id: string) => {
-    setSavedOrders(prev => prev.filter(o => o.id !== id));
+    setDeletingOrderId(id);
+    const updated = savedOrders.filter(o => o.id !== id);
+    setSavedOrders(updated);
     setSelectedOrderIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -554,12 +580,105 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     });
 
     try {
+      localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
+    } catch {}
+
+    try {
       await fetch(`/api/orders/${id}`, { method: 'DELETE' });
     } catch (e) {
       console.warn('API delete order:', e);
+    } finally {
+      setDeletingOrderId(null);
     }
 
-    showToast('Order removed from master ledger.');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: updated } }));
+    }
+
+    showToast('✓ Order permanently removed from database & storage.');
+    if (onRefreshStats) onRefreshStats();
+  };
+
+  // Bulk Delete Selected Orders Permanently
+  const handleDeleteSelectedOrders = async () => {
+    if (selectedOrderIds.size === 0) {
+      showToast('No orders selected to delete.');
+      return;
+    }
+
+    const count = selectedOrderIds.size;
+    if (!window.confirm(`Are you sure you want to permanently delete ${count} selected order(s) from database and storage? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeletingSelected(true);
+    const idsToDelete = Array.from(selectedOrderIds);
+    const updated = savedOrders.filter(o => !selectedOrderIds.has(o.id));
+    setSavedOrders(updated);
+    setSelectedOrderIds(new Set());
+
+    try {
+      localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
+    } catch {}
+
+    try {
+      await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: idsToDelete })
+      });
+    } catch (e) {
+      console.warn('API bulk delete error:', e);
+    } finally {
+      setIsDeletingSelected(false);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: updated } }));
+    }
+
+    showToast(`✓ ${count} orders permanently deleted from database & storage.`);
+    if (onRefreshStats) onRefreshStats();
+  };
+
+  // Permanently Delete All Master Orders
+  const handleDeleteAllOrders = async () => {
+    if (savedOrders.length === 0) {
+      showToast('Master order ledger is already empty.');
+      return;
+    }
+
+    const count = savedOrders.length;
+    if (!window.confirm(`Are you sure you want to permanently delete ALL ${count} orders from the database and storage? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeletingAll(true);
+    setSavedOrders([]);
+    setSelectedOrderIds(new Set());
+
+    try {
+      localStorage.removeItem('spidey_master_orders');
+    } catch {}
+
+    try {
+      await fetch('/api/orders/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteAll: true })
+      });
+    } catch (e) {
+      console.warn('API delete all orders error:', e);
+    } finally {
+      setIsDeletingAll(false);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: [] } }));
+    }
+
+    showToast(`✓ All ${count} orders permanently deleted. Database & storage is clean.`);
+    if (onRefreshStats) onRefreshStats();
   };
 
   // Filtered orders list for display
@@ -947,7 +1066,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
             </p>
           </div>
 
-          {/* Courier and Print Action Buttons */}
+          {/* Courier, Print, Delete and Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             
             {/* Steadfast Courier Trigger Button */}
@@ -983,6 +1102,44 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                 Print Invoices ({selectedOrderIds.size > 0 ? selectedOrderIds.size : savedOrders.length})
               </span>
             </button>
+
+            {/* Delete Selected Orders Permanently Button */}
+            {selectedOrderIds.size > 0 && (
+              <button
+                type="button"
+                disabled={isDeletingSelected}
+                onClick={handleDeleteSelectedOrders}
+                className="px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer animate-in fade-in"
+                title="Permanently delete selected orders from database and storage"
+              >
+                {isDeletingSelected ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <Trash2 className="w-4 h-4 text-white" />
+                )}
+                <span>
+                  {isDeletingSelected ? 'Deleting...' : `Delete Selected (${selectedOrderIds.size})`}
+                </span>
+              </button>
+            )}
+
+            {/* Delete All Orders Permanently Button */}
+            {savedOrders.length > 0 && (
+              <button
+                type="button"
+                disabled={isDeletingAll}
+                onClick={handleDeleteAllOrders}
+                className="px-3 py-2 rounded-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Permanently remove all orders from database and storage"
+              >
+                {isDeletingAll ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                )}
+                <span>{isDeletingAll ? 'Clearing...' : 'Delete All'}</span>
+              </button>
+            )}
 
             {/* Barcode Scanner View Button */}
             {onNavigateToBarcodeScanner && (
@@ -1282,11 +1439,16 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                           </button>
                           <button
                             type="button"
+                            disabled={deletingOrderId === order.id}
                             onClick={() => handleDeleteSavedOrder(order.id)}
-                            className="p-1.5 rounded-lg hover:bg-rose-50 text-neutral-400 hover:text-rose-600 transition-all"
+                            className="p-1.5 rounded-lg hover:bg-rose-50 text-neutral-400 hover:text-rose-600 disabled:opacity-50 transition-all cursor-pointer"
                             title="Delete Order"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {deletingOrderId === order.id ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
                           </button>
                         </div>
                       </td>
