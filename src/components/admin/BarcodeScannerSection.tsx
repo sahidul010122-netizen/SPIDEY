@@ -190,7 +190,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   const manualInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastScannedTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
-  const scannerContainerId = 'unified-barcode-scanner-viewport';
+  const fullscreenScannerContainerId = 'spidey-fullscreen-camera-scanner-viewport';
 
   const showToast = (msg: string) => {
     setStatusToast(msg);
@@ -272,127 +272,107 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
   // Camera devices initialization
   useEffect(() => {
-    if (activeTab !== 'scanner') {
-      stopCameraScanner();
-      return;
-    }
-
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length > 0) {
-          setAvailableCameras(devices);
-          const backCam = devices.find(d => 
-            d.label.toLowerCase().includes('back') || 
-            d.label.toLowerCase().includes('rear') || 
-            d.label.toLowerCase().includes('environment')
-          );
-          setSelectedCameraId(backCam ? backCam.id : devices[0].id);
-        }
-      })
-      .catch(() => {
-        // Camera permissions or no camera
-      });
-
     return () => {
       stopCameraScanner();
     };
   }, [activeTab]);
 
-  // Start Camera Scanner (Robust async mount & mobile auto-detect)
-  const startCameraScanner = async (cameraIdOrFacing?: string, fullscreen = false) => {
+  // Start Camera Scanner (Direct userMedia prompt on user gesture & fullscreen launch)
+  const startCameraScanner = async (facingModeOverride?: 'environment' | 'user') => {
+    const targetFacing = facingModeOverride || cameraFacing;
     setIsCameraInitializing(true);
     setScannerError(null);
+    setIsFullscreenScanner(true);
     setIsScannerActive(true);
-    if (fullscreen) {
-      setIsFullscreenScanner(true);
-    }
 
-    // Wait a brief tick for React DOM to render the container element
-    setTimeout(async () => {
-      try {
-        const container = document.getElementById(scannerContainerId);
-        if (!container) {
-          throw new Error('ক্যামেরা ফ্রেম লোড হতে পারেনি। আবার চেষ্টা করুন।');
-        }
-
-        if (html5QrCodeRef.current) {
-          try {
-            await html5QrCodeRef.current.stop();
-          } catch {}
-          try {
-            html5QrCodeRef.current.clear();
-          } catch {}
-        }
-
-        const qrCode = new Html5Qrcode(scannerContainerId, {
-          verbose: false
-        });
-        html5QrCodeRef.current = qrCode;
-
-        const config = {
-          fps: 20,
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            const qrboxWidth = Math.min(320, Math.floor(viewfinderWidth * 0.85));
-            const qrboxHeight = Math.min(220, Math.floor(viewfinderHeight * 0.65));
-            return {
-              width: Math.max(220, qrboxWidth),
-              height: Math.max(140, qrboxHeight)
-            };
-          },
-          aspectRatio: 1.333334,
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.QR_CODE
-          ]
-        };
-
-        // Determine camera target (Camera ID or Facing mode)
-        let cameraParam: any;
-        if (cameraIdOrFacing && (cameraIdOrFacing === 'environment' || cameraIdOrFacing === 'user')) {
-          cameraParam = { facingMode: cameraIdOrFacing };
-        } else if (cameraIdOrFacing) {
-          cameraParam = cameraIdOrFacing;
-        } else if (selectedCameraId) {
-          cameraParam = selectedCameraId;
-        } else {
-          cameraParam = { facingMode: 'environment' };
-        }
-
-        await qrCode.start(
-          cameraParam,
-          config,
-          (decodedText) => {
-            handleIncomingBarcode(decodedText);
-          },
-          () => {
-            // ignore continuous search frames
+    try {
+      // 1. Direct getUserMedia call inside user click to trigger browser permission dialog immediately
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const testStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: targetFacing } }
+          });
+          testStream.getTracks().forEach(t => t.stop());
+        } catch (permErr: any) {
+          console.warn('getUserMedia prompt check:', permErr);
+          if (permErr?.name === 'NotAllowedError' || permErr?.name === 'PermissionDeniedError') {
+            throw new Error('ক্যামেরা ব্যবহারের অনুমতি (Permission) দেওয়া হয়নি। ব্রাউজার থেকে ক্যামেরা Allow করুন।');
           }
-        );
-
-        setIsScannerActive(true);
-        setScannerError(null);
-      } catch (err: any) {
-        console.error('Camera start error:', err);
-        const rawErr = err?.message || String(err);
-        if (rawErr.includes('NotAllowedError') || rawErr.includes('Permission') || rawErr.includes('denied')) {
-          setScannerError('ক্যামেরা ব্যবহারের অনুমতি (Permission) দেওয়া হয়নি। ব্রাউজার সেটিংসে ক্যামেরা Allow করুন।');
-        } else if (rawErr.includes('NotFoundError') || rawErr.includes('DevicesNotFoundError')) {
-          setScannerError('কোনো ক্যামেরা ডিভাইস খুঁজে পাওয়া যায়নি।');
-        } else if (rawErr.includes('NotReadableError') || rawErr.includes('TrackStartError')) {
-          setScannerError('ক্যামেরা অন্য অ্যাপ বা ট্যাবে চালু আছে। অনুগ্রহ করে অন্য অ্যাপ বন্ধ করে চেষ্টা করুন।');
-        } else {
-          setScannerError('ক্যামেরা চালু করা সম্ভব হয়নি: ' + rawErr);
         }
-      } finally {
-        setIsCameraInitializing(false);
       }
-    }, 150);
+
+      // 2. Wait a tick for React to render the fullscreen viewport element
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const container = document.getElementById(fullscreenScannerContainerId);
+      if (!container) {
+        throw new Error('ক্যামেরা ফ্রেম লোড হতে পারেনি। আবার চেষ্টা করুন।');
+      }
+
+      if (html5QrCodeRef.current) {
+        try {
+          await html5QrCodeRef.current.stop();
+        } catch {}
+        try {
+          html5QrCodeRef.current.clear();
+        } catch {}
+      }
+
+      const qrCode = new Html5Qrcode(fullscreenScannerContainerId, {
+        verbose: false
+      });
+      html5QrCodeRef.current = qrCode;
+
+      const config = {
+        fps: 24,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const qrboxWidth = Math.min(340, Math.floor(viewfinderWidth * 0.85));
+          const qrboxHeight = Math.min(240, Math.floor(viewfinderHeight * 0.65));
+          return {
+            width: Math.max(220, qrboxWidth),
+            height: Math.max(140, qrboxHeight)
+          };
+        },
+        aspectRatio: 1.333334,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ]
+      };
+
+      await qrCode.start(
+        { facingMode: targetFacing },
+        config,
+        (decodedText) => {
+          handleIncomingBarcode(decodedText);
+        },
+        () => {
+          // ignore background frame decoding misses
+        }
+      );
+
+      setIsScannerActive(true);
+      setScannerError(null);
+    } catch (err: any) {
+      console.error('Camera start error:', err);
+      const rawErr = err?.message || String(err);
+      if (rawErr.includes('NotAllowedError') || rawErr.includes('Permission') || rawErr.includes('denied') || rawErr.includes('অনুমতি')) {
+        setScannerError('ক্যামেরা ব্যবহারের অনুমতি দেওয়া হয়নি। অনুগ্রহ করে ব্রাউজারে ক্যামেরার পারমিশন দিন।');
+      } else if (rawErr.includes('NotFoundError') || rawErr.includes('DevicesNotFoundError')) {
+        setScannerError('কোনো ক্যামেরা ডিভাইস খুঁজে পাওয়া যায়নি।');
+      } else if (rawErr.includes('NotReadableError') || rawErr.includes('TrackStartError')) {
+        setScannerError('ক্যামেরা অন্য কোনো অ্যাপে চালু আছে। অনুগ্রহ করে অন্য অ্যাপ বন্ধ করে চেষ্টা করুন।');
+      } else {
+        setScannerError('ক্যামেরা চালু করা সম্ভব হয়নি: ' + rawErr);
+      }
+    } finally {
+      setIsCameraInitializing(false);
+    }
   };
 
   // Stop Camera Scanner
@@ -400,10 +380,11 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     if (html5QrCodeRef.current) {
       try {
         await html5QrCodeRef.current.stop();
+      } catch (err) {}
+      try {
         html5QrCodeRef.current.clear();
-      } catch (err) {
-        console.warn('Error stopping scanner:', err);
-      }
+      } catch (err) {}
+      html5QrCodeRef.current = null;
     }
     setIsScannerActive(false);
     setIsFullscreenScanner(false);
@@ -431,18 +412,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
     setCameraFacing(nextFacing);
     await stopCameraScanner();
-    startCameraScanner(nextFacing, isFullscreenScanner);
-  };
-
-  // Open Fullscreen Scanner Mode
-  const openFullscreenScanner = async () => {
-    await stopCameraScanner();
-    startCameraScanner(selectedCameraId || cameraFacing, true);
-  };
-
-  // Close Fullscreen Scanner Mode
-  const closeFullscreenScanner = async () => {
-    await stopCameraScanner();
+    startCameraScanner(nextFacing);
   };
 
   // Core Barcode Matching & Automated Size Stock Deduction Engine
@@ -1059,161 +1029,32 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                 </div>
               </div>
 
-              {/* 📷 GORGEOUS CAMERA SCANNER LAUNCHER / CONTROLLER */}
-              {!isScannerActive ? (
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-neutral-900 via-[#16191f] to-neutral-950 p-5 text-white border border-neutral-800 shadow-md">
-                  {/* Background Ambient Glow & Grid lines */}
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
-                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-600/10 rounded-full blur-2xl pointer-events-none" />
-
-                  <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5 text-center sm:text-left">
-                      <div className="w-12 h-12 rounded-2xl bg-rose-600/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shadow-inner shrink-0">
-                        <Camera className="w-6 h-6 animate-bounce" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-black text-white tracking-wide flex items-center justify-center sm:justify-start gap-2">
-                          Live Camera Scanner
-                          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        </h4>
-                        <p className="text-xs text-neutral-300 font-normal mt-0.5">
-                          ক্যামেরা অন করে ইনভয়েসের বারকোড বা কিউআর কোডের সামনে ধরুন
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-2.5 w-full sm:w-auto shrink-0">
-                      {/* Main Launch Camera Button */}
-                      <button
-                        type="button"
-                        onClick={() => startCameraScanner(undefined, false)}
-                        disabled={isCameraInitializing}
-                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-rose-600/30 active:scale-95 transition-all cursor-pointer border border-rose-400/40"
-                      >
-                        {isCameraInitializing ? (
-                          <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                        ) : (
-                          <Camera className="w-4 h-4 text-white" />
-                        )}
-                        <span>{isCameraInitializing ? 'ক্যামেরা লোড হচ্ছে...' : '📷 ক্যামেরা চালু করুন'}</span>
-                      </button>
-
-                      {/* Fullscreen Mobile Button */}
-                      <button
-                        type="button"
-                        onClick={() => startCameraScanner(undefined, true)}
-                        className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 border border-white/15 backdrop-blur-xs transition-all cursor-pointer"
-                        title="মোবাইল বা ট্যাবলেটের জন্য ফুলস্ক্রিন ভিউ"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-rose-300" />
-                        <span className="hidden md:inline">ফুলস্ক্রিন</span>
-                      </button>
-                    </div>
+              {/* Quick Mobile Camera Scanner Trigger Card */}
+              <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-rose-600 flex items-center justify-center text-white shadow-md shadow-rose-600/20 shrink-0">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-neutral-900 flex items-center gap-2">
+                      লাইভ মোবাইল ক্যামেরা স্ক্যানার
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                    </h4>
+                    <p className="text-xs text-neutral-600 mt-0.5">
+                      ক্লিক করলেই সরাসরি ফুলস্ক্রিনে ক্যামেরা ওপেন হবে এবং পার্সেলের কোড লাইভ ডিটেক্ট করবে
+                    </p>
                   </div>
                 </div>
-              ) : (
-                /* Active Viewfinder Container */
-                <div className="space-y-3 p-4 rounded-2xl bg-neutral-950 text-white border border-neutral-800 shadow-inner">
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-neutral-800">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-                      <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
-                        <Camera className="w-3.5 h-3.5 text-rose-400" />
-                        Live Laser Scanner Active
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {/* Torch Button */}
-                      <button
-                        type="button"
-                        onClick={toggleFlashlight}
-                        className={`p-1.5 rounded-lg text-xs font-bold transition-all border ${
-                          isFlashlightOn 
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-400/40' 
-                            : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border-neutral-700'
-                        }`}
-                        title="টর্চ / ফ্ল্যাশলাইট চালু/বন্ধ করুন"
-                      >
-                        <Flashlight className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Flip Camera */}
-                      <button
-                        type="button"
-                        onClick={toggleCameraFacing}
-                        className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 transition-all text-xs font-bold"
-                        title="ক্যামেরা ফ্লিপ করুন (সামনে / পেছনে)"
-                      >
-                        <SwitchCamera className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Fullscreen Expand */}
-                      <button
-                        type="button"
-                        onClick={() => setIsFullscreenScanner(true)}
-                        className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 transition-all text-xs font-bold"
-                        title="ফুলস্ক্রিন ভিউতে বড় করুন"
-                      >
-                        <Maximize2 className="w-3.5 h-3.5" />
-                      </button>
-
-                      {/* Stop Camera Button */}
-                      <button
-                        type="button"
-                        onClick={stopCameraScanner}
-                        className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1 transition-all shadow-xs"
-                      >
-                        <CameraOff className="w-3 h-3" />
-                        <span>বন্ধ করুন</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Multi-Camera Selector */}
-                  {availableCameras.length > 1 && (
-                    <div className="flex items-center justify-between text-xs text-neutral-400">
-                      <span>ক্যামেরা সিলেক্ট করুন:</span>
-                      <select
-                        value={selectedCameraId}
-                        onChange={(e) => {
-                          setSelectedCameraId(e.target.value);
-                          startCameraScanner(e.target.value);
-                        }}
-                        className="text-xs bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-neutral-200 outline-hidden font-medium"
-                      >
-                        {availableCameras.map(cam => (
-                          <option key={cam.id} value={cam.id}>{cam.label || `Camera Lens ${cam.id.slice(0, 5)}`}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Live Viewport Box */}
-                  <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-72 border-2 border-neutral-800 flex items-center justify-center">
-                    <div id={scannerContainerId} className="w-full h-full" />
-                    
-                    {/* Cyber Laser Reticle Overlay */}
-                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="w-52 h-36 border-2 border-rose-500/80 rounded-xl relative shadow-[0_0_15px_rgba(244,63,94,0.3)]">
-                        <span className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 border-rose-400" />
-                        <span className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 border-rose-400" />
-                        <span className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 border-rose-400" />
-                        <span className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 border-rose-400" />
-                        
-                        {/* Animated Sweeping Laser Line */}
-                        <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-rose-500 to-transparent absolute top-1/2 -translate-y-1/2 animate-pulse shadow-[0_0_8px_#f43f5e]" />
-                      </div>
-                    </div>
-
-                    <div className="absolute bottom-2 inset-x-0 text-center pointer-events-none">
-                      <span className="px-3 py-1 rounded-full bg-neutral-950/80 backdrop-blur-md text-[10px] font-bold text-rose-300 border border-rose-500/30">
-                        🎯 বারকোড বা কিউআর কোড ফ্রেমের সেন্টারে রাখুন
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => startCameraScanner()}
+                  disabled={isCameraInitializing}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md shadow-rose-600/25 cursor-pointer shrink-0"
+                >
+                  {isCameraInitializing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                  <span>{isCameraInitializing ? 'ক্যামেরা লোড হচ্ছে...' : '📷 ক্যামেরা ওপেন করুন'}</span>
+                </button>
+              </div>
 
               {/* Camera Error Message */}
               {scannerError && (
@@ -1965,12 +1806,12 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
       {/* Fullscreen Mobile Viewfinder Modal */}
       {isFullscreenScanner && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between animate-fadeIn select-none">
           {/* Top Bar */}
-          <div className="p-4 bg-neutral-900/90 backdrop-blur-md flex items-center justify-between z-20 border-b border-neutral-800 text-white">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-              <span className="text-xs font-bold font-mono tracking-wide text-rose-300">
+          <div className="p-3.5 sm:p-4 bg-neutral-900/95 backdrop-blur-md flex items-center justify-between z-20 border-b border-neutral-800 text-white">
+            <div className="flex items-center gap-2.5">
+              <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-xs sm:text-sm font-extrabold font-mono tracking-wide text-rose-300">
                 🔴 LIVE CAMERA SCANNER
               </span>
             </div>
@@ -1992,8 +1833,8 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
               <button
                 type="button"
                 onClick={toggleCameraFacing}
-                className="p-2 rounded-xl bg-neutral-800 text-neutral-300 border border-neutral-700 text-xs font-bold"
-                title="ক্যামেরা ফ্লিপ"
+                className="p-2 rounded-xl bg-neutral-800 text-neutral-300 border border-neutral-700 text-xs font-bold hover:bg-neutral-700 transition-all"
+                title="ক্যামেরা ফ্লিপ (সামনে / পেছনে)"
               >
                 <SwitchCamera className="w-4 h-4" />
               </button>
@@ -2002,21 +1843,22 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
               <button
                 type="button"
                 onClick={() => setSoundEnabled(!soundEnabled)}
-                className={`p-2 rounded-xl text-xs font-bold border ${
+                className={`p-2 rounded-xl text-xs font-bold border transition-all ${
                   soundEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                 }`}
+                title={soundEnabled ? 'সাউন্ড অন' : 'সাউন্ড মিউট'}
               >
                 {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </button>
 
-              {/* Exit Fullscreen */}
+              {/* Exit / Close Fullscreen */}
               <button
                 type="button"
-                onClick={closeFullscreenScanner}
-                className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1 shadow-md cursor-pointer"
+                onClick={stopCameraScanner}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
               >
                 <X className="w-4 h-4" />
-                <span className="text-xs font-bold">বন্ধ</span>
+                <span>বন্ধ করুন</span>
               </button>
             </div>
           </div>
@@ -2024,53 +1866,68 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           {/* Full Viewport Frame with HUD */}
           <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
             {/* Viewport container inside fullscreen */}
-            <div id={scannerContainerId} className="w-full h-full object-cover" />
+            <div id={fullscreenScannerContainerId} className="w-full h-full object-cover" />
 
             {/* Overlaid Targeting Reticle */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-              <div className="w-64 h-44 border-2 border-rose-500/80 rounded-2xl relative shadow-[0_0_25px_rgba(244,63,94,0.4)]">
-                <span className="absolute -top-2 -left-2 w-5 h-5 border-t-4 border-l-4 border-rose-400 rounded-tl-sm" />
-                <span className="absolute -top-2 -right-2 w-5 h-5 border-t-4 border-r-4 border-rose-400 rounded-tr-sm" />
-                <span className="absolute -bottom-2 -left-2 w-5 h-5 border-b-4 border-l-4 border-rose-400 rounded-bl-sm" />
-                <span className="absolute -bottom-2 -right-2 w-5 h-5 border-b-4 border-r-4 border-rose-400 rounded-br-sm" />
+              <div className="w-64 sm:w-80 h-44 sm:h-52 border-2 border-rose-500/90 rounded-2xl relative shadow-[0_0_30px_rgba(244,63,94,0.5)]">
+                <span className="absolute -top-2 -left-2 w-6 h-6 border-t-4 border-l-4 border-rose-400 rounded-tl-sm" />
+                <span className="absolute -top-2 -right-2 w-6 h-6 border-t-4 border-r-4 border-rose-400 rounded-tr-sm" />
+                <span className="absolute -bottom-2 -left-2 w-6 h-6 border-b-4 border-l-4 border-rose-400 rounded-bl-sm" />
+                <span className="absolute -bottom-2 -right-2 w-6 h-6 border-b-4 border-r-4 border-rose-400 rounded-br-sm" />
                 <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-rose-500 to-transparent absolute top-1/2 -translate-y-1/2 animate-pulse shadow-[0_0_12px_#f43f5e]" />
               </div>
             </div>
 
             <div className="absolute top-4 inset-x-0 text-center pointer-events-none z-10">
-              <span className="px-4 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-xs font-bold text-rose-300 border border-rose-500/40">
-                🎯 পার্সেলের বারকোড বা কিউআর কোড স্ক্যান করুন
+              <span className="px-4 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-xs font-bold text-rose-300 border border-rose-500/40 shadow-lg">
+                🎯 পার্সেলের বারকোড বা কিউআর কোড ফ্রেমের সেন্টারে ধরুন
               </span>
             </div>
           </div>
 
           {/* Floating Bottom Quick Scan Result Card */}
-          <div className="p-4 bg-neutral-950/90 backdrop-blur-md border-t border-neutral-800 text-white z-20 space-y-2">
+          <div className="p-3 sm:p-4 bg-neutral-950/95 backdrop-blur-md border-t border-neutral-800 text-white z-20 space-y-2">
             {lastScanResult ? (
-              <div className="p-3 rounded-2xl bg-neutral-900 border border-neutral-700 flex items-center justify-between gap-3">
+              <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 ${
+                lastScanResult.status === 'success' 
+                  ? 'bg-emerald-950/60 border-emerald-500/60' 
+                  : lastScanResult.status === 'warning'
+                  ? 'bg-amber-950/60 border-amber-500/60'
+                  : 'bg-rose-950/60 border-rose-500/60'
+              }`}>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs font-extrabold text-white font-mono truncate">
+                    <span className={`w-2 h-2 rounded-full ${
+                      lastScanResult.status === 'success' ? 'bg-emerald-400' : lastScanResult.status === 'warning' ? 'bg-amber-400' : 'bg-rose-400'
+                    }`} />
+                    <span className="text-xs sm:text-sm font-extrabold text-white font-mono truncate">
                       {lastScanResult.order?.invoiceNumber || lastScanResult.code}
                     </span>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
-                      Dispatched
+                      {lastScanResult.order?.status || 'Matched'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-neutral-300 truncate mt-0.5">
-                    {lastScanResult.order?.customerName} • {lastScanResult.message}
+                  <p className="text-[11px] sm:text-xs text-neutral-200 truncate mt-0.5 font-medium">
+                    {lastScanResult.order?.customerName ? `${lastScanResult.order.customerName} • ` : ''}
+                    {lastScanResult.message}
                   </p>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="text-xs font-bold text-emerald-400 font-mono">
-                    Stock -{lastScanResult.deductedDetails?.reduce((a, b) => a + b.quantity, 0) || 1}
-                  </span>
-                </div>
+                {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-emerald-400 font-mono block">
+                      Stock -{lastScanResult.deductedDetails.reduce((a, b) => a + b.quantity, 0)}
+                    </span>
+                    <span className="text-[10px] text-neutral-400">
+                      {lastScanResult.deductedDetails.map(d => `${d.size}: -${d.quantity}`).join(', ')}
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="text-center text-xs text-neutral-400 py-1 font-medium">
-                বারকোড স্ক্যান করলে স্বয়ংক্রিয়ভাবে স্টক মাইনাস ও হ্যান্ডওভার সম্পন্ন হবে
+              <div className="text-center text-xs text-neutral-400 py-1.5 font-medium flex items-center justify-center gap-2">
+                <ScanLine className="w-4 h-4 text-rose-400 animate-pulse" />
+                <span>বারকোড স্ক্যান করলে স্বয়ংক্রিয়ভাবে স্টক মাইনাস ও হ্যান্ডওভার সম্পন্ন হবে</span>
               </div>
             )}
           </div>
