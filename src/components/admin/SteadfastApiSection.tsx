@@ -337,7 +337,7 @@ export const SteadfastApiSection: React.FC<SteadfastApiSectionProps> = ({ onGoTo
                     <XCircle className="w-5 h-5 text-rose-600 shrink-0" />
                   )}
                   <div>
-                    <div className="font-bold">{testResult.message}</div>
+                    <div className="font-bold">{typeof testResult.message === 'string' ? testResult.message : JSON.stringify(testResult.message)}</div>
                     <div className="text-[10px] opacity-80">
                       {testResult.success ? 'Steadfast Merchant API Live & Authorized' : 'Please check your API Key and Secret Key.'}
                     </div>

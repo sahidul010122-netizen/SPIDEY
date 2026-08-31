@@ -156,8 +156,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   // Status Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
+  const showToast = (msg: any) => {
+    const text = typeof msg === 'string' ? msg : (msg?.message || JSON.stringify(msg));
+    setToastMessage(text);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -484,23 +485,27 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       }
 
       // Always open Steadfast Dispatch Results Summary Modal so merchant sees exact status
+      const safeResults = Array.isArray(res.results) && res.results.length > 0 
+        ? res.results 
+        : targetOrders.map(o => ({
+            orderId: o.id,
+            success: !!o.trackingCode,
+            trackingCode: o.trackingCode,
+            error: !o.trackingCode ? (typeof res.message === 'string' ? res.message : 'Consignment failed') : undefined
+          }));
+
       setDispatchResultModal({
         isOpen: true,
-        results: res.results || targetOrders.map(o => ({
-          orderId: o.id,
-          success: !!o.trackingCode,
-          trackingCode: o.trackingCode,
-          error: !o.trackingCode ? res.message : undefined
-        })),
-        successCount: res.totalProcessed,
-        failedCount: res.results ? res.results.filter(r => !r.success).length : (res.success ? 0 : targetOrders.length),
-        message: res.message
+        results: safeResults,
+        successCount: Number(res.totalProcessed) || 0,
+        failedCount: safeResults.filter(r => !r.success).length,
+        message: typeof res.message === 'string' ? res.message : JSON.stringify(res.message || '')
       });
 
       if (res.success) {
         showToast(`🚚 Steadfast Consignments Entry: ${res.totalProcessed} orders processed successfully!`);
       } else {
-        showToast(`⚠️ Steadfast Entry: ${res.message}`);
+        showToast(`⚠️ Steadfast Entry: ${typeof res.message === 'string' ? res.message : 'Process completed with notices'}`);
       }
     } catch (e: any) {
       console.error('Steadfast error:', e);
@@ -1620,7 +1625,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                     ) : (
                       <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                     )}
-                    <span className="font-semibold">{connectionTestResult.message}</span>
+                    <span className="font-semibold">{typeof connectionTestResult.message === 'string' ? connectionTestResult.message : JSON.stringify(connectionTestResult.message)}</span>
                   </div>
                   {connectionTestResult.success && connectionTestResult.balance !== undefined && (
                     <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 font-mono font-black rounded-lg text-xs">
@@ -1704,10 +1709,11 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
             {/* Consignment List */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {dispatchResultModal.results.map((res, idx) => {
+              {(dispatchResultModal.results || []).map((res, idx) => {
                 const matchedOrder = savedOrders.find(o => o.id === res.orderId);
                 const tracking = res.trackingCode || matchedOrder?.trackingCode;
                 const consignmentId = res.consignment?.consignment_id || matchedOrder?.consignmentId;
+                const errorStr = res.error ? (typeof res.error === 'string' ? res.error : JSON.stringify(res.error)) : null;
 
                 return (
                   <div 
@@ -1736,9 +1742,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       <div className="text-neutral-600 text-[11px] mt-0.5">
                         {matchedOrder?.customerName} • {matchedOrder?.phoneNumber}
                       </div>
-                      {res.error && (
-                        <div className="text-rose-600 text-[10px] mt-0.5">
-                          Error: {res.error}
+                      {errorStr && (
+                        <div className="text-rose-600 text-[10px] mt-0.5 font-medium">
+                          Error: {errorStr}
                         </div>
                       )}
                     </div>
@@ -1786,7 +1792,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const failedIds = dispatchResultModal.results.filter(r => !r.success).map(r => r.orderId);
+                      const failedIds = (dispatchResultModal.results || []).filter(r => !r.success).map(r => r.orderId);
                       handleAutoAssignSteadfast(failedIds);
                     }}
                     className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all"

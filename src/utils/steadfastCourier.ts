@@ -232,17 +232,18 @@ export async function processOrdersWithSteadfast(
         success: false,
         totalProcessed: 0,
         orders: ordersToProcess,
-        message: data.message || 'Steadfast API Key and Secret Key required.',
+        message: String(data.message || 'Steadfast API Key and Secret Key required.'),
         requiresApiKey: true
       };
     } else {
       // If server returned partial failure or error
+      const rawMsg = (data && data.message) || (data && data.results && data.results[0]?.error) || 'Steadfast consignment entry encountered errors.';
       return {
         success: false,
         totalProcessed: (data && data.successfulCount) || 0,
         orders: ordersToProcess,
-        message: (data && data.message) || (data && data.results && data.results[0]?.error) || 'Steadfast consignment entry encountered errors.',
-        results: data && data.results
+        message: typeof rawMsg === 'string' ? rawMsg : JSON.stringify(rawMsg),
+        results: Array.isArray(data?.results) ? data.results : []
       };
     }
   } catch (err: any) {
@@ -264,7 +265,12 @@ export async function processOrdersWithSteadfast(
       success: true,
       totalProcessed: updatedOrders.length,
       orders: updatedOrders,
-      message: `Offline mode: Assigned ${updatedOrders.length} Steadfast 9-digit tracking numbers.`
+      message: `Offline mode: Assigned ${updatedOrders.length} Steadfast 9-digit tracking numbers.`,
+      results: updatedOrders.map(o => ({
+        orderId: o.id,
+        success: true,
+        trackingCode: o.trackingCode
+      }))
     };
   }
 }

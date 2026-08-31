@@ -1334,7 +1334,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                         {lastScanResult.status === 'success' ? '✔ অর্ডার স্ক্যান সম্পন্ন (DONE)' : lastScanResult.status === 'warning' ? 'ইতিমধ্যে ডিসপ্যাচড' : '✕ স্ক্যান ফেইল্ড (FAILED)'}
                       </h4>
                       <p className="text-xs font-medium mt-0.5">
-                        {lastScanResult.message}
+                        {typeof lastScanResult.message === 'string' ? lastScanResult.message : JSON.stringify(lastScanResult.message)}
                       </p>
                       <span className="text-[10px] font-mono opacity-70 block mt-1">
                         Scanned Code: {lastScanResult.code}
@@ -2118,7 +2118,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
                   {lastScanResult.status === 'fail' && (
                     <p className="text-xs text-rose-200 pt-1 border-t border-rose-500/30">
-                      {lastScanResult.message}
+                      {typeof lastScanResult.message === 'string' ? lastScanResult.message : JSON.stringify(lastScanResult.message)}
                     </p>
                   )}
                 </div>

@@ -1327,20 +1327,39 @@ async function startServer() {
           });
           updatedOrdersList.push({ ...order });
         } else {
-          // Check if Steadfast gave an error message
-          const errMsg = (sfRes.data && (sfRes.data.message || sfRes.data.error)) || (sfRes.data && sfRes.data.errors ? JSON.stringify(sfRes.data.errors) : sfRes.error || `HTTP ${sfRes.status}`);
+          // Format error message to clean string even if Steadfast returns nested error object
+          let errMsg = 'Steadfast entry rejected';
+          if (sfRes.data) {
+            if (typeof sfRes.data.message === 'string' && sfRes.data.message.trim()) {
+              errMsg = sfRes.data.message;
+            } else if (typeof sfRes.data.error === 'string' && sfRes.data.error.trim()) {
+              errMsg = sfRes.data.error;
+            } else if (sfRes.data.errors && typeof sfRes.data.errors === 'object') {
+              errMsg = Object.entries(sfRes.data.errors)
+                .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                .join(' | ');
+            } else if (sfRes.data.error && typeof sfRes.data.error === 'object') {
+              errMsg = Object.entries(sfRes.data.error)
+                .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                .join(' | ');
+            } else {
+              errMsg = JSON.stringify(sfRes.data);
+            }
+          } else {
+            errMsg = sfRes.error || `HTTP ${sfRes.status || 500}`;
+          }
           
           results.push({
             orderId: order.id,
             success: false,
-            error: errMsg
+            error: String(errMsg)
           });
         }
       } catch (err: any) {
         results.push({
           orderId: order.id,
           success: false,
-          error: err.message || 'Network request failed'
+          error: String(err.message || 'Network request failed')
         });
       }
     }
@@ -1359,7 +1378,7 @@ async function startServer() {
       updatedOrders: updatedOrdersList,
       message: successfulCount > 0 
         ? `Steadfast Entry: ${successfulCount} of ${targetOrders.length} orders dispatched successfully.`
-        : `Steadfast Entry Error: ${results[0]?.error || 'API Authentication or validation failed'}`
+        : `Steadfast Entry: ${results[0]?.error ? String(results[0].error) : 'API Authentication or validation failed'}`
     });
   });
 
