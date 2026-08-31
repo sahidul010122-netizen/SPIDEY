@@ -44,9 +44,12 @@ import {
   Info,
   UploadCloud,
   Flashlight,
-  Smartphone
+  Smartphone,
+  Lock,
+  Settings,
+  HelpCircle
 } from 'lucide-react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import JsBarcode from 'jsbarcode';
 import { Order, JerseyProduct } from '../../types';
 import { SiteSettings } from '../../types/settings';
@@ -185,12 +188,15 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   // Invoice Print Preview Modal
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
 
-  // Scanner refs
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  // Scanner state & refs
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const zxingControlsRef = useRef<any>(null);
+  const barcodeAnimationIdRef = useRef<number | null>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastScannedTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
-  const fullscreenScannerContainerId = 'spidey-fullscreen-camera-scanner-viewport';
 
   const showToast = (msg: string) => {
     setStatusToast(msg);
@@ -270,121 +276,170 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     }
   }, [activeTab]);
 
-  // Camera devices initialization
+  // Clean up camera stream on unmount
   useEffect(() => {
     return () => {
       stopCameraScanner();
     };
-  }, [activeTab]);
+  }, []);
 
-  // Start Camera Scanner (Direct userMedia prompt on user gesture & fullscreen launch)
+  // Start Camera Scanner (Direct WebRTC userMedia & instant Native Video render)
   const startCameraScanner = async (facingModeOverride?: 'environment' | 'user') => {
     const targetFacing = facingModeOverride || cameraFacing;
     setIsCameraInitializing(true);
     setScannerError(null);
+    setShowPermissionModal(false);
     setIsFullscreenScanner(true);
     setIsScannerActive(true);
 
     try {
-      // 1. Direct getUserMedia call inside user click to trigger browser permission dialog immediately
-      if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        try {
-          const testStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: targetFacing } }
-          });
-          testStream.getTracks().forEach(t => t.stop());
-        } catch (permErr: any) {
-          console.warn('getUserMedia prompt check:', permErr);
-          if (permErr?.name === 'NotAllowedError' || permErr?.name === 'PermissionDeniedError') {
-            throw new Error('ক্যামেরা ব্যবহারের অনুমতি (Permission) দেওয়া হয়নি। ব্রাউজার থেকে ক্যামেরা Allow করুন।');
-          }
-        }
+      // 1. Clean up any previous stream/decoder
+      if (barcodeAnimationIdRef.current) {
+        cancelAnimationFrame(barcodeAnimationIdRef.current);
+        barcodeAnimationIdRef.current = null;
       }
-
-      // 2. Wait a tick for React to render the fullscreen viewport element
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      const container = document.getElementById(fullscreenScannerContainerId);
-      if (!container) {
-        throw new Error('ক্যামেরা ফ্রেম লোড হতে পারেনি। আবার চেষ্টা করুন।');
-      }
-
-      if (html5QrCodeRef.current) {
+      if (zxingControlsRef.current) {
         try {
-          await html5QrCodeRef.current.stop();
+          zxingControlsRef.current.stop();
         } catch {}
-        try {
-          html5QrCodeRef.current.clear();
-        } catch {}
+        zxingControlsRef.current = null;
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(t => {
+          try { t.stop(); } catch {}
+        });
+        mediaStreamRef.current = null;
       }
 
-      const qrCode = new Html5Qrcode(fullscreenScannerContainerId, {
-        verbose: false
-      });
-      html5QrCodeRef.current = qrCode;
-
-      const config = {
-        fps: 24,
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const qrboxWidth = Math.min(340, Math.floor(viewfinderWidth * 0.85));
-          const qrboxHeight = Math.min(240, Math.floor(viewfinderHeight * 0.65));
-          return {
-            width: Math.max(220, qrboxWidth),
-            height: Math.max(140, qrboxHeight)
-          };
+      // 2. Request user media with ideal mobile rear-facing camera constraints
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: { ideal: targetFacing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         },
-        aspectRatio: 1.333334,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.QR_CODE
-        ]
+        audio: false
       };
 
-      await qrCode.start(
-        { facingMode: targetFacing },
-        config,
-        (decodedText) => {
-          handleIncomingBarcode(decodedText);
-        },
-        () => {
-          // ignore background frame decoding misses
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      mediaStreamRef.current = stream;
+
+      // 3. Attach directly to Video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('autoplay', 'true');
+        videoRef.current.muted = true;
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn('Video autoPlay catch:', playErr);
         }
-      );
+      }
+
+      // 4. Start Hardware-Accelerated Barcode / QR Decoder Engine
+      startDecodingEngine(stream);
 
       setIsScannerActive(true);
       setScannerError(null);
+      setIsCameraInitializing(false);
     } catch (err: any) {
-      console.error('Camera start error:', err);
-      const rawErr = err?.message || String(err);
-      if (rawErr.includes('NotAllowedError') || rawErr.includes('Permission') || rawErr.includes('denied') || rawErr.includes('অনুমতি')) {
-        setScannerError('ক্যামেরা ব্যবহারের অনুমতি দেওয়া হয়নি। অনুগ্রহ করে ব্রাউজারে ক্যামেরার পারমিশন দিন।');
+      console.error('Camera stream start error:', err);
+      setIsCameraInitializing(false);
+      const rawErr = err?.name || err?.message || String(err);
+      
+      if (rawErr.includes('NotAllowedError') || rawErr.includes('Permission') || rawErr.includes('denied')) {
+        setScannerError('ক্যামেরা ব্যবহারের অনুমতি (Permission) দেওয়া হয়নি।');
+        setShowPermissionModal(true);
       } else if (rawErr.includes('NotFoundError') || rawErr.includes('DevicesNotFoundError')) {
         setScannerError('কোনো ক্যামেরা ডিভাইস খুঁজে পাওয়া যায়নি।');
       } else if (rawErr.includes('NotReadableError') || rawErr.includes('TrackStartError')) {
-        setScannerError('ক্যামেরা অন্য কোনো অ্যাপে চালু আছে। অনুগ্রহ করে অন্য অ্যাপ বন্ধ করে চেষ্টা করুন।');
+        setScannerError('ক্যামেরা অন্য কোনো অ্যাপে চালু আছে। অনুগ্রহ করে অন্য অ্যাপ বন্ধ করে আবার চেষ্টা করুন।');
       } else {
-        setScannerError('ক্যামেরা চালু করা সম্ভব হয়নি: ' + rawErr);
+        setScannerError('ক্যামেরা চালু করতে সমস্যা হয়েছে: ' + rawErr);
       }
-    } finally {
-      setIsCameraInitializing(false);
     }
   };
 
-  // Stop Camera Scanner
+  // Barcode & QR Code live scanning loop (Hardware BarcodeDetector + ZXing Fallback)
+  const startDecodingEngine = (stream: MediaStream) => {
+    // A) Fast hardware detection using standard BarcodeDetector (Supported in Android Chrome & modern browsers)
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        const detector = new (window as any).BarcodeDetector({
+          formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e']
+        });
+
+        let isScanningFrame = false;
+        const scanFrame = async () => {
+          if (!mediaStreamRef.current || !videoRef.current) return;
+
+          if (!isScanningFrame && videoRef.current.readyState >= 2) {
+            isScanningFrame = true;
+            try {
+              const barcodes = await detector.detect(videoRef.current);
+              if (barcodes && barcodes.length > 0) {
+                const detectedCode = barcodes[0].rawValue;
+                if (detectedCode) {
+                  handleIncomingBarcode(detectedCode);
+                }
+              }
+            } catch (frameErr) {
+              // Frame decoding skip
+            } finally {
+              isScanningFrame = false;
+            }
+          }
+
+          barcodeAnimationIdRef.current = requestAnimationFrame(scanFrame);
+        };
+
+        barcodeAnimationIdRef.current = requestAnimationFrame(scanFrame);
+        return;
+      } catch (detectorErr) {
+        console.warn('BarcodeDetector fallback to ZXing:', detectorErr);
+      }
+    }
+
+    // B) Multi-Format ZXing Browser Reader Fallback (Universal support for iOS / Desktop / All browsers)
+    try {
+      const codeReader = new BrowserMultiFormatReader();
+      if (videoRef.current) {
+        codeReader.decodeFromVideoElement(videoRef.current, (result, err, controls) => {
+          zxingControlsRef.current = controls;
+          if (result) {
+            const detectedText = result.getText();
+            if (detectedText) {
+              handleIncomingBarcode(detectedText);
+            }
+          }
+        });
+      }
+    } catch (zxingErr) {
+      console.error('ZXing decoder init error:', zxingErr);
+    }
+  };
+
+  // Stop Camera Scanner & clean resources
   const stopCameraScanner = async () => {
-    if (html5QrCodeRef.current) {
+    if (barcodeAnimationIdRef.current) {
+      cancelAnimationFrame(barcodeAnimationIdRef.current);
+      barcodeAnimationIdRef.current = null;
+    }
+    if (zxingControlsRef.current) {
       try {
-        await html5QrCodeRef.current.stop();
-      } catch (err) {}
-      try {
-        html5QrCodeRef.current.clear();
-      } catch (err) {}
-      html5QrCodeRef.current = null;
+        zxingControlsRef.current.stop();
+      } catch {}
+      zxingControlsRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => {
+        try { track.stop(); } catch {}
+      });
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setIsScannerActive(false);
     setIsFullscreenScanner(false);
@@ -394,12 +449,15 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
   // Toggle Camera Flashlight / Torch
   const toggleFlashlight = async () => {
-    if (!html5QrCodeRef.current || !isScannerActive) return;
+    if (!mediaStreamRef.current) return;
+    const track = mediaStreamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
     try {
       const nextTorch = !isFlashlightOn;
-      await html5QrCodeRef.current.applyVideoConstraints({
-        // @ts-ignore
-        advanced: [{ torch: nextTorch }]
+      // @ts-ignore
+      await track.applyConstraints({
+        advanced: [{ torch: nextTorch } as any]
       });
       setIsFlashlightOn(nextTorch);
     } catch (err) {
@@ -506,18 +564,19 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     if (!file) return;
 
     setIsScanningFile(true);
+    let imgUrl = '';
     try {
-      const scanner = new Html5Qrcode('temp-file-scanner-element', {
-        verbose: false
-      });
-
-      const decodedText = await scanner.scanFile(file, true);
-      handleIncomingBarcode(decodedText);
-      scanner.clear();
+      imgUrl = URL.createObjectURL(file);
+      const codeReader = new BrowserMultiFormatReader();
+      const result = await codeReader.decodeFromImageUrl(imgUrl);
+      if (result) {
+        handleIncomingBarcode(result.getText());
+      }
     } catch (err: any) {
       showToast(`✕ ছবিতে পরিষ্কার বারকোড পাওয়া যায়নি`);
       if (soundEnabled) playMatchFailSound();
     } finally {
+      if (imgUrl) URL.revokeObjectURL(imgUrl);
       setIsScanningFile(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -1045,25 +1104,45 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => startCameraScanner()}
-                  disabled={isCameraInitializing}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md shadow-rose-600/25 cursor-pointer shrink-0"
-                >
-                  {isCameraInitializing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                  <span>{isCameraInitializing ? 'ক্যামেরা লোড হচ্ছে...' : '📷 ক্যামেরা ওপেন করুন'}</span>
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => startCameraScanner()}
+                    disabled={isCameraInitializing}
+                    className="flex-1 sm:flex-initial px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md shadow-rose-600/25 cursor-pointer"
+                  >
+                    {isCameraInitializing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                    <span>{isCameraInitializing ? 'ক্যামেরা লোড হচ্ছে...' : '📷 ক্যামেরা ওপেন করুন'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPermissionModal(true)}
+                    className="p-2.5 rounded-xl bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-700 text-xs font-bold transition-all"
+                    title="ক্যামেরা পারমিশন অন করার নিয়ম দেখুন"
+                  >
+                    <HelpCircle className="w-4 h-4 text-neutral-600" />
+                  </button>
+                </div>
               </div>
 
-              {/* Camera Error Message */}
+              {/* Camera Error Message with Help Trigger */}
               {scannerError && (
-                <div className="p-3.5 rounded-2xl bg-red-50 text-red-700 text-xs font-semibold flex items-start gap-2.5 border border-red-200">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-red-900 block">ক্যামেরা সংক্রান্ত ত্রুটি:</span>
-                    <span>{scannerError}</span>
+                <div className="p-4 rounded-2xl bg-red-50 text-red-700 text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-red-200">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-red-900 block">ক্যামেরা সংক্রান্ত ত্রুটি:</span>
+                      <span>{scannerError}</span>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPermissionModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shrink-0 flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>পারমিশন দেওয়ার নিয়ম</span>
+                  </button>
                 </div>
               )}
 
@@ -1864,12 +1943,18 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           </div>
 
           {/* Full Viewport Frame with HUD */}
-          <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-            {/* Viewport container inside fullscreen */}
-            <div id={fullscreenScannerContainerId} className="w-full h-full object-cover" />
+          <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden w-full h-full">
+            {/* Live Native Video Viewport */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover absolute inset-0 z-0"
+            />
 
             {/* Overlaid Targeting Reticle */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
               <div className="w-64 sm:w-80 h-44 sm:h-52 border-2 border-rose-500/90 rounded-2xl relative shadow-[0_0_30px_rgba(244,63,94,0.5)]">
                 <span className="absolute -top-2 -left-2 w-6 h-6 border-t-4 border-l-4 border-rose-400 rounded-tl-sm" />
                 <span className="absolute -top-2 -right-2 w-6 h-6 border-t-4 border-r-4 border-rose-400 rounded-tr-sm" />
@@ -1930,6 +2015,107 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                 <span>বারকোড স্ক্যান করলে স্বয়ংক্রিয়ভাবে স্টক মাইনাস ও হ্যান্ডওভার সম্পন্ন হবে</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Camera Permission Guide Modal */}
+      {showPermissionModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-neutral-200">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-neutral-900">
+                    ক্যামেরা পারমিশন অন করার নিয়ম
+                  </h3>
+                  <p className="text-xs text-neutral-500">
+                    ব্রাউজার থেকে ক্যামেরা পারমিশন সক্রিয় করুন
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPermissionModal(false)}
+                className="w-8 h-8 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-600 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs text-neutral-700">
+              <div className="flex items-start gap-3 p-3 rounded-2xl bg-neutral-50 border border-neutral-100">
+                <div className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ১
+                </div>
+                <div>
+                  <p className="font-bold text-neutral-900">
+                    ব্রাউজারের উপরে URL বারের বামে <Lock className="w-3.5 h-3.5 inline text-neutral-600 -mt-0.5 mx-0.5" /> (লক / তালা) বা সাইট সেটিংস আইকনে চাপুন।
+                  </p>
+                  <p className="text-[11px] text-neutral-500 mt-0.5">
+                    আপনার মোবাইলের Chrome বা Safari ব্রাউজারের অ্যাড্রেস বারে তালা আইকন দেখতে পাবেন।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-2xl bg-neutral-50 border border-neutral-100">
+                <div className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ২
+                </div>
+                <div>
+                  <p className="font-bold text-neutral-900">
+                    <strong>"Permissions"</strong> অথবা <strong>"Site settings"</strong> অপশনে যান।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-2xl bg-neutral-50 border border-neutral-100">
+                <div className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ৩
+                </div>
+                <div>
+                  <p className="font-bold text-neutral-900">
+                    <strong>"Camera"</strong> অপশনটিতে গিয়ে <strong>"Allow" (অনুমতি দিন)</strong> সিলেক্ট করুন।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-100">
+                <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ৪
+                </div>
+                <div>
+                  <p className="font-bold text-emerald-900">
+                    পারমিশন অন করার পর নিচে "📷 পুনরায় ক্যামেরা চালু করুন" বাটনে চাপুন।
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPermissionModal(false);
+                  startCameraScanner();
+                }}
+                className="flex-1 py-3 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-rose-600/25 transition-all cursor-pointer"
+              >
+                <Camera className="w-4 h-4" />
+                <span>📷 পুনরায় ক্যামেরা চালু করুন</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="py-3 px-4 rounded-2xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>পেজ রিলোড</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
