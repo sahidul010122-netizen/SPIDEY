@@ -267,15 +267,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     return () => window.removeEventListener('spidey-orders-updated', handleOrdersSync);
   }, []);
 
-  // Autofocus manual scanner input on scanner tab
-  useEffect(() => {
-    if (activeTab === 'scanner') {
-      setTimeout(() => {
-        manualInputRef.current?.focus();
-      }, 100);
-    }
-  }, [activeTab]);
-
   // Clean up camera stream on unmount
   useEffect(() => {
     return () => {
@@ -551,10 +542,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       });
     } finally {
       setIsProcessingScan(false);
-      // Re-focus manual input for next barcode gun scan
-      setTimeout(() => {
-        manualInputRef.current?.focus();
-      }, 50);
     }
   };
 
@@ -1158,10 +1145,10 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-neutral-700">
-                    স্ক্যানার গান দিয়ে স্ক্যান করুন অথবা কোড লিখুন:
+                    ম্যানুয়াল এন্ট্রি অথবা বারকোড স্ক্যানার গান:
                   </label>
-                  <span className="text-[11px] text-rose-600 font-bold font-mono">
-                    ● Gun Mode Active
+                  <span className="text-[11px] text-emerald-600 font-bold font-mono">
+                    ● Ready for Scan
                   </span>
                 </div>
 
@@ -1172,35 +1159,98 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                     type="text"
                     value={manualCodeInput}
                     onChange={(e) => setManualCodeInput(e.target.value)}
-                    placeholder="বারকোড স্ক্যানার গান দিয়ে স্ক্যান করুন বা ইনভয়েস/অর্ডার নং লিখুন..."
-                    autoFocus
+                    placeholder="ইনভয়েস / অর্ডার আইডি লিখুন বা স্ক্যান করুন..."
                     disabled={isProcessingScan}
-                    className="w-full pl-11 pr-28 py-3.5 text-sm bg-neutral-50 border-2 border-neutral-300 focus:border-rose-600 focus:bg-white rounded-2xl text-neutral-900 font-mono tracking-wider transition-all placeholder:text-neutral-400 font-bold"
+                    className="w-full pl-11 pr-28 py-3.5 text-sm bg-neutral-50 border-2 border-neutral-200 focus:border-rose-600 focus:bg-white rounded-2xl text-neutral-900 font-mono tracking-wider transition-all placeholder:text-neutral-400 font-bold"
                   />
                   <button
                     type="submit"
                     disabled={!manualCodeInput.trim() || isProcessingScan}
                     className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-neutral-900 hover:bg-rose-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                   >
-                    {isProcessingScan ? 'Processing...' : 'Scan & Match'}
+                    {isProcessingScan ? 'Processing...' : 'স্ক্যান ও ডান'}
                   </button>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-neutral-500 pt-1">
-                  <span>⚡ USB / Bluetooth Barcode Gun প্লাগ-অ্যান্ড-প্লে কাজ করবে (Auto Enter)</span>
-                  <span className="text-neutral-400 font-mono">Supports: Code128, EAN13, QR</span>
+                  <span>⚡ ক্যামেরা অন করে স্ক্যান করলে কোনো কিবোর্ড আসবে না, সরাসরি অর্ডার ডান হবে</span>
+                  <span className="text-neutral-400 font-mono">Auto Done & Outbound Sync</span>
                 </div>
               </form>
             </div>
 
-            {/* Workflow Guide Info */}
-            <div className="p-4 rounded-3xl bg-neutral-100 border border-neutral-200/60 flex items-start gap-3">
-              <Info className="w-4 h-4 text-neutral-500 shrink-0 mt-0.5" />
-              <div className="text-xs text-neutral-600 space-y-1">
-                <span className="font-bold text-neutral-900 block">স্টক ম্যানেজমেন্ট ও ডিসপ্যাচ রুলস:</span>
-                <p>
-                  ১. ইনভয়েস প্রিন্ট বা কুরিয়ার এন্ট্রির পর পার্সেল <b>"In-Warehouse"</b> এ থাকবে।<br />
-                  ২. রাইডার যখন পার্সেল নিয়ে যাবে, তখন বারকোড স্ক্যান করলেই স্ট্যাটাস <b>"Handed Over to Rider"</b> হবে এবং অর্ডারের প্রতিটি জার্সির সাইজ অনুযায়ী ডাটাবেজ থেকে স্টক মাইনাস হবে।
-                </p>
+            {/* Live Outbound Orders Dispatch Queue */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-white border border-neutral-200/80 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-neutral-100">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-rose-600" />
+                  <h4 className="text-sm font-extrabold text-neutral-900">
+                    আউটবাউন্ড পার্সেল স্ট্যাটাস বোর্ড
+                  </h4>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    ⏳ স্ক্যান বাকি: {orders.filter(o => o.status !== 'shipped' && o.status !== 'dispatched' && o.status !== 'delivered' && o.status !== 'cancelled').length} টি
+                  </span>
+                  <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    ✅ স্ক্যান ডান: {orders.filter(o => o.status === 'shipped' || o.status === 'dispatched' || o.status === 'delivered').length} টি
+                  </span>
+                </div>
+              </div>
+
+              {/* Pending Queue List */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-neutral-500 uppercase tracking-wider flex items-center justify-between">
+                  <span>পেন্ডিং পার্সেলসমূহ (স্ক্যান করার অপেক্ষায়)</span>
+                  <span className="text-[10px] text-neutral-400 font-normal">স্ক্যান করলেই সাথে সাথে ডান হবে</span>
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                  {orders
+                    .filter(o => o.status !== 'shipped' && o.status !== 'dispatched' && o.status !== 'delivered' && o.status !== 'cancelled')
+                    .slice(0, 15)
+                    .map((ord) => (
+                      <div
+                        key={ord.id}
+                        className={`p-3 rounded-2xl border transition-all flex items-center justify-between text-xs ${
+                          recentlyMatchedId === ord.id
+                            ? 'bg-emerald-50 border-emerald-400 shadow-sm'
+                            : 'bg-neutral-50/80 hover:bg-neutral-100/70 border-neutral-200/70'
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-rose-600">
+                              #{ord.invoiceNumber || ord.id.slice(-6)}
+                            </span>
+                            <span className="font-bold text-neutral-800 truncate">
+                              {ord.customerName}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-neutral-500 flex items-center gap-2 mt-0.5">
+                            <span>📞 {ord.phoneNumber}</span>
+                            <span>•</span>
+                            <span className="truncate">
+                              {ord.items?.map(it => `${it.product?.title || 'Jersey'} (${it.size || 'M'}) x${it.quantity}`).join(', ') || 'Item'}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleIncomingBarcode(ord.invoiceNumber || ord.id)}
+                          disabled={isProcessingScan}
+                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-600 hover:text-white border border-neutral-200 text-neutral-700 text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                          title="ম্যানুয়ালি স্ক্যান ডান করুন"
+                        >
+                          ডান করুন
+                        </button>
+                      </div>
+                    ))}
+
+                  {orders.filter(o => o.status !== 'shipped' && o.status !== 'dispatched' && o.status !== 'delivered' && o.status !== 'cancelled').length === 0 && (
+                    <div className="py-6 text-center text-neutral-400 text-xs font-medium">
+                      🎉 সব পার্সেল স্ক্যান সম্পন্ন হয়েছে! কোনো পেন্ডিং অর্ডার নেই।
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1209,7 +1259,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           {/* Right Live Scan Feedback & Stock Deduction Inspector */}
           <div className="lg:col-span-5 space-y-4">
             
-            {/* Live Result Card */}
+            {/* Live Result Pop-Up & Card */}
             <div className="p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-neutral-400 font-mono">
@@ -1226,7 +1276,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                 <div className="py-12 text-center text-neutral-400 space-y-2">
                   <ScanLine className="w-10 h-10 mx-auto stroke-1 text-neutral-300 animate-pulse" />
                   <p className="text-xs font-medium">
-                    স্ক্যানার রেডি আছে। ইনভয়েসের বারকোড স্ক্যান করলেই এখানে বিস্তারিত তথ্য ও সাইজ অনুযায়ী স্টক ডিডাকশন শো করবে।
+                    স্ক্যানার রেডি আছে। ইনভয়েসের বারকোড স্ক্যান করলেই সাথে সাথে এখানে অর্ডার ডান হবে ও স্টক ডিডাক্ট হবে।
                   </p>
                 </div>
               ) : (
@@ -1235,27 +1285,27 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                   {/* Status Banner */}
                   <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
                     lastScanResult.status === 'success'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-sm'
                       : lastScanResult.status === 'warning'
-                      ? 'bg-amber-50 border-amber-200 text-amber-900'
-                      : 'bg-red-50 border-red-200 text-red-900'
+                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                      : 'bg-red-50 border-red-300 text-red-900'
                   }`}>
                     {lastScanResult.status === 'success' ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
                     ) : lastScanResult.status === 'warning' ? (
-                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
                     ) : (
-                      <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                      <XCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
                     )}
                     <div className="min-w-0">
-                      <h4 className="text-xs font-black">
-                        {lastScanResult.status === 'success' ? '✔ DISPATCH CONFIRMED' : lastScanResult.status === 'warning' ? 'ALREADY DISPATCHED' : 'SCAN FAILED'}
+                      <h4 className="text-sm font-black">
+                        {lastScanResult.status === 'success' ? '✔ অর্ডার স্ক্যান সম্পন্ন (DONE)' : lastScanResult.status === 'warning' ? 'ইতিমধ্যে ডিসপ্যাচড' : '✕ স্ক্যান ফেইল্ড (FAILED)'}
                       </h4>
                       <p className="text-xs font-medium mt-0.5">
                         {lastScanResult.message}
                       </p>
                       <span className="text-[10px] font-mono opacity-70 block mt-1">
-                        Code: {lastScanResult.code}
+                        Scanned Code: {lastScanResult.code}
                       </span>
                     </div>
                   </div>
@@ -1264,11 +1314,11 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                   {lastScanResult.order && (
                     <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200 space-y-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-neutral-800">
+                        <span className="font-bold text-neutral-800 text-sm">
                           {lastScanResult.order.customerName}
                         </span>
-                        <span className="font-mono font-bold text-rose-600">
-                          {lastScanResult.order.invoiceNumber || lastScanResult.order.id}
+                        <span className="font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">
+                          #{lastScanResult.order.invoiceNumber || lastScanResult.order.id}
                         </span>
                       </div>
 
@@ -1294,7 +1344,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                         <div className="pt-2 border-t border-neutral-200/80 space-y-2">
                           <span className="text-[11px] font-extrabold text-neutral-700 flex items-center gap-1">
                             <TrendingDown className="w-3.5 h-3.5 text-emerald-600" />
-                            Stock Deducted Breakdown (Size-wise):
+                            স্টক ডিডাকশন হিসাব (সাইজ অনুযায়ী):
                           </span>
                           <div className="space-y-1.5">
                             {lastScanResult.deductedDetails.map((det, idx) => (
@@ -1302,11 +1352,11 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                                 <div className="min-w-0 pr-2">
                                   <span className="font-bold text-neutral-800 block truncate">{det.productTitle}</span>
                                   <span className="text-[10px] text-neutral-500 font-mono">
-                                    Size: <b className="text-neutral-800">{det.size}</b> | Deducted: <b className="text-rose-600">-{det.quantity}</b>
+                                    Size: <b className="text-neutral-800">{det.size}</b> | মাইনাস: <b className="text-rose-600">-{det.quantity} pcs</b>
                                   </span>
                                 </div>
                                 <div className="text-right shrink-0">
-                                  <span className="text-[10px] text-neutral-400 font-mono block">Remaining Stock</span>
+                                  <span className="text-[10px] text-neutral-400 font-mono block">বর্তমান স্টক</span>
                                   <span className="text-xs font-black font-mono text-emerald-700">{det.newStock} pcs</span>
                                 </div>
                               </div>
@@ -1322,7 +1372,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                           className="w-full py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>View / Print Invoice</span>
+                          <span>ইনভয়েস ভিউ ও প্রিন্ট</span>
                         </button>
                       </div>
                     </div>
@@ -1336,10 +1386,12 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
             <div className="p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-neutral-400" />
-                  Recent Outbound Dispatches
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  সাম্প্রতিক স্ক্যান সম্পন্ন পার্সেল
                 </span>
-                <span className="text-[10px] font-mono text-neutral-400">Latest 5</span>
+                <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
+                  {orders.filter(o => o.status === 'shipped' || o.status === 'dispatched' || o.status === 'delivered').length} Dispatched
+                </span>
               </div>
 
               <div className="space-y-2">
@@ -1358,12 +1410,12 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                         </span>
                       </div>
                       <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold font-mono shrink-0">
-                        With Rider
+                        ✔ DONE
                       </span>
                     </div>
                   ))}
                 {orders.filter(o => o.status === 'shipped' || o.status === 'dispatched' || o.status === 'delivered').length === 0 && (
-                  <p className="text-xs text-neutral-400 text-center py-3">এখনো কোনো পার্সেল ডিসপ্যাচ হয়নি।</p>
+                  <p className="text-xs text-neutral-400 text-center py-3">এখনো কোনো পার্সেল স্ক্যান সম্পন্ন হয়নি।</p>
                 )}
               </div>
             </div>
@@ -1964,57 +2016,90 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
               </div>
             </div>
 
-            <div className="absolute top-4 inset-x-0 text-center pointer-events-none z-10">
-              <span className="px-4 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-xs font-bold text-rose-300 border border-rose-500/40 shadow-lg">
+            {/* Top Live Status Bar */}
+            <div className="absolute top-4 inset-x-0 text-center pointer-events-none z-10 flex flex-col items-center gap-1.5 px-4">
+              <span className="px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md text-xs font-bold text-rose-300 border border-rose-500/40 shadow-lg">
                 🎯 পার্সেলের বারকোড বা কিউআর কোড ফ্রেমের সেন্টারে ধরুন
               </span>
-            </div>
-          </div>
-
-          {/* Floating Bottom Quick Scan Result Card */}
-          <div className="p-3 sm:p-4 bg-neutral-950/95 backdrop-blur-md border-t border-neutral-800 text-white z-20 space-y-2">
-            {lastScanResult ? (
-              <div className={`p-3 rounded-2xl border flex items-center justify-between gap-3 ${
-                lastScanResult.status === 'success' 
-                  ? 'bg-emerald-950/60 border-emerald-500/60' 
-                  : lastScanResult.status === 'warning'
-                  ? 'bg-amber-950/60 border-amber-500/60'
-                  : 'bg-rose-950/60 border-rose-500/60'
-              }`}>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${
-                      lastScanResult.status === 'success' ? 'bg-emerald-400' : lastScanResult.status === 'warning' ? 'bg-amber-400' : 'bg-rose-400'
-                    }`} />
-                    <span className="text-xs sm:text-sm font-extrabold text-white font-mono truncate">
-                      {lastScanResult.order?.invoiceNumber || lastScanResult.code}
-                    </span>
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
-                      {lastScanResult.order?.status || 'Matched'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-neutral-200 truncate mt-0.5 font-medium">
-                    {lastScanResult.order?.customerName ? `${lastScanResult.order.customerName} • ` : ''}
-                    {lastScanResult.message}
-                  </p>
-                </div>
-                {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
-                  <div className="text-right shrink-0">
-                    <span className="text-xs font-bold text-emerald-400 font-mono block">
-                      Stock -{lastScanResult.deductedDetails.reduce((a, b) => a + b.quantity, 0)}
-                    </span>
-                    <span className="text-[10px] text-neutral-400">
-                      {lastScanResult.deductedDetails.map(d => `${d.size}: -${d.quantity}`).join(', ')}
-                    </span>
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                  ✅ ডান: {orders.filter(o => o.status === 'shipped' || o.status === 'dispatched' || o.status === 'delivered').length}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                  ⏳ পেন্ডিং: {orders.filter(o => o.status !== 'shipped' && o.status !== 'dispatched' && o.status !== 'delivered' && o.status !== 'cancelled').length}
+                </span>
               </div>
-            ) : (
-              <div className="text-center text-xs text-neutral-400 py-1.5 font-medium flex items-center justify-center gap-2">
-                <ScanLine className="w-4 h-4 text-rose-400 animate-pulse" />
-                <span>বারকোড স্ক্যান করলে স্বয়ংক্রিয়ভাবে স্টক মাইনাস ও হ্যান্ডওভার সম্পন্ন হবে</span>
+            </div>
+
+            {/* Central Immediate Done / Fail Popup Modal Card */}
+            {lastScanResult && (
+              <div className="absolute inset-x-4 top-20 z-30 flex justify-center pointer-events-none animate-fadeIn">
+                <div className={`p-4 rounded-3xl backdrop-blur-xl border max-w-md w-full shadow-2xl space-y-2 pointer-events-auto ${
+                  lastScanResult.status === 'success'
+                    ? 'bg-emerald-950/90 border-emerald-500 text-white shadow-emerald-900/50'
+                    : lastScanResult.status === 'warning'
+                    ? 'bg-amber-950/90 border-amber-500 text-white shadow-amber-900/50'
+                    : 'bg-rose-950/90 border-rose-500 text-white shadow-rose-900/50'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {lastScanResult.status === 'success' ? (
+                        <div className="w-7 h-7 rounded-full bg-emerald-500 text-black flex items-center justify-center font-black">
+                          ✓
+                        </div>
+                      ) : lastScanResult.status === 'warning' ? (
+                        <div className="w-7 h-7 rounded-full bg-amber-500 text-black flex items-center justify-center font-black">
+                          !
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-rose-500 text-white flex items-center justify-center font-black">
+                          ✕
+                        </div>
+                      )}
+                      <span className="font-black text-sm tracking-wide">
+                        {lastScanResult.status === 'success' 
+                          ? '✔ অর্ডার ডান (DISPATCHED)' 
+                          : lastScanResult.status === 'warning' 
+                          ? 'ALREADY DISPATCHED' 
+                          : '✕ স্ক্যান ফেইল্ড (FAILED)'}
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-black/40 border border-white/10">
+                      #{lastScanResult.order?.invoiceNumber || lastScanResult.code}
+                    </span>
+                  </div>
+
+                  {lastScanResult.order && (
+                    <div className="text-xs text-neutral-200 space-y-1 pt-1 border-t border-white/10">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white">{lastScanResult.order.customerName}</span>
+                        <span className="font-mono text-emerald-300 font-bold">{lastScanResult.order.phoneNumber}</span>
+                      </div>
+                      {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
+                        <div className="text-[11px] text-emerald-300 font-mono flex items-center justify-between pt-0.5">
+                          <span>সাইজ মাইনাস: {lastScanResult.deductedDetails.map(d => `${d.size} (-${d.quantity})`).join(', ')}</span>
+                          <span className="text-white font-bold">স্টক: {lastScanResult.deductedDetails[0]?.newStock} pcs</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {lastScanResult.status === 'fail' && (
+                    <p className="text-xs text-rose-200 pt-1 border-t border-rose-500/30">
+                      {lastScanResult.message}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
+          </div>
+
+          {/* Floating Bottom Quick Scan Result Bar */}
+          <div className="p-3 sm:p-4 bg-neutral-950/95 backdrop-blur-md border-t border-neutral-800 text-white z-20 space-y-2">
+            <div className="text-center text-xs text-neutral-300 py-1 font-medium flex items-center justify-center gap-2">
+              <ScanLine className="w-4 h-4 text-emerald-400 animate-pulse" />
+              <span>পরপর একটার পর একটা পার্সেল স্ক্যান করতে থাকুন — কোনো কিবোর্ড ছাড়া প্রতিবার ডান হবে</span>
+            </div>
           </div>
         </div>
       )}
