@@ -54,7 +54,7 @@ import JsBarcode from 'jsbarcode';
 import { Order, JerseyProduct } from '../../types';
 import { SiteSettings } from '../../types/settings';
 import { CurrencyCode, formatPrice } from '../../utils/currency';
-import { playMatchSuccessSound, playMatchFailSound } from '../../utils/scannerSound';
+import { playMatchSuccessSound, playMatchFailSound, unlockAudioContext } from '../../utils/scannerSound';
 import { CompactInvoicePrintView, getSteadfastParcelId } from './CompactInvoicePrintView';
 
 interface BarcodeScannerSectionProps {
@@ -276,6 +276,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
   // Start Camera Scanner (Direct WebRTC userMedia & instant Native Video render)
   const startCameraScanner = async (facingModeOverride?: 'environment' | 'user') => {
+    unlockAudioContext();
     const targetFacing = facingModeOverride || cameraFacing;
     setIsCameraInitializing(true);
     setScannerError(null);
@@ -1040,11 +1041,14 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {/* Audio Mute / Unmute */}
                   <button
                     type="button"
-                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    onClick={() => {
+                      unlockAudioContext();
+                      setSoundEnabled(!soundEnabled);
+                    }}
                     className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
                       soundEnabled 
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
@@ -1053,7 +1057,35 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                     title={soundEnabled ? 'Audio Chime Enabled' : 'Audio Muted'}
                   >
                     {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline text-[11px]">{soundEnabled ? 'সাউন্ড চালু' : 'মিউট'}</span>
+                    <span className="text-[11px]">{soundEnabled ? 'সাউন্ড অন' : 'মিউট'}</span>
+                  </button>
+
+                  {/* Sound Test: Done Beep */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      unlockAudioContext();
+                      playMatchSuccessSound();
+                      showToast('🔊 Done Beep Sound Played');
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-all flex items-center gap-1 text-[11px] font-bold"
+                    title="টেস্ট করুন ডান/সাকসেস সাউন্ড"
+                  >
+                    <span>🔔 টেস্ট Done</span>
+                  </button>
+
+                  {/* Sound Test: Fail Buzz */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      unlockAudioContext();
+                      playMatchFailSound();
+                      showToast('🚨 Fail Buzzer Sound Played');
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 transition-all flex items-center gap-1 text-[11px] font-bold"
+                    title="টেস্ট করুন ফেইল/এরর সাউন্ড"
+                  >
+                    <span>🚨 টেস্ট Fail</span>
                   </button>
 
                   {/* Upload Image Barcode */}

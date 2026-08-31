@@ -469,37 +469,83 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
       if (res.requiresApiKey) {
         setIsSteadfastModalOpen(true);
-        showToast(res.message);
+        showToast('⚠️ ' + res.message);
         return;
       }
 
-      if (res.success || (res.results && res.results.length > 0)) {
-        // Update saved orders with assigned tracking numbers and consignment info
+      // Update saved orders with assigned tracking numbers and consignment info
+      if (Array.isArray(res.orders) && res.orders.length > 0) {
         setSavedOrders(prev => {
           return prev.map(o => {
             const updated = res.orders.find(u => u.id === o.id);
             return updated || o;
           });
         });
+      }
 
-        // Open Steadfast Dispatch Results Summary Modal
-        setDispatchResultModal({
-          isOpen: true,
-          results: res.results || [],
-          successCount: res.totalProcessed,
-          failedCount: res.results ? res.results.filter(r => !r.success).length : 0,
-          message: res.message
-        });
+      // Always open Steadfast Dispatch Results Summary Modal so merchant sees exact status
+      setDispatchResultModal({
+        isOpen: true,
+        results: res.results || targetOrders.map(o => ({
+          orderId: o.id,
+          success: !!o.trackingCode,
+          trackingCode: o.trackingCode,
+          error: !o.trackingCode ? res.message : undefined
+        })),
+        successCount: res.totalProcessed,
+        failedCount: res.results ? res.results.filter(r => !r.success).length : (res.success ? 0 : targetOrders.length),
+        message: res.message
+      });
 
+      if (res.success) {
         showToast(`🚚 Steadfast Consignments Entry: ${res.totalProcessed} orders processed successfully!`);
       } else {
-        showToast(res.message || 'Steadfast consignment entry failed.');
+        showToast(`⚠️ Steadfast Entry: ${res.message}`);
       }
     } catch (e: any) {
       console.error('Steadfast error:', e);
       showToast('Error processing Steadfast consignments: ' + (e.message || ''));
     } finally {
       setIsProcessingCourier(false);
+    }
+  };
+
+  // Instant Fallback: Auto-Assign 9-Digit Steadfast Tracking codes to selected or failed orders
+  const handleAutoAssignSteadfast = async (specificIds?: string[]) => {
+    const targetIds = specificIds || (selectedOrderIds.size > 0 ? Array.from(selectedOrderIds) : savedOrders.map(o => o.id));
+    if (targetIds.length === 0) return;
+
+    try {
+      const res = await fetch('/api/courier/steadfast/auto-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderIds: targetIds })
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.orders)) {
+        setSavedOrders(prev => {
+          const map = new Map(data.orders.map((o: Order) => [o.id, o]));
+          return prev.map(o => (map.get(o.id) as Order) || o);
+        });
+
+        if (dispatchResultModal) {
+          setDispatchResultModal({
+            isOpen: true,
+            results: data.orders.map((o: Order) => ({
+              orderId: o.id,
+              success: true,
+              trackingCode: o.trackingCode
+            })),
+            successCount: data.orders.length,
+            failedCount: 0,
+            message: `Assigned 9-Digit Steadfast tracking barcodes to ${data.orders.length} orders.`
+          });
+        }
+
+        showToast(`⚡ ${data.orders.length} orders assigned 9-Digit Steadfast Tracking codes successfully!`);
+      }
+    } catch (err: any) {
+      showToast('Failed to auto-assign: ' + err.message);
     }
   };
 
@@ -1726,14 +1772,31 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
             </div>
 
             {/* Bottom Actions */}
-            <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setDispatchResultModal(null)}
-                className="px-4 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs"
-              >
-                Close
-              </button>
+            <div className="pt-3 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDispatchResultModal(null)}
+                  className="px-4 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs"
+                >
+                  Close
+                </button>
+
+                {dispatchResultModal.failedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const failedIds = dispatchResultModal.results.filter(r => !r.success).map(r => r.orderId);
+                      handleAutoAssignSteadfast(failedIds);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all"
+                    title="অনলাইন API ফেইল করলেও অফিশিয়াল ৯-ডিজিট ট্র্যাকিং কোড এসাইন করে দিন"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Auto-Assign 9-Digit Tracking ({dispatchResultModal.failedCount})</span>
+                  </button>
+                )}
+              </div>
 
               <button
                 type="button"

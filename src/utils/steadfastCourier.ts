@@ -241,7 +241,7 @@ export async function processOrdersWithSteadfast(
         success: false,
         totalProcessed: (data && data.successfulCount) || 0,
         orders: ordersToProcess,
-        message: (data && data.message) || 'Steadfast consignment entry encountered errors.',
+        message: (data && data.message) || (data && data.results && data.results[0]?.error) || 'Steadfast consignment entry encountered errors.',
         results: data && data.results
       };
     }
@@ -267,4 +267,40 @@ export async function processOrdersWithSteadfast(
       message: `Offline mode: Assigned ${updatedOrders.length} Steadfast 9-digit tracking numbers.`
     };
   }
+}
+
+/**
+ * Auto-assign Steadfast 9-digit tracking codes to orders (Instant / Fallback Dispatch)
+ */
+export async function autoAssignSteadfastTracking(orderIds?: string[]): Promise<{
+  success: boolean;
+  count: number;
+  orders: Order[];
+  message: string;
+}> {
+  try {
+    const res = await fetch('/api/courier/steadfast/auto-assign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderIds })
+    });
+    const data = await parseResponseSafe(res);
+    if (data && data.success && Array.isArray(data.orders)) {
+      return {
+        success: true,
+        count: data.count || data.orders.length,
+        orders: data.orders,
+        message: data.message || `Successfully assigned Steadfast tracking codes.`
+      };
+    }
+  } catch (e) {
+    console.warn('Auto assign error:', e);
+  }
+
+  return {
+    success: false,
+    count: 0,
+    orders: [],
+    message: 'Could not auto-assign tracking codes.'
+  };
 }
