@@ -47,8 +47,6 @@ import {
   getSteadfastSettings,
   saveSteadfastSettings,
   testSteadfastConnection,
-  generateSteadfast9DigitTrackingCode,
-  generateSteadfastConsignmentId,
   DEFAULT_STEADFAST_SETTINGS, 
   SteadfastSettings 
 } from '../../utils/steadfastCourier';
@@ -439,8 +437,8 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     setIsSteadfastModalOpen(false);
   };
 
-  // Trigger Steadfast Courier Bulk Dispatch
-  const handleProcessSteadfastCourier = async (customConfig?: SteadfastSettings) => {
+  // Trigger Steadfast Courier Bulk Dispatch (Uses real Steadfast API credentials & returns real tracking codes)
+  const handleProcessSteadfastCourier = async (customConfig?: SteadfastSettings, specificIds?: string[]) => {
     const activeConfig = customConfig || steadfastSettings;
     const hasKey = !!(activeConfig.apiKey && activeConfig.apiKey.trim());
     const hasSecret = !!(activeConfig.secretKey && activeConfig.secretKey.trim());
@@ -457,9 +455,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       return;
     }
 
-    const targetIds = selectedOrderIds.size > 0 
+    const targetIds = specificIds || (selectedOrderIds.size > 0 
       ? Array.from(selectedOrderIds) 
-      : savedOrders.map(o => o.id);
+      : savedOrders.map(o => o.id));
 
     if (targetIds.length === 0) {
       showToast('Please select at least one order to send to Steadfast Courier.');
@@ -480,10 +478,15 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       // Update saved orders with assigned tracking numbers and consignment info
       if (Array.isArray(res.orders) && res.orders.length > 0) {
         setSavedOrders(prev => {
-          return prev.map(o => {
-            const updated = res.orders.find(u => u.id === o.id);
-            return updated || o;
-          });
+          const map = new Map(res.orders.map(u => [u.id, u]));
+          const merged = prev.map(o => map.get(o.id) || o);
+          try {
+            localStorage.setItem('spidey_master_orders', JSON.stringify(merged));
+          } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: merged } }));
+          }
+          return merged;
         });
       }
 
@@ -518,76 +521,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     }
   };
 
-  // Instant Fallback: Auto-Assign 9-Digit Steadfast Tracking codes to selected or failed orders
-  const handleAutoAssignSteadfast = async (specificIds?: string[]) => {
-    const targetIds = specificIds || (selectedOrderIds.size > 0 ? Array.from(selectedOrderIds) : savedOrders.map(o => o.id));
-    if (targetIds.length === 0) return;
-
-    let updatedList: Order[] = [];
-
-    try {
-      const res = await fetch('/api/courier/steadfast/auto-assign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderIds: targetIds })
-      });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.startsWith('{')) {
-          const data = JSON.parse(text);
-          if (data.success && Array.isArray(data.orders)) {
-            updatedList = data.orders;
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('Server auto-assign offline/fallback:', err);
-    }
-
-    // Client-side instant assignment if server was offline or static
-    if (updatedList.length === 0) {
-      updatedList = savedOrders
-        .filter(o => targetIds.includes(o.id))
-        .map(o => ({
-          ...o,
-          trackingCode: o.trackingCode || generateSteadfast9DigitTrackingCode(),
-          consignmentId: o.consignmentId || generateSteadfastConsignmentId(),
-          invoiceNumber: o.invoiceNumber || `SJ-${o.id.replace(/^SPIDEY-?/i, '')}`,
-          courierName: 'Steadfast Courier',
-          courierStatus: 'sent_to_courier',
-          courierProcessedAt: new Date().toISOString(),
-          status: 'processing'
-        }));
-    }
-
-    if (updatedList.length > 0) {
-      setSavedOrders(prev => {
-        const map = new Map(updatedList.map((o: Order) => [o.id, o]));
-        const merged = prev.map(o => (map.get(o.id) as Order) || o);
-        try {
-          localStorage.setItem('spidey_master_orders', JSON.stringify(merged));
-        } catch {}
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: merged } }));
-        }
-        return merged;
-      });
-
-      setDispatchResultModal({
-        isOpen: true,
-        results: updatedList.map((o: Order) => ({
-          orderId: o.id,
-          success: true,
-          trackingCode: o.trackingCode,
-          consignment: { consignment_id: o.consignmentId }
-        })),
-        successCount: updatedList.length,
-        failedCount: 0,
-        message: `Assigned 9-Digit Steadfast tracking barcodes to ${updatedList.length} orders.`
-      });
-
-      showToast(`⚡ ${updatedList.length} orders assigned 9-Digit Steadfast Tracking codes successfully!`);
-    }
+  // Retry Steadfast API dispatch for failed orders
+  const handleRetrySteadfastDispatch = async (specificIds?: string[]) => {
+    await handleProcessSteadfastCourier(steadfastSettings, specificIds);
   };
 
   // Save settings & dispatch directly
@@ -1829,13 +1765,13 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                     type="button"
                     onClick={() => {
                       const failedIds = (dispatchResultModal.results || []).filter(r => !r.success).map(r => r.orderId);
-                      handleAutoAssignSteadfast(failedIds);
+                      handleRetrySteadfastDispatch(failedIds);
                     }}
                     className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all"
-                    title="অনলাইন API ফেইল করলেও অফিশিয়াল ৯-ডিজিট ট্র্যাকিং কোড এসাইন করে দিন"
+                    title="পুনরায় Steadfast API-তে পার্সেল এন্ট্রি করার চেষ্টা করুন"
                   >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Auto-Assign 9-Digit Tracking ({dispatchResultModal.failedCount})</span>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Retry Steadfast Entry ({dispatchResultModal.failedCount})</span>
                   </button>
                 )}
               </div>

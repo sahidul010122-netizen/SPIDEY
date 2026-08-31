@@ -1,0 +1,1934 @@
+[
+  {
+    "id": "TEST-ORD-1",
+    "customerName": "YASIN",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "orderNote": "Test Jersey"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-16",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-15-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-15-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-15-2",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "RONALDO 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-15",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-14-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-14-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-14-2",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "RONALDO 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-14",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-13-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-13-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-13",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-12-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-12-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-12",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-11-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-11",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-10-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-10",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-9-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-09",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-8-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-08",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-7-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-7-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-7-2",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "RONALDO 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-7-3",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "MESSI 10",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-07",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-6-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-6-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-6-2",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "RONALDO 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-6-3",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "MESSI 10",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-06",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-5-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-5-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-5-2",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "RONALDO 7",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      },
+      {
+        "itemKey": "cart-item-1788185806787-5-3",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "MESSI 10",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-05",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-4-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-04",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-3-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-03",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-2-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2B-02",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806787-1-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "L",
+        "customName": "DAVID 40",
+        "quantity": 1,
+        "addedAt": 1788185806787
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741714588@spideyorder.com",
+    "phoneNumber": "01741714588",
+    "shippingAddress": "dhakka ,mirour",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 500,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 500,
+    "codAmount": 500,
+    "status": "confirmed",
+    "courierStatus": "pending",
+    "createdAt": "2026-08-31T14:16:46.787Z"
+  },
+  {
+    "id": "SPIDEY-MTHBNR2A-01",
+    "items": [
+      {
+        "itemKey": "cart-item-1788185806786-0-0",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "TORRES 9",
+        "quantity": 1,
+        "addedAt": 1788185806786
+      },
+      {
+        "itemKey": "cart-item-1788185806786-0-1",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "YASIN 7",
+        "quantity": 1,
+        "addedAt": 1788185806786
+      },
+      {
+        "itemKey": "cart-item-1788185806786-0-2",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XXL",
+        "customName": "RONALDO 7",
+        "quantity": 1,
+        "addedAt": 1788185806786
+      },
+      {
+        "itemKey": "cart-item-1788185806786-0-3",
+        "product": {
+          "id": "spidey-rm-2627-third",
+          "code": "SJ-C8MXU",
+          "title": "REAL MADRID 3RD SHIRT 2026/27 AUTHENTIC",
+          "category": "Real Madrid",
+          "price": 144.99,
+          "originalPrice": 174.99,
+          "season": "2026/27",
+          "edition": "Player Issue Authentic",
+          "badge": "New Season",
+          "images": [
+            "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80",
+            "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=80"
+          ],
+          "description": "Deep burgundy and metallic gold Madrid third shirt engineered with ultra-breathable Heat.RDY match specs.",
+          "features": [
+            "Heat.RDY cooling and lightweight match technology",
+            "Heat-applied metallic gold crest",
+            "Ergonomic athletic performance cut"
+          ],
+          "sizes": [
+            "S",
+            "M",
+            "L",
+            "XL",
+            "XXL",
+            "3XL"
+          ],
+          "inStock": true,
+          "stockCount": 30,
+          "rating": 4.9,
+          "reviewCount": 198,
+          "customizable": true,
+          "colorTheme": {
+            "primary": "#881337",
+            "accent": "#f59e0b",
+            "glow": "rgba(245, 158, 11, 0.35)"
+          },
+          "createdAt": "2025-01-15T12:00:00.000Z"
+        },
+        "selectedSize": "XL",
+        "customName": "MESSI 10",
+        "quantity": 1,
+        "addedAt": 1788185806786
+      }
+    ],
+    "customerName": "yasin",
+    "customerEmail": "01741475888@spideyorder.com",
+    "phoneNumber": "01741475888",
+    "shippingAddress": "sreenagar munshigang",
+    "paymentMethod": "Cash On Delivery (COD)",
+    "isExchange": false,
+    "orderType": "bulk_entry",
+    "subtotal": 1570,
+    "discount": 0,
+    "shippingFee": 0,
+    "totalAmount": 1570,
+    "codAmount": 1570,
+    "status": "processing",
+    "courierStatus": "sent_to_courier",
+    "createdAt": "2026-08-31T14:16:46.786Z",
+    "trackingCode": "SFR260831ST89915B2BD",
+    "consignmentId": "290670543",
+    "invoiceNumber": "SPIDEY-MTHBNR2A-01",
+    "courierName": "Steadfast Courier",
+    "courierProcessedAt": "2026-08-31T14:16:50.822Z"
+  }
+]
