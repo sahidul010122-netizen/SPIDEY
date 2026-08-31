@@ -878,21 +878,191 @@ async function startServer() {
     res.status(400).json({ success: false, message: 'Invalid bulk delete payload' });
   });
 
+  // Helper: Ensure size breakdown exists for product
+  function ensureProductSizeStock(product: JerseyProduct): Record<string, number> {
+    const standardSizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    if (product.sizeStock && typeof product.sizeStock === 'object' && Object.keys(product.sizeStock).length > 0) {
+      return product.sizeStock;
+    }
+    const total = Number(product.stockCount) || 15;
+    const count = standardSizes.length;
+    const base = Math.floor(total / count);
+    const remainder = total % count;
+    const newSizeStock: Record<string, number> = {};
+    standardSizes.forEach((sz, idx) => {
+      newSizeStock[sz] = base + (idx < remainder ? 1 : 0);
+    });
+    product.sizeStock = newSizeStock;
+    return newSizeStock;
+  }
+
   // Update Order Barcode Scan Status
   app.patch('/api/orders/:id/scan-status', (req: Request, res: Response) => {
     const index = orders.findIndex((o) => o.id === req.params.id);
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
-    const { barcodeScanned, scannedAt, status } = req.body;
+    const { barcodeScanned, scannedAt, status, outboundScannedAt } = req.body;
     orders[index] = {
       ...orders[index],
       barcodeScanned: barcodeScanned !== undefined ? barcodeScanned : true,
       scannedAt: scannedAt || new Date().toISOString(),
+      outboundScannedAt: outboundScannedAt || orders[index].outboundScannedAt || new Date().toISOString(),
       status: status || orders[index].status
     };
     saveJsonFile(ORDERS_FILE, orders);
     res.json({ success: true, message: 'Order scan status updated', order: orders[index] });
+  });
+
+  // --- Warehouse Automated Outbound Barcode Scan & Stock Deduction ---
+  app.post('/api/warehouse/scan-dispatch', (req: Request, res: Response) => {
+    const { scanCode, orderId } = req.body;
+    if (!scanCode && !orderId) {
+      return res.status(400).json({ success: false, message: 'Scan code or Order ID is required' });
+    }
+
+    const code = (scanCode || '').trim().toLowerCase();
+    
+    // Match order by invoiceNumber, trackingCode, consignmentId, id, or phoneNumber
+    let orderIndex = -1;
+    if (orderId) {
+      orderIndex = orders.findIndex(o => o.id === orderId);
+    }
+    if (orderIndex === -1 && code) {
+      orderIndex = orders.findIndex(o => {
+        const inv = (o.invoiceNumber || '').trim().toLowerCase();
+        const trk = (o.trackingCode || '').trim().toLowerCase();
+        const cid = (o.consignmentId || '').trim().toLowerCase();
+        const oid = (o.id || '').trim().toLowerCase();
+        const ph = (o.phoneNumber || '').replace(/[^0-9]/g, '');
+        const cleanCode = code.replace(/[^a-zA-Z0-9_-]/g, '');
+
+        return (
+          (inv && (inv === code || inv === cleanCode)) ||
+          (trk && (trk === code || trk === cleanCode)) ||
+          (cid && (cid === code || cid === cleanCode)) ||
+          (oid && (oid === code || oid === cleanCode)) ||
+          (ph && code.length >= 10 && ph.includes(code))
+        );
+      });
+    }
+
+    if (orderIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: `কোনো অর্ডার খুঁজে পাওয়া যায়নি (Scanned Code: ${scanCode || orderId})`
+      });
+    }
+
+    const targetOrder = orders[orderIndex];
+    const wasAlreadyDispatched = targetOrder.status === 'shipped' || targetOrder.status === 'dispatched' || targetOrder.status === 'delivered';
+    const wasStockDeducted = !!targetOrder.outboundStockDeducted;
+
+    const deductedDetails: Array<{
+      productId: string;
+      productTitle: string;
+      size: string;
+      quantity: number;
+      previousStock: number;
+      newStock: number;
+    }> = [];
+
+    // Deduct stock per size if not already deducted
+    if (!wasStockDeducted && Array.isArray(targetOrder.items)) {
+      for (const item of targetOrder.items) {
+        const prodId = item.product?.id;
+        const prodCode = item.product?.code;
+        const prodTitle = item.product?.title;
+        const size = (item.selectedSize || 'L').toUpperCase();
+        const qty = Number(item.quantity) || 1;
+
+        let matchedProduct = products.find(p => 
+          (prodId && p.id === prodId) ||
+          (prodCode && p.code && p.code.toLowerCase() === prodCode.toLowerCase()) ||
+          (prodTitle && p.title.toLowerCase() === prodTitle.toLowerCase())
+        );
+
+        if (matchedProduct) {
+          const currentSizeStock = ensureProductSizeStock(matchedProduct);
+          const currentSizeQty = currentSizeStock[size] !== undefined ? currentSizeStock[size] : 0;
+          const newSizeQty = Math.max(0, currentSizeQty - qty);
+          
+          currentSizeStock[size] = newSizeQty;
+          matchedProduct.sizeStock = currentSizeStock;
+          
+          // Recompute total stock
+          const prevTotal = matchedProduct.stockCount;
+          matchedProduct.stockCount = Object.values(currentSizeStock).reduce((acc, count) => acc + (Number(count) || 0), 0);
+          matchedProduct.inStock = matchedProduct.stockCount > 0;
+          matchedProduct.updatedAt = new Date().toISOString();
+
+          deductedDetails.push({
+            productId: matchedProduct.id,
+            productTitle: matchedProduct.title,
+            size,
+            quantity: qty,
+            previousStock: currentSizeQty,
+            newStock: newSizeQty
+          });
+        }
+      }
+
+      saveJsonFile(PRODUCTS_FILE, products);
+    }
+
+    // Update order status to Dispatched / Left Warehouse
+    const nowIso = new Date().toISOString();
+    const updatedOrder: Order = {
+      ...targetOrder,
+      status: 'shipped',
+      barcodeScanned: true,
+      scannedAt: nowIso,
+      outboundScannedAt: targetOrder.outboundScannedAt || nowIso,
+      outboundStockDeducted: true,
+      courierStatus: targetOrder.courierStatus === 'delivered' ? 'delivered' : (targetOrder.courierStatus || 'sent_to_courier'),
+      deductedItemsSummary: deductedDetails.map(d => `${d.productTitle} (${d.size} × ${d.quantity})`).join(', ') || targetOrder.deductedItemsSummary
+    };
+
+    orders[orderIndex] = updatedOrder;
+    saveJsonFile(ORDERS_FILE, orders);
+
+    return res.json({
+      success: true,
+      message: wasAlreadyDispatched 
+        ? `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id})`
+        : `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে এবং স্টক ডিডাক্ট সম্পন্ন হয়েছে!`,
+      order: updatedOrder,
+      wasAlreadyDispatched,
+      wasStockDeducted,
+      deductedDetails,
+      updatedProducts: products
+    });
+  });
+
+  // --- Manual / Quick Stock Matrix Update ---
+  app.put('/api/products/:id/stock-matrix', (req: Request, res: Response) => {
+    const { sizeStock, stockCount, inStock } = req.body;
+    const index = products.findIndex(p => p.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    const prod = products[index];
+    let newSizeStock: Record<string, number> = sizeStock || prod.sizeStock || ensureProductSizeStock(prod);
+    let newTotal: number = stockCount !== undefined 
+      ? Number(stockCount) 
+      : Object.values(newSizeStock).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+
+    products[index] = {
+      ...prod,
+      sizeStock: newSizeStock,
+      stockCount: Math.max(0, newTotal),
+      inStock: inStock !== undefined ? !!inStock : newTotal > 0,
+      updatedAt: new Date().toISOString()
+    };
+
+    saveJsonFile(PRODUCTS_FILE, products);
+    res.json({ success: true, product: products[index], message: 'Product size stock matrix updated' });
   });
 
   // --- Steadfast Courier Integration Endpoints ---
@@ -1193,6 +1363,100 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ success: false, message: err.message || 'Tracking lookup failed' });
     }
+  });
+
+  // Bulk Sync All Courier Statuses with Steadfast API
+  app.post('/api/courier/steadfast/sync-all-status', async (req: Request, res: Response) => {
+    const apiKey = (steadfastConfig.apiKey || '').trim();
+    const secretKey = (steadfastConfig.secretKey || '').trim();
+
+    if (!apiKey || !secretKey) {
+      return res.json({
+        success: false,
+        requiresApiKey: true,
+        message: 'Steadfast API Key / Secret Key is not configured.'
+      });
+    }
+
+    // Filter active orders that have tracking codes
+    const trackableOrders = orders.filter(o => !!(o.trackingCode || o.consignmentId));
+    if (trackableOrders.length === 0) {
+      return res.json({
+        success: true,
+        totalChecked: 0,
+        updatedCount: 0,
+        message: 'No orders with tracking codes found to synchronize.'
+      });
+    }
+
+    let updatedCount = 0;
+    const syncLogs: Array<{ orderId: string; trackingCode: string; prevStatus: string; newStatus: string; rawStatus: string }> = [];
+
+    for (const order of trackableOrders) {
+      const trk = order.trackingCode;
+      const cid = order.consignmentId;
+      const endpoint = trk ? `status_by_trackingcode/${trk}` : `status_by_cid/${cid}`;
+
+      try {
+        const result = await callSteadfastApi(endpoint, 'GET', apiKey, secretKey);
+        if (result.ok && result.data) {
+          const rawStatus = String(result.data.delivery_status || result.data.status || '').toLowerCase();
+          const prevCourierStatus = order.courierStatus || 'pending';
+          let newCourierStatus = prevCourierStatus;
+          let newOrderStatus = order.status;
+
+          if (rawStatus.includes('delivered') && !rawStatus.includes('pending')) {
+            newCourierStatus = 'delivered';
+            newOrderStatus = 'delivered';
+          } else if (
+            rawStatus.includes('in_transit') || 
+            rawStatus.includes('transit') || 
+            rawStatus.includes('picked_up') || 
+            rawStatus.includes('hold') || 
+            rawStatus.includes('approval_pending')
+          ) {
+            newCourierStatus = 'in_transit'; // "With Delivery Man"
+            if (newOrderStatus !== 'delivered') {
+              newOrderStatus = 'shipped';
+            }
+          } else if (rawStatus.includes('pending') || rawStatus.includes('review')) {
+            newCourierStatus = 'pending'; // "Pending at Courier"
+          } else if (rawStatus.includes('cancel') || rawStatus.includes('return')) {
+            newCourierStatus = 'cancelled';
+          }
+
+          if (newCourierStatus !== prevCourierStatus || newOrderStatus !== order.status) {
+            order.courierStatus = newCourierStatus;
+            order.status = newOrderStatus;
+            order.courierProcessedAt = new Date().toISOString();
+            updatedCount++;
+
+            syncLogs.push({
+              orderId: order.id,
+              trackingCode: trk || cid || '',
+              prevStatus: prevCourierStatus,
+              newStatus: newCourierStatus,
+              rawStatus
+            });
+          }
+        }
+      } catch (e) {
+        // Continue loop on individual item network error
+      }
+    }
+
+    if (updatedCount > 0) {
+      saveJsonFile(ORDERS_FILE, orders);
+    }
+
+    res.json({
+      success: true,
+      totalChecked: trackableOrders.length,
+      updatedCount,
+      syncLogs,
+      orders,
+      message: `Steadfast Sync: Checked ${trackableOrders.length} parcels. ${updatedCount} status records updated!`
+    });
   });
 
   // Reset / Seed Catalog

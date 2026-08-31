@@ -7,7 +7,7 @@ import {
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
-  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -109,7 +109,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
+  const handleSelectMenu = (menu: 'order_process' | 'warehouse' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
     setActiveMenu(menu);
     // Auto-collapse sidebar on mobile after selecting a menu
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -599,27 +599,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </button>
 
-            {/* 2. Barcode Scanner & Continuous Auto-Matching */}
+            {/* 2. Barcode Scanner & Warehouse Stock Dispatch */}
             <button
               onClick={() => handleSelectMenu('barcode_scanner')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                 activeMenu === 'barcode_scanner'
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 font-extrabold'
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 font-extrabold'
                   : 'text-neutral-300 hover:text-white hover:bg-white/10'
               }`}
             >
               <div className="flex items-center gap-3">
-                <ScanLine className="w-4 h-4 text-red-400" />
+                <ScanLine className="w-4 h-4 text-rose-400" />
                 <span className="font-extrabold tracking-tight">Barcode Scanner</span>
               </div>
               <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                activeMenu === 'barcode_scanner' ? 'bg-white text-red-900 font-black' : 'bg-red-500/20 text-red-300 font-bold'
+                activeMenu === 'barcode_scanner' ? 'bg-white text-rose-900 font-black' : 'bg-rose-500/20 text-rose-300 font-bold'
               }`}>
                 Live Match
               </span>
             </button>
 
-            {/* 3. Steadfast Courier API Configuration (Dedicated Sidebar Section) */}
+            {/* 4. Steadfast Courier API Configuration (Dedicated Sidebar Section) */}
             <button
               onClick={() => handleSelectMenu('steadfast_api')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
@@ -882,7 +882,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB: BARCODE SCANNER & CONTINUOUS AUTO-MATCHING */}
           {activeMenu === 'barcode_scanner' && (
             <BarcodeScannerSection 
+              products={products}
+              siteSettings={localSettings}
+              currency={currency}
+              onUpdateProduct={onUpdateProduct}
               onGoToOrderProcess={() => setActiveMenu('order_process')}
+              onGoToSteadfastApi={() => setActiveMenu('steadfast_api')}
             />
           )}
 

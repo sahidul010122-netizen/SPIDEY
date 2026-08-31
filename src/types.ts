@@ -20,6 +20,7 @@ export interface JerseyProduct {
   sizes: string[];
   inStock: boolean;
   stockCount: number;
+  sizeStock?: Record<string, number>; // e.g. { S: 5, M: 8, L: 12, XL: 6, XXL: 3, '3XL': 2 }
   rating: number;
   reviewCount: number;
   customizable: boolean;
@@ -54,15 +55,18 @@ export interface Order {
   shippingFee: number;
   totalAmount: number;
   codAmount?: number;
-  status: 'confirmed' | 'processing' | 'shipped' | 'delivered';
+  status: 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'dispatched' | 'cancelled';
   consignmentId?: string;
   trackingCode?: string; // 9-digit Steadfast tracking code
-  courierStatus?: 'pending' | 'sent_to_courier' | 'in_transit' | 'delivered' | 'cancelled';
+  courierStatus?: 'pending' | 'sent_to_courier' | 'in_transit' | 'with_delivery_man' | 'delivered' | 'cancelled' | 'returned' | 'partial_delivered';
   courierName?: string;
   courierProcessedAt?: string;
   invoiceNumber?: string;
   barcodeScanned?: boolean;
   scannedAt?: string;
+  outboundScannedAt?: string;
+  outboundStockDeducted?: boolean;
+  deductedItemsSummary?: string;
   createdAt: string;
 }
 
