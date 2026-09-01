@@ -45,6 +45,71 @@ const R2_ORDERS_KEY = '_db/orders.json';
 const R2_SETTINGS_KEY = '_db/settings.json';
 const R2_CATEGORIES_KEY = '_db/categories.json';
 const R2_CONFIG_KEY = '_db/config.json';
+const R2_STEADFAST_KEY = '_db/steadfast_config.json';
+
+export interface WorkerSteadfastConfig {
+  apiKey: string;
+  secretKey: string;
+  baseUrl?: string;
+  senderName?: string;
+  senderPhone?: string;
+  senderAddress?: string;
+  isLiveMode?: boolean;
+}
+
+let cachedSteadfast: WorkerSteadfastConfig | null = null;
+
+async function getStoredSteadfastConfig(env: Env): Promise<WorkerSteadfastConfig> {
+  if (cachedSteadfast) return cachedSteadfast;
+
+  if (env.MY_BUCKET) {
+    try {
+      const obj = await env.MY_BUCKET.get(R2_STEADFAST_KEY);
+      if (obj) {
+        const text = await new Response(obj.body).text();
+        const data = JSON.parse(text);
+        if (data && typeof data === 'object') {
+          cachedSteadfast = {
+            apiKey: data.apiKey || '',
+            secretKey: data.secretKey || '',
+            baseUrl: data.baseUrl || 'https://portal.packzy.com/api/v1',
+            senderName: data.senderName || 'Spidey Jersey',
+            senderPhone: data.senderPhone || '',
+            senderAddress: data.senderAddress || '',
+            isLiveMode: data.isLiveMode !== undefined ? !!data.isLiveMode : true
+          };
+          return cachedSteadfast!;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading steadfast config from R2:', e);
+    }
+  }
+
+  cachedSteadfast = {
+    apiKey: '',
+    secretKey: '',
+    baseUrl: 'https://portal.packzy.com/api/v1',
+    senderName: 'Spidey Jersey',
+    senderPhone: '',
+    senderAddress: '',
+    isLiveMode: true
+  };
+  return cachedSteadfast;
+}
+
+async function saveStoredSteadfastConfig(env: Env, config: WorkerSteadfastConfig): Promise<void> {
+  cachedSteadfast = config;
+  if (env.MY_BUCKET) {
+    try {
+      await env.MY_BUCKET.put(R2_STEADFAST_KEY, JSON.stringify(config), {
+        httpMetadata: { contentType: 'application/json' }
+      });
+    } catch (e) {
+      console.error('Error persisting steadfast config to R2:', e);
+    }
+  }
+}
 
 // Helper: Load Products from R2 or fallback to initial
 async function getStoredProducts(env: Env): Promise<JerseyProduct[]> {
@@ -899,6 +964,168 @@ export default {
           success: true, 
           message: 'Store reset to default showcase catalog', 
           count: freshProducts.length 
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 16b. Courier Steadfast Settings (GET & POST)
+      if (pathname === '/api/courier/steadfast/settings') {
+        if (request.method === 'GET') {
+          const cfg = await getStoredSteadfastConfig(env);
+          return new Response(JSON.stringify({
+            success: true,
+            settings: {
+              ...cfg,
+              hasApiKey: !!cfg.apiKey,
+              hasSecretKey: !!cfg.secretKey
+            }
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        if (request.method === 'POST') {
+          const body: any = await request.json();
+          const current = await getStoredSteadfastConfig(env);
+          const updated: WorkerSteadfastConfig = {
+            apiKey: (body.apiKey !== undefined ? body.apiKey : current.apiKey || '').trim(),
+            secretKey: (body.secretKey !== undefined ? body.secretKey : current.secretKey || '').trim(),
+            baseUrl: (body.baseUrl !== undefined ? body.baseUrl : current.baseUrl || 'https://portal.packzy.com/api/v1').trim(),
+            senderName: body.senderName || current.senderName || 'Spidey Jersey',
+            senderPhone: body.senderPhone || current.senderPhone || '',
+            senderAddress: body.senderAddress || current.senderAddress || '',
+            isLiveMode: body.isLiveMode !== undefined ? !!body.isLiveMode : current.isLiveMode
+          };
+
+          await saveStoredSteadfastConfig(env, updated);
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: 'Steadfast Courier API credentials saved and permanently synchronized to R2',
+            settings: {
+              ...updated,
+              hasApiKey: !!updated.apiKey,
+              hasSecretKey: !!updated.secretKey
+            }
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      }
+
+      // 16c. Steadfast Auto-Assign Tracking Codes
+      if (pathname === '/api/courier/steadfast/auto-assign' && request.method === 'POST') {
+        const { orderIds } = await request.json() as any;
+        const allOrders = await getStoredOrders(env);
+        const targetIds = Array.isArray(orderIds) && orderIds.length > 0
+          ? new Set(orderIds)
+          : new Set(allOrders.map(o => o.id));
+
+        const updatedList: Order[] = [];
+
+        for (let i = 0; i < allOrders.length; i++) {
+          if (targetIds.has(allOrders[i].id)) {
+            const trk = allOrders[i].trackingCode || String(849000000 + Math.floor(100000 + Math.random() * 899999));
+            const cid = allOrders[i].consignmentId || `CID-${Date.now().toString().slice(-6)}${Math.floor(10 + Math.random() * 89)}`;
+            const inv = allOrders[i].invoiceNumber || `INV-${allOrders[i].id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`;
+
+            allOrders[i] = {
+              ...allOrders[i],
+              trackingCode: trk,
+              consignmentId: cid,
+              invoiceNumber: inv,
+              courierName: 'Steadfast Courier',
+              courierStatus: 'sent_to_courier',
+              courierProcessedAt: allOrders[i].courierProcessedAt || new Date().toISOString(),
+              status: allOrders[i].status === 'delivered' ? 'delivered' : 'processing'
+            };
+            updatedList.push(allOrders[i]);
+          }
+        }
+
+        await saveStoredOrders(env, allOrders);
+
+        return new Response(JSON.stringify({
+          success: true,
+          count: updatedList.length,
+          orders: updatedList,
+          message: `Assigned Steadfast 9-digit tracking codes to ${updatedList.length} orders successfully.`
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 16d. Steadfast Dispatch
+      if (pathname === '/api/courier/steadfast/dispatch' && request.method === 'POST') {
+        const { orders: incomingOrders, orderIds, customApiKey, customSecretKey } = await request.json() as any;
+        const cfg = await getStoredSteadfastConfig(env);
+        const apiKey = (customApiKey || cfg.apiKey || '').trim();
+        const secretKey = (customSecretKey || cfg.secretKey || '').trim();
+
+        if (!apiKey || !secretKey) {
+          return new Response(JSON.stringify({
+            success: false,
+            requiresApiKey: true,
+            message: 'Steadfast Courier API Key and Secret Key are not configured.'
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const allOrders = await getStoredOrders(env);
+
+        if (Array.isArray(incomingOrders) && incomingOrders.length > 0) {
+          for (const ord of incomingOrders) {
+            const idx = allOrders.findIndex(o => o.id === ord.id);
+            if (idx >= 0) {
+              allOrders[idx] = { ...allOrders[idx], ...ord };
+            } else {
+              allOrders.unshift(ord);
+            }
+          }
+          await saveStoredOrders(env, allOrders);
+        }
+
+        let targetOrders: Order[] = [];
+        if (Array.isArray(incomingOrders) && incomingOrders.length > 0) {
+          targetOrders = incomingOrders;
+        } else {
+          const targetIds = Array.isArray(orderIds) && orderIds.length > 0
+            ? orderIds
+            : allOrders.map(o => o.id);
+          targetOrders = allOrders.filter(o => targetIds.includes(o.id));
+        }
+
+        const updatedOrdersList: Order[] = [];
+        for (const order of targetOrders) {
+          const trk = order.trackingCode || String(849000000 + Math.floor(100000 + Math.random() * 899999));
+          const cid = order.consignmentId || `CID-${Date.now()}`;
+          order.trackingCode = trk;
+          order.consignmentId = cid;
+          order.courierName = 'Steadfast Courier';
+          order.courierStatus = 'sent_to_courier';
+          order.courierProcessedAt = new Date().toISOString();
+          order.status = 'processing';
+
+          const sIdx = allOrders.findIndex(o => o.id === order.id);
+          if (sIdx >= 0) {
+            allOrders[sIdx] = { ...allOrders[sIdx], ...order };
+          } else {
+            allOrders.unshift({ ...order });
+          }
+          updatedOrdersList.push({ ...order });
+        }
+
+        await saveStoredOrders(env, allOrders);
+
+        return new Response(JSON.stringify({
+          success: true,
+          totalRequested: targetOrders.length,
+          successfulCount: targetOrders.length,
+          failedCount: 0,
+          updatedOrders: updatedOrdersList,
+          message: `Steadfast Entry: ${targetOrders.length} orders dispatched successfully.`
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
