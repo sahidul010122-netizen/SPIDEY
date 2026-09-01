@@ -11,13 +11,13 @@ interface ShopByCategoryProps {
 export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
   selectedCategory,
   onSelectCategory,
-  categories,
+  categories = [],
   headingTitle = 'Shop by Category'
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const items = categories;
+  const items = Array.isArray(categories) ? categories : [];
 
   // Handle scroll to calculate active pagination dot
   const handleScroll = () => {

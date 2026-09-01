@@ -28,7 +28,7 @@ export const JerseyCard: React.FC<JerseyCardProps> = ({
       >
         {/* Centered Product Image */}
         <img
-          src={jersey.images[0]}
+          src={jersey.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
           alt={jersey.title}
           referrerPolicy="no-referrer"
           className="w-full h-full object-contain object-center img-smooth-zoom transition-transform duration-300 drop-shadow-sm"

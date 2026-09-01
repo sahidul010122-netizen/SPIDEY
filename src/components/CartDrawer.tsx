@@ -28,12 +28,13 @@ interface CartDrawerContentProps {
 
 const CartDrawerContent: React.FC<CartDrawerContentProps> = ({
   onClose,
-  items,
+  items = [],
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
   currency
 }) => {
+  const safeItems = Array.isArray(items) ? items : [];
   const [promoCode, setPromoCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [discountMessage, setDiscountMessage] = useState('');
@@ -46,7 +47,7 @@ const CartDrawerContent: React.FC<CartDrawerContentProps> = ({
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
-  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const subtotal = safeItems.reduce((sum, item) => sum + (item.product?.price || 0) * (item.quantity || 1), 0);
   const shippingFee = subtotal > 150 || appliedDiscount === 999 ? 0 : 9.99;
   const calculatedDiscount = appliedDiscount === 999 
     ? 0 
@@ -297,14 +298,14 @@ const CartDrawerContent: React.FC<CartDrawerContentProps> = ({
         ) : (
           /* Normal Cart List */
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
-            {items.map((item) => (
+            {safeItems.map((item) => (
               <div
                 key={item.itemKey}
                 id={`cart-item-${item.itemKey}`}
                 className="p-3 rounded-2xl bg-slate-900/80 border border-white/10 flex gap-3 items-center justify-between"
               >
                 <img
-                  src={item.product.images[0]}
+                  src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
                   alt=""
                   referrerPolicy="no-referrer"
                   className="w-16 h-16 rounded-xl object-cover bg-slate-950 border border-white/10 shrink-0"

@@ -54,7 +54,7 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
 
   // Dynamic Size Guide Settings from Admin
   const isSizeGuideEnabled = siteSettings?.enableSizeGuide !== false;
-  const activeSizeGuideData = (siteSettings?.sizeGuideMeasurements && siteSettings.sizeGuideMeasurements.length > 0)
+  const activeSizeGuideData = (Array.isArray(siteSettings?.sizeGuideMeasurements) && siteSettings.sizeGuideMeasurements.length > 0)
     ? siteSettings.sizeGuideMeasurements
     : DEFAULT_SIZE_GUIDE_DATA;
   const sizeGuideNote = siteSettings?.sizeGuideNote || 'Standard Thai Fit';
@@ -69,10 +69,11 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
   const touchEndX = useRef<number | null>(null);
 
   // Available Sizes fallback
-  const availableSizes = jersey.sizes && jersey.sizes.length > 0 ? jersey.sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
+  const availableSizes = Array.isArray(jersey.sizes) && jersey.sizes.length > 0 ? jersey.sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
 
   // Current active image URL
-  const currentImageUrl = jersey.images[activeImageIndex] || jersey.images[0];
+  const safeImages = Array.isArray(jersey.images) ? jersey.images : [];
+  const currentImageUrl = (safeImages[activeImageIndex]) || safeImages[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80';
 
   // Official Business WhatsApp Configuration
   const rawWhatsApp = siteSettings?.whatsappNumber || '8801715123766';
@@ -93,16 +94,16 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeImageIndex, jersey.images.length]);
+  }, [activeImageIndex, jersey.images?.length]);
 
   const nextImage = () => {
-    if (jersey.images.length > 1) {
+    if (jersey.images && jersey.images.length > 1) {
       setActiveImageIndex((prev) => (prev + 1) % jersey.images.length);
     }
   };
 
   const prevImage = () => {
-    if (jersey.images.length > 1) {
+    if (jersey.images && jersey.images.length > 1) {
       setActiveImageIndex((prev) => (prev - 1 + jersey.images.length) % jersey.images.length);
     }
   };
@@ -118,11 +119,15 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
 
   // Touch Swipe Handlers for mobile gestures
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.targetTouches[0].clientX;
+    if (e.targetTouches && e.targetTouches.length > 0) {
+      touchStartX.current = e.targetTouches[0].clientX;
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
+    if (e.targetTouches && e.targetTouches.length > 0) {
+      touchEndX.current = e.targetTouches[0].clientX;
+    }
   };
 
   const handleTouchEnd = () => {
@@ -362,7 +367,7 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
               </div>
 
               {/* Counter Indicator */}
-              {jersey.images.length > 1 && (
+              {jersey.images && jersey.images.length > 1 && (
                 <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 rounded-full bg-white/90 backdrop-blur-xs shadow-xs border border-neutral-200/80 text-[10px] font-mono font-bold text-neutral-600 pointer-events-none">
                   {activeImageIndex + 1}/{jersey.images.length}
                 </div>
@@ -370,7 +375,7 @@ const ProductModalContent: React.FC<ProductModalContentProps> = ({
             </div>
 
             {/* Thumbnail Strip */}
-            {jersey.images.length > 1 && (
+            {jersey.images && jersey.images.length > 1 && (
               <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-none justify-center">
                 {jersey.images.map((img, idx) => (
                   <button

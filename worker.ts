@@ -1131,6 +1131,112 @@ export default {
         });
       }
 
+      // 16e. Warehouse Scan Dispatch & Stock Deduction (POST)
+      if (pathname === '/api/warehouse/scan-dispatch' && request.method === 'POST') {
+        const { scanCode } = await request.json() as any;
+        if (!scanCode || typeof scanCode !== 'string') {
+          return new Response(JSON.stringify({ success: false, message: 'Scan code is required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const normalizedScan = scanCode.trim().toLowerCase();
+        const cleanDigitsScan = scanCode.replace(/[^0-9]/g, '');
+
+        const orders = await getStoredOrders(env);
+        const products = await getStoredProducts(env);
+
+        let orderIndex = orders.findIndex(o => {
+          if (o.id && o.id.toLowerCase() === normalizedScan) return true;
+          if (o.invoiceNumber && o.invoiceNumber.toLowerCase() === normalizedScan) return true;
+          if (o.trackingCode && o.trackingCode.toLowerCase() === normalizedScan) return true;
+          if (o.consignmentId && o.consignmentId.toLowerCase() === normalizedScan) return true;
+          if (cleanDigitsScan.length >= 8 && o.trackingCode && o.trackingCode.replace(/[^0-9]/g, '') === cleanDigitsScan) return true;
+          if (cleanDigitsScan.length >= 10 && o.phoneNumber && o.phoneNumber.replace(/[^0-9]/g, '').endsWith(cleanDigitsScan)) return true;
+          return false;
+        });
+
+        if (orderIndex === -1) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: `কোনো ম্যাচিং অর্ডার পাওয়া যায়নি (${scanCode})`
+          }), {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const targetOrder = orders[orderIndex];
+        const wasAlreadyDispatched = targetOrder.status === 'shipped' || targetOrder.status === 'dispatched' || targetOrder.status === 'delivered';
+        const deductedDetails: Array<{ productId: string; productTitle: string; size: string; quantity: number; previousStock: number; newStock: number }> = [];
+
+        if (!targetOrder.outboundStockDeducted && Array.isArray(targetOrder.items)) {
+          for (const item of targetOrder.items) {
+            const rawItem = item as any;
+            const size = (rawItem.selectedSize || rawItem.size || 'L').toUpperCase();
+            const qty = Number(rawItem.quantity) || 1;
+            const pId = rawItem.productId || rawItem.product?.id;
+
+            const pIdx = products.findIndex(p => p.id === pId || (p.title && rawItem.product?.title && p.title.toLowerCase() === rawItem.product.title.toLowerCase()));
+
+            if (pIdx !== -1) {
+              const matched = products[pIdx];
+              const sizeStock: Record<string, number> = matched.sizeStock || {};
+              ['S', 'M', 'L', 'XL', 'XXL', '3XL'].forEach(sz => {
+                if (sizeStock[sz] === undefined) sizeStock[sz] = Math.max(0, Math.floor((matched.stockCount || 15) / 6));
+              });
+
+              const prevQty = sizeStock[size] !== undefined ? sizeStock[size] : 0;
+              const newQty = Math.max(0, prevQty - qty);
+              sizeStock[size] = newQty;
+              matched.sizeStock = sizeStock;
+              matched.stockCount = Object.values(sizeStock).reduce((a, b) => a + (Number(b) || 0), 0);
+              matched.inStock = matched.stockCount > 0;
+              matched.updatedAt = new Date().toISOString();
+
+              deductedDetails.push({
+                productId: matched.id,
+                productTitle: matched.title,
+                size,
+                quantity: qty,
+                previousStock: prevQty,
+                newStock: newQty
+              });
+            }
+          }
+          await saveStoredProducts(env, products);
+        }
+
+        const nowIso = new Date().toISOString();
+        const updatedOrder: Order = {
+          ...targetOrder,
+          status: 'shipped',
+          barcodeScanned: true,
+          scannedAt: nowIso,
+          outboundScannedAt: targetOrder.outboundScannedAt || nowIso,
+          outboundStockDeducted: true,
+          courierStatus: targetOrder.courierStatus === 'delivered' ? 'delivered' : (targetOrder.courierStatus || 'sent_to_courier'),
+          deductedItemsSummary: deductedDetails.map(d => `${d.productTitle} (${d.size} × ${d.quantity})`).join(', ') || targetOrder.deductedItemsSummary
+        };
+
+        orders[orderIndex] = updatedOrder;
+        await saveStoredOrders(env, orders);
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: wasAlreadyDispatched
+            ? `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id})`
+            : `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে এবং সাইজ অনুযায়ী স্টক আপডেট হয়েছে!`,
+          order: updatedOrder,
+          wasAlreadyDispatched,
+          wasStockDeducted: deductedDetails.length > 0,
+          deductedDetails,
+          updatedProducts: products
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
       // 17. Static Assets fallback with SPA routing for Cloudflare Pages / Workers
       if (env.ASSETS) {
         const assetResponse = await env.ASSETS.fetch(request);

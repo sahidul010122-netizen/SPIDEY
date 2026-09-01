@@ -92,7 +92,7 @@ Amount: 1350৳
 `;
 
 export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
-  products,
+  products = [],
   siteSettings,
   onRefreshStats,
   onNavigateToSteadfastApi,
@@ -625,7 +625,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       customerName: staged.customerName || 'Customer',
       phoneNumber: staged.phoneNumber || '01XXXXXXXXX',
       shippingAddress: staged.shippingAddress || 'Bangladesh',
-      items: staged.items.map((it, itIdx) => ({
+      items: (staged.items || []).map((it, itIdx) => ({
         itemKey: `stg-item-${idx}-${itIdx}`,
         productId: it.matchedProduct?.id || `jersey-${itIdx}`,
         product: it.matchedProduct || {
@@ -942,7 +942,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
               <tbody className="divide-y divide-neutral-100 font-sans">
                 {stagedOrders.map((order, orderIdx) => {
                   const hasPhoneError = !order.phoneNumber || order.phoneNumber.length !== 11;
-                  const firstItem = order.items[0];
+                  const firstItem = order.items?.[0];
                   const thumbnailImg = firstItem?.matchedProduct?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80';
 
                   return (
@@ -1010,7 +1010,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       {/* Items / Code / Size / Custom details */}
                       <td className="py-2.5 px-3">
                         <div className="space-y-1.5">
-                          {order.items.map((it, itemIdx) => (
+                          {(order.items || []).map((it, itemIdx) => (
                             <div key={it.id || itemIdx} className="p-1.5 rounded-lg bg-neutral-50 border border-neutral-200 text-[11px] space-y-1">
                               <div className="flex items-center gap-1.5">
                                 <input
@@ -1372,7 +1372,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
               ) : (
                 filteredSavedOrders.map((order, idx) => {
                   const isSelected = selectedOrderIds.has(order.id);
-                  const firstItem = order.items[0];
+                  const firstItem = order.items?.[0];
                   const thumbnailImg = firstItem?.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80';
                   const codAmt = order.codAmount !== undefined ? order.codAmount : order.totalAmount;
 
@@ -1433,7 +1433,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       {/* Items */}
                       <td className="py-3 px-3">
                         <div className="space-y-1">
-                          {order.items.map((it, itemIdx) => (
+                          {(order.items || []).map((it, itemIdx) => (
                             <div key={it.itemKey || itemIdx} className="text-[11px] leading-tight">
                               <span className="font-bold text-neutral-900">
                                 {it.product?.code && `[${it.product.code}] `}

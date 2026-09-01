@@ -371,7 +371,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
             try {
               const barcodes = await detector.detect(videoRef.current);
               if (barcodes && barcodes.length > 0) {
-                const detectedCode = barcodes[0].rawValue;
+                const detectedCode = barcodes[0]?.rawValue;
                 if (detectedCode) {
                   handleIncomingBarcode(detectedCode);
                 }
@@ -442,7 +442,8 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   // Toggle Camera Flashlight / Torch
   const toggleFlashlight = async () => {
     if (!mediaStreamRef.current) return;
-    const track = mediaStreamRef.current.getVideoTracks()[0];
+    const videoTracks = mediaStreamRef.current.getVideoTracks();
+    const track = videoTracks && videoTracks.length > 0 ? videoTracks[0] : null;
     if (!track) return;
 
     try {
@@ -1372,7 +1373,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                       </div>
 
                       {/* Outbound Stock Deduction Breakdown */}
-                      {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
+                      {Array.isArray(lastScanResult.deductedDetails) && lastScanResult.deductedDetails.length > 0 && (
                         <div className="pt-2 border-t border-neutral-200/80 space-y-2">
                           <span className="text-[11px] font-extrabold text-neutral-700 flex items-center gap-1">
                             <TrendingDown className="w-3.5 h-3.5 text-emerald-600" />
@@ -2107,7 +2108,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                         <span className="font-bold text-white">{lastScanResult.order.customerName}</span>
                         <span className="font-mono text-emerald-300 font-bold">{lastScanResult.order.phoneNumber}</span>
                       </div>
-                      {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
+                      {Array.isArray(lastScanResult.deductedDetails) && lastScanResult.deductedDetails.length > 0 && (
                         <div className="text-[11px] text-emerald-300 font-mono flex items-center justify-between pt-0.5">
                           <span>সাইজ মাইনাস: {lastScanResult.deductedDetails.map(d => `${d.size} (-${d.quantity})`).join(', ')}</span>
                           <span className="text-white font-bold">স্টক: {lastScanResult.deductedDetails[0]?.newStock} pcs</span>

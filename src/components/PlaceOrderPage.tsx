@@ -40,7 +40,7 @@ interface PlaceOrderPageProps {
 const AVAILABLE_SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
 
 export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
-  products,
+  products = [],
   siteSettings,
   currency,
   onBackToStore,
@@ -52,7 +52,8 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   const [items, setItems] = useState<OrderItemForm[]>(() => {
     let initialProd: JerseyProduct | null = null;
     if (initialProductId) {
-      initialProd = products.find(p => p.id === initialProductId) || null;
+      const safeProducts = Array.isArray(products) ? products : [];
+      initialProd = safeProducts.find(p => p.id === initialProductId) || null;
     }
     return [
       {
@@ -187,13 +188,14 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
 
   // Filter products for search
   const getFilteredProducts = (query: string) => {
-    if (!query.trim()) return products.slice(0, 8);
+    const safeProducts = Array.isArray(products) ? products : [];
+    if (!query.trim()) return safeProducts.slice(0, 8);
     const q = query.toLowerCase().trim();
-    return products.filter(p => 
+    return safeProducts.filter(p => 
       (p.code && p.code.toLowerCase().includes(q)) ||
-      p.title.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.season?.toLowerCase().includes(q)
+      (p.title && p.title.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q)) ||
+      (p.season && p.season.toLowerCase().includes(q))
     );
   };
 
@@ -313,10 +315,13 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
 
   // Generate clean, formatted receipt text for clipboard copying matching exact requested pattern
   const generateReceiptText = (order: Order, codValue: string) => {
-    const itemsFormatted = order.items.map((it, idx) => {
-      const codePart = it.product.code ? `[${it.product.code}] ` : '';
-      const customPart = it.customName ? `-  "${it.customName}"` : '';
-      return `${idx + 1}. ${codePart}${it.product.title} (Size: ${it.selectedSize}) ${customPart}`.trim();
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    const itemsFormatted = orderItems.map((it, idx) => {
+      const codePart = it?.product?.code ? `[${it.product.code}] ` : '';
+      const customPart = it?.customName ? `-  "${it.customName}"` : '';
+      const prodTitle = it?.product?.title || 'Jersey';
+      const sizeStr = it?.selectedSize || 'L';
+      return `${idx + 1}. ${codePart}${prodTitle} (Size: ${sizeStr}) ${customPart}`.trim();
     }).join('\n');
 
     const amountDisplay = codValue ? `${codValue}৳` : '0৳';

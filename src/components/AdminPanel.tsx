@@ -39,8 +39,8 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
-  products,
-  categories,
+  products = [],
+  categories = [],
   siteSettings,
   stats,
   onAddProduct,
@@ -497,22 +497,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // Filter Categories
-  const filteredCategories = categories.filter((c) => {
+  const safeCategories = Array.isArray(categories) ? categories : [];
+  const filteredCategories = safeCategories.filter((c) => {
     if (!searchQuery.trim()) return true;
-    return c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    return (c.name && c.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (c.subtitle && c.subtitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (c.tag && c.tag.toLowerCase().includes(searchQuery.toLowerCase()));
   });
 
   // Filter Products
-  const filteredProducts = products.filter((p) => {
+  const safeProducts = Array.isArray(products) ? products : [];
+  const filteredProducts = safeProducts.filter((p) => {
     if (!searchQuery.trim()) return true;
-    return p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.edition.toLowerCase().includes(searchQuery.toLowerCase());
+    return (p.title && p.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.edition && p.edition.toLowerCase().includes(searchQuery.toLowerCase()));
   });
 
-  const totalInventoryValue = products.reduce((acc, p) => acc + p.price * p.stockCount, 0);
+  const totalInventoryValue = safeProducts.reduce((acc, p) => acc + (p.price || 0) * (p.stockCount || 0), 0);
 
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-neutral-900 flex flex-col lg:flex-row p-2 sm:p-4 lg:p-6 gap-4 sm:gap-5 font-sans relative">
@@ -1153,7 +1155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       
                       <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden">
                         <img
-                          src={prod.images[0]}
+                          src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
                           alt={prod.title}
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-contain"

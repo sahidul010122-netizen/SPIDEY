@@ -380,19 +380,28 @@ export default function App() {
   }, []);
 
   // Filter products by selected category and search query
-  const displayedProducts = products.filter((p) => {
+  const safeProductsList = Array.isArray(products) ? products : [];
+  const displayedProducts = safeProductsList.filter((p) => {
+    const pCat = p?.category?.toLowerCase() || '';
+    const pTitle = p?.title?.toLowerCase() || '';
+    const pSeason = p?.season?.toLowerCase() || '';
+    const pEdition = p?.edition?.toLowerCase() || '';
+    const pBadge = p?.badge?.toLowerCase() || '';
+    const selCat = (selectedCategory || 'all').toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+
     const matchesCategory =
-      selectedCategory === 'all' ||
-      p.category.toLowerCase() === selectedCategory.toLowerCase() ||
-      (selectedCategory === 'kits' && (p.category.toLowerCase().includes('madrid') || p.category.toLowerCase().includes('barcelona') || p.category.toLowerCase().includes('manchester')));
+      selCat === 'all' ||
+      pCat === selCat ||
+      (selCat === 'kits' && (pCat.includes('madrid') || pCat.includes('barcelona') || pCat.includes('manchester')));
 
     const matchesSearch =
-      !searchQuery.trim() ||
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.season.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.edition.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.badge && p.badge.toLowerCase().includes(searchQuery.toLowerCase()));
+      !query ||
+      pTitle.includes(query) ||
+      pCat.includes(query) ||
+      pSeason.includes(query) ||
+      pEdition.includes(query) ||
+      pBadge.includes(query);
 
     return matchesCategory && matchesSearch;
   });

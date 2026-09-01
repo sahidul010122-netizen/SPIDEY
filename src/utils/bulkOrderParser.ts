@@ -350,15 +350,17 @@ export function parseSingleOrderBlock(block: string, products: JerseyProduct[], 
  * Parse entire raw text containing multiple orders.
  */
 export function parseBulkOrders(rawText: string, products: JerseyProduct[]): ParsedOrder[] {
+  const safeProducts = Array.isArray(products) ? products : [];
   const blocks = splitRawTextIntoOrderBlocks(rawText);
-  return blocks.map((b, idx) => parseSingleOrderBlock(b, products, idx));
+  return (blocks || []).map((b, idx) => parseSingleOrderBlock(b, safeProducts, idx));
 }
 
 /**
  * Convert a ParsedOrder into a final Order ready to be saved into master orders database.
  */
 export function convertParsedOrderToMasterOrder(parsed: ParsedOrder, index: number = 0): Order {
-  const cartItems: CartItem[] = parsed.items.map((it, idx) => {
+  const parsedItems = Array.isArray(parsed.items) ? parsed.items : [];
+  const cartItems: CartItem[] = parsedItems.map((it, idx) => {
     // Fallback dummy product if no match
     const dummyProduct: JerseyProduct = it.matchedProduct || {
       id: `prod-${it.code || 'custom'}-${idx}`,

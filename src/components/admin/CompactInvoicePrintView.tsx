@@ -230,7 +230,7 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
           {itemCount === 1 ? (
             /* Single Jersey Layout: Large 1:1 Square Image + Vertical Pill + Product Title */
             (() => {
-              const item = items[0];
+              const item = items?.[0] || {};
               const imgUrl = item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80';
               const sizeVal = item.selectedSize || 'L';
               const customText = item.customName || (item.product?.code ? `[${item.product.code}]` : item.product?.title || 'STANDARD PRO');

@@ -15,12 +15,14 @@ interface WishlistModalProps {
 export const WishlistModal: React.FC<WishlistModalProps> = ({
   isOpen,
   onClose,
-  wishlist,
+  wishlist = [],
   onRemove,
   onInspect,
   currency
 }) => {
   if (!isOpen) return null;
+
+  const items = Array.isArray(wishlist) ? wishlist : [];
 
   return (
     <div
@@ -40,7 +42,7 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-neutral-900 tracking-tight">
-                Saved Favorites ({wishlist.length})
+                Saved Favorites ({items.length})
               </h2>
               <p className="text-xs text-neutral-500">Your curated collection</p>
             </div>
@@ -55,20 +57,20 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 space-y-3">
-          {wishlist.length === 0 ? (
+          {items.length === 0 ? (
             <div className="text-center py-12 space-y-3">
               <Heart className="w-8 h-8 text-neutral-300 mx-auto" />
               <p className="text-sm text-neutral-600">Your saved collection is currently empty.</p>
               <p className="text-xs text-neutral-400">Tap the heart icon on any card to save it here.</p>
             </div>
           ) : (
-            wishlist.map((jersey) => (
+            items.map((jersey) => (
               <div
                 key={jersey.id}
                 className="p-3 rounded-2xl bg-[#f6f7f9] border border-neutral-100 flex items-center justify-between gap-3"
               >
                 <img
-                  src={jersey.images[0]}
+                  src={jersey.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
                   alt=""
                   referrerPolicy="no-referrer"
                   className="w-14 h-14 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-1"
