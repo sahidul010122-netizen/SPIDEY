@@ -1056,7 +1056,7 @@ export default {
         });
       }
 
-      // 16d. Steadfast Dispatch
+      // 16d. Steadfast Dispatch (Real API Consignment Creation)
       if (pathname === '/api/courier/steadfast/dispatch' && request.method === 'POST') {
         const { orders: incomingOrders, orderIds, customApiKey, customSecretKey } = await request.json() as any;
         const cfg = await getStoredSteadfastConfig(env);
@@ -1097,46 +1097,125 @@ export default {
           targetOrders = allOrders.filter(o => targetIds.includes(o.id));
         }
 
+        const results: Array<{ orderId: string; success: boolean; consignment?: any; trackingCode?: string; error?: string }> = [];
         const updatedOrdersList: Order[] = [];
-        for (const order of targetOrders) {
-          const trk = order.trackingCode || String(849000000 + Math.floor(100000 + Math.random() * 899999));
-          const cid = order.consignmentId || `CID-${Date.now()}`;
-          order.trackingCode = trk;
-          order.consignmentId = cid;
-          order.courierName = 'Steadfast Courier';
-          order.courierStatus = 'sent_to_courier';
-          order.courierProcessedAt = new Date().toISOString();
-          order.status = 'processing';
 
-          const sIdx = allOrders.findIndex(o => o.id === order.id);
-          if (sIdx >= 0) {
-            allOrders[sIdx] = { ...allOrders[sIdx], ...order };
-          } else {
-            allOrders.unshift({ ...order });
+        for (const order of targetOrders) {
+          const codAmt = Number(order.codAmount !== undefined ? order.codAmount : order.totalAmount) || 0;
+          let cleanPhone = (order.phoneNumber || '').replace(/[^0-9]/g, '');
+          if (cleanPhone.startsWith('880')) cleanPhone = cleanPhone.substring(2);
+          if (!cleanPhone.startsWith('0') && cleanPhone.length === 10) cleanPhone = '0' + cleanPhone;
+
+          if (!cleanPhone || cleanPhone.length !== 11 || !cleanPhone.startsWith('01')) {
+            results.push({
+              orderId: order.id,
+              success: false,
+              error: `ভুল ফোন নম্বর (${order.phoneNumber || 'খালি'})। স্টেডফাস্ট কুরিয়ারে এন্ট্রি দিতে ১১ ডিজিটের বাংলাদেশি নম্বর (যেমন 017XXXXXXXX) প্রয়োজন।`
+            });
+            continue;
           }
-          updatedOrdersList.push({ ...order });
+
+          let cleanAddress = (order.shippingAddress || '').trim();
+          if (cleanAddress.length < 5) {
+            cleanAddress = `${cleanAddress || 'Customer Address'}, Bangladesh`;
+          }
+
+          const noteText = order.isExchange 
+            ? `[EXCHANGE PARCEL] ${order.orderNote || 'Please collect exchange item'}`
+            : (order.orderNote || 'Spidey Jersey Kit');
+
+          let invoiceNum = order.invoiceNumber || order.id || `SJ-${Date.now()}`;
+          const payload = {
+            invoice: invoiceNum,
+            recipient_name: (order.customerName || 'Customer').trim(),
+            recipient_phone: cleanPhone,
+            recipient_address: cleanAddress,
+            cod_amount: codAmt,
+            note: noteText
+          };
+
+          try {
+            let sfRes = await callSteadfastWorkerApi(env, 'create_order', 'POST', apiKey, secretKey, payload);
+
+            if (sfRes.ok && sfRes.data && (sfRes.data.status === 200 || sfRes.data.consignment)) {
+              const consignment = sfRes.data.consignment || {};
+              const trackingCode = String(consignment.tracking_code || '').trim();
+              const consignmentId = String(consignment.consignment_id || '').trim();
+
+              if (!trackingCode) {
+                results.push({
+                  orderId: order.id,
+                  success: false,
+                  error: 'Steadfast API থেকে ট্র্যাকিং কোড পাওয়া যায়নি: ' + JSON.stringify(sfRes.data)
+                });
+                continue;
+              }
+
+              order.trackingCode = trackingCode;
+              order.consignmentId = consignmentId || undefined;
+              order.invoiceNumber = invoiceNum;
+              order.courierName = 'Steadfast Courier';
+              order.courierStatus = 'sent_to_courier';
+              order.courierProcessedAt = new Date().toISOString();
+              order.status = 'processing';
+
+              const sIdx = allOrders.findIndex(o => o.id === order.id);
+              if (sIdx >= 0) {
+                allOrders[sIdx] = { ...allOrders[sIdx], ...order };
+              } else {
+                allOrders.unshift({ ...order });
+              }
+
+              results.push({
+                orderId: order.id,
+                success: true,
+                consignment,
+                trackingCode
+              });
+              updatedOrdersList.push({ ...order });
+            } else {
+              let errMsg = 'Steadfast entry rejected';
+              if (sfRes.data) {
+                if (typeof sfRes.data.message === 'string' && sfRes.data.message.trim()) {
+                  errMsg = sfRes.data.message;
+                } else if (typeof sfRes.data.error === 'string' && sfRes.data.error.trim()) {
+                  errMsg = sfRes.data.error;
+                } else if (sfRes.data.errors && typeof sfRes.data.errors === 'object') {
+                  errMsg = Object.entries(sfRes.data.errors)
+                    .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+                    .join(' | ');
+                } else {
+                  errMsg = JSON.stringify(sfRes.data);
+                }
+              }
+              results.push({
+                orderId: order.id,
+                success: false,
+                error: errMsg
+              });
+            }
+          } catch (err: any) {
+            results.push({
+              orderId: order.id,
+              success: false,
+              error: err.message || 'Steadfast API connection failed'
+            });
+          }
         }
 
         await saveStoredOrders(env, allOrders);
 
-        const results = updatedOrdersList.map(o => ({
-          orderId: o.id,
-          success: true,
-          trackingCode: o.trackingCode,
-          consignment: {
-            consignment_id: o.consignmentId,
-            tracking_code: o.trackingCode
-          }
-        }));
+        const successfulCount = results.filter(r => r.success).length;
+        const failedCount = results.filter(r => !r.success).length;
 
         return new Response(JSON.stringify({
-          success: true,
+          success: successfulCount > 0,
           totalRequested: targetOrders.length,
-          successfulCount: targetOrders.length,
-          failedCount: 0,
+          successfulCount,
+          failedCount,
           results,
           updatedOrders: updatedOrdersList,
-          message: `Steadfast Entry: ${targetOrders.length} orders dispatched successfully.`
+          message: `Steadfast Entry: ${successfulCount} টি সফল, ${failedCount} টি ব্যর্থ।`
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -1242,6 +1321,111 @@ export default {
           wasAlreadyDispatched,
           wasStockDeducted: deductedDetails.length > 0,
           deductedDetails,
+          updatedProducts: products
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // 16f. Warehouse Revert Scan to Pending & Restore Inventory Stock (POST)
+      if (pathname === '/api/warehouse/revert-scan' && request.method === 'POST') {
+        const { orderId, scanCode } = await request.json() as any;
+        const code = (scanCode || '').trim().toLowerCase();
+
+        const orders = await getStoredOrders(env);
+        const products = await getStoredProducts(env);
+
+        let orderIndex = -1;
+        if (orderId) {
+          orderIndex = orders.findIndex(o => o.id === orderId);
+        }
+        if (orderIndex === -1 && code) {
+          orderIndex = orders.findIndex(o => {
+            const inv = (o.invoiceNumber || '').trim().toLowerCase();
+            const trk = (o.trackingCode || '').trim().toLowerCase();
+            const cid = (o.consignmentId || '').trim().toLowerCase();
+            const oid = (o.id || '').trim().toLowerCase();
+            const ph = (o.phoneNumber || '').replace(/[^0-9]/g, '');
+            const cleanCode = code.replace(/[^a-zA-Z0-9_-]/g, '');
+
+            return (
+              (inv && (inv === code || inv === cleanCode)) ||
+              (trk && (trk === code || trk === cleanCode)) ||
+              (cid && (cid === code || cid === cleanCode)) ||
+              (oid && (oid === code || oid === cleanCode)) ||
+              (ph && code.length >= 10 && ph.includes(code))
+            );
+          });
+        }
+
+        if (orderIndex === -1) {
+          return new Response(JSON.stringify({
+            success: false,
+            message: `কোনো অর্ডার খুঁজে পাওয়া যায়নি (${orderId || scanCode})`
+          }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const targetOrder = orders[orderIndex];
+        const restoredDetails: Array<{ productId: string; productTitle: string; size: string; quantity: number; previousStock: number; newStock: number }> = [];
+
+        if (targetOrder.outboundStockDeducted && Array.isArray(targetOrder.items)) {
+          for (const item of targetOrder.items) {
+            const rawItem = item as any;
+            const size = (rawItem.selectedSize || rawItem.size || 'L').toUpperCase();
+            const qty = Number(rawItem.quantity) || 1;
+            const pId = rawItem.productId || rawItem.product?.id;
+
+            const pIdx = products.findIndex(p => p.id === pId || (p.title && rawItem.product?.title && p.title.toLowerCase() === rawItem.product.title.toLowerCase()));
+
+            if (pIdx !== -1) {
+              const matched = products[pIdx];
+              const sizeStock: Record<string, number> = matched.sizeStock || {};
+              ['S', 'M', 'L', 'XL', 'XXL', '3XL'].forEach(sz => {
+                if (sizeStock[sz] === undefined) sizeStock[sz] = Math.max(0, Math.floor((matched.stockCount || 15) / 6));
+              });
+
+              const prevQty = sizeStock[size] !== undefined ? sizeStock[size] : 0;
+              const newQty = prevQty + qty;
+              sizeStock[size] = newQty;
+              matched.sizeStock = sizeStock;
+              matched.stockCount = Object.values(sizeStock).reduce((a, b) => a + (Number(b) || 0), 0);
+              matched.inStock = matched.stockCount > 0;
+              matched.updatedAt = new Date().toISOString();
+
+              restoredDetails.push({
+                productId: matched.id,
+                productTitle: matched.title,
+                size,
+                quantity: qty,
+                previousStock: prevQty,
+                newStock: newQty
+              });
+            }
+          }
+          await saveStoredProducts(env, products);
+        }
+
+        const updatedOrder: Order = {
+          ...targetOrder,
+          status: 'processing',
+          barcodeScanned: false,
+          scannedAt: undefined,
+          outboundScannedAt: undefined,
+          outboundStockDeducted: false,
+          deductedItemsSummary: undefined
+        };
+
+        orders[orderIndex] = updatedOrder;
+        await saveStoredOrders(env, orders);
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: `অর্ডারটি সফলভাবে পুনরায় "পেন্ডিং" এ নেওয়া হয়েছে এবং সাইজ অনুযায়ী স্টক রিস্টোর করা হয়েছে!`,
+          order: updatedOrder,
+          restoredDetails,
           updatedProducts: products
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }

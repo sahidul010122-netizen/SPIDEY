@@ -116,9 +116,9 @@ interface SteadfastConfig {
 }
 
 const defaultSteadfastConfig: SteadfastConfig = {
-  apiKey: process.env.STEADFAST_API_KEY || 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl',
-  secretKey: process.env.STEADFAST_SECRET_KEY || 'crjccez7uboye8w81jcyza7k',
-  baseUrl: process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1',
+  apiKey: process.env.STEADFAST_API_KEY || '',
+  secretKey: process.env.STEADFAST_SECRET_KEY || '',
+  baseUrl: process.env.STEADFAST_BASE_URL || 'https://portal.steadfast.com.bd/api/v1',
   senderName: 'Spidey Jersey Store',
   senderPhone: '01715123766',
   senderAddress: 'Dhaka, Bangladesh',
@@ -126,15 +126,6 @@ const defaultSteadfastConfig: SteadfastConfig = {
 };
 
 let steadfastConfig: SteadfastConfig = loadJsonFile<SteadfastConfig>(STEADFAST_CONFIG_FILE, defaultSteadfastConfig);
-if (!steadfastConfig.apiKey || !steadfastConfig.apiKey.trim()) {
-  steadfastConfig.apiKey = 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl';
-}
-if (!steadfastConfig.secretKey || !steadfastConfig.secretKey.trim()) {
-  steadfastConfig.secretKey = 'crjccez7uboye8w81jcyza7k';
-}
-if (!steadfastConfig.baseUrl || steadfastConfig.baseUrl.includes('portal.steadfast.com.bd')) {
-  steadfastConfig.baseUrl = 'https://portal.packzy.com/api/v1';
-}
 
 // Ensure all master persistent files exist physically on disk immediately
 if (!fs.existsSync(PRODUCTS_FILE)) saveJsonFile(PRODUCTS_FILE, products);
@@ -1036,11 +1027,124 @@ async function startServer() {
       success: true,
       message: wasAlreadyDispatched 
         ? `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id})`
-        : `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে এবং স্টক ডিডাক্ট সম্পন্ন হয়েছে!`,
+        : `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে এবং সাইজ অনুযায়ী স্টক ডিডাক্ট সম্পন্ন হয়েছে!`,
       order: updatedOrder,
       wasAlreadyDispatched,
       wasStockDeducted,
       deductedDetails,
+      updatedProducts: products
+    });
+  });
+
+  // --- Revert Order from Dispatched/Done back to Pending (Restores Inventory Stock) ---
+  app.post('/api/warehouse/revert-scan', (req: Request, res: Response) => {
+    const { orderId, scanCode } = req.body;
+    if (!orderId && !scanCode) {
+      return res.status(400).json({ success: false, message: 'Order ID or Scan Code is required' });
+    }
+
+    const code = (scanCode || '').trim().toLowerCase();
+    let orderIndex = -1;
+
+    if (orderId) {
+      orderIndex = orders.findIndex(o => o.id === orderId);
+    }
+    if (orderIndex === -1 && code) {
+      orderIndex = orders.findIndex(o => {
+        const inv = (o.invoiceNumber || '').trim().toLowerCase();
+        const trk = (o.trackingCode || '').trim().toLowerCase();
+        const cid = (o.consignmentId || '').trim().toLowerCase();
+        const oid = (o.id || '').trim().toLowerCase();
+        const ph = (o.phoneNumber || '').replace(/[^0-9]/g, '');
+        const cleanCode = code.replace(/[^a-zA-Z0-9_-]/g, '');
+
+        return (
+          (inv && (inv === code || inv === cleanCode)) ||
+          (trk && (trk === code || trk === cleanCode)) ||
+          (cid && (cid === code || cid === cleanCode)) ||
+          (oid && (oid === code || oid === cleanCode)) ||
+          (ph && code.length >= 10 && ph.includes(code))
+        );
+      });
+    }
+
+    if (orderIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: `কোনো অর্ডার খুঁজে পাওয়া যায়নি (Order: ${orderId || scanCode})`
+      });
+    }
+
+    const targetOrder = orders[orderIndex];
+    const restoredDetails: Array<{
+      productId: string;
+      productTitle: string;
+      size: string;
+      quantity: number;
+      previousStock: number;
+      newStock: number;
+    }> = [];
+
+    // Restore stock if previously deducted
+    if (targetOrder.outboundStockDeducted && Array.isArray(targetOrder.items)) {
+      for (const item of targetOrder.items) {
+        const prodId = item.product?.id;
+        const prodCode = item.product?.code;
+        const prodTitle = item.product?.title;
+        const size = (item.selectedSize || 'L').toUpperCase();
+        const qty = Number(item.quantity) || 1;
+
+        let matchedProduct = products.find(p => 
+          (prodId && p.id === prodId) ||
+          (prodCode && p.code && p.code.toLowerCase() === prodCode.toLowerCase()) ||
+          (prodTitle && p.title.toLowerCase() === prodTitle.toLowerCase())
+        );
+
+        if (matchedProduct) {
+          const currentSizeStock = ensureProductSizeStock(matchedProduct);
+          const currentSizeQty = currentSizeStock[size] !== undefined ? currentSizeStock[size] : 0;
+          const newSizeQty = currentSizeQty + qty;
+          
+          currentSizeStock[size] = newSizeQty;
+          matchedProduct.sizeStock = currentSizeStock;
+          
+          matchedProduct.stockCount = Object.values(currentSizeStock).reduce((acc, count) => acc + (Number(count) || 0), 0);
+          matchedProduct.inStock = matchedProduct.stockCount > 0;
+          matchedProduct.updatedAt = new Date().toISOString();
+
+          restoredDetails.push({
+            productId: matchedProduct.id,
+            productTitle: matchedProduct.title,
+            size,
+            quantity: qty,
+            previousStock: currentSizeQty,
+            newStock: newSizeQty
+          });
+        }
+      }
+
+      saveJsonFile(PRODUCTS_FILE, products);
+    }
+
+    // Update order back to pending / in-warehouse status
+    const updatedOrder: Order = {
+      ...targetOrder,
+      status: 'processing',
+      barcodeScanned: false,
+      scannedAt: undefined,
+      outboundScannedAt: undefined,
+      outboundStockDeducted: false,
+      deductedItemsSummary: undefined
+    };
+
+    orders[orderIndex] = updatedOrder;
+    saveJsonFile(ORDERS_FILE, orders);
+
+    return res.json({
+      success: true,
+      message: `অর্ডারটি সফলভাবে পুনরায় "পেন্ডিং (In-Warehouse)" এ নেওয়া হয়েছে এবং সাইজ অনুযায়ী স্টক রিস্টোর করা হয়েছে!`,
+      order: updatedOrder,
+      restoredDetails,
       updatedProducts: products
     });
   });
@@ -1269,14 +1373,19 @@ async function startServer() {
       if (!cleanPhone.startsWith('0') && cleanPhone.length === 10) {
         cleanPhone = '0' + cleanPhone;
       }
-      if (!cleanPhone || cleanPhone.length < 11) {
-        cleanPhone = '01715123766';
+      if (!cleanPhone || cleanPhone.length !== 11 || !cleanPhone.startsWith('01')) {
+        results.push({
+          orderId: order.id,
+          success: false,
+          error: `ভুল ফোন নম্বর (${order.phoneNumber || 'খালি'})। স্টেডফাস্ট কুরিয়ারে এন্ট্রি দিতে ১১ ডিজিটের বাংলাদেশি নম্বর (যেমন 017XXXXXXXX) প্রয়োজন।`
+        });
+        continue;
       }
 
       // Steadfast requires address to have reasonable length
       let cleanAddress = (order.shippingAddress || '').trim();
-      if (cleanAddress.length < 10) {
-        cleanAddress = `${cleanAddress || 'Main Road'}, Bangladesh`;
+      if (cleanAddress.length < 5) {
+        cleanAddress = `${cleanAddress || 'Customer Address'}, Bangladesh`;
       }
 
       const noteText = order.isExchange 
@@ -1287,7 +1396,7 @@ async function startServer() {
 
       let payload = {
         invoice: invoiceNum,
-        recipient_name: order.customerName || 'Customer',
+        recipient_name: (order.customerName || 'Customer').trim(),
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
         cod_amount: codAmt,
@@ -1306,11 +1415,20 @@ async function startServer() {
 
         if (sfRes.ok && sfRes.data && (sfRes.data.status === 200 || sfRes.data.consignment)) {
           const consignment = sfRes.data.consignment || {};
-          const trackingCode = String(consignment.tracking_code || (849000000 + Math.floor(Math.random() * 900000)));
-          const consignmentId = String(consignment.consignment_id || `CID-${Date.now()}`);
+          const trackingCode = String(consignment.tracking_code || '').trim();
+          const consignmentId = String(consignment.consignment_id || '').trim();
+
+          if (!trackingCode) {
+            results.push({
+              orderId: order.id,
+              success: false,
+              error: 'Steadfast API থেকে ট্র্যাকিং কোড পাওয়া যায়নি: ' + JSON.stringify(sfRes.data)
+            });
+            continue;
+          }
 
           order.trackingCode = trackingCode;
-          order.consignmentId = consignmentId;
+          order.consignmentId = consignmentId || undefined;
           order.invoiceNumber = invoiceNum;
           order.courierName = 'Steadfast Courier';
           order.courierStatus = 'sent_to_courier';

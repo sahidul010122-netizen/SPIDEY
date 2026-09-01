@@ -13,9 +13,9 @@ export interface SteadfastSettings {
 }
 
 export const DEFAULT_STEADFAST_SETTINGS: SteadfastSettings = {
-  apiKey: 'tg4eyfbrobgvcvehcrlqw2quwl12ktvl',
-  secretKey: 'crjccez7uboye8w81jcyza7k',
-  baseUrl: 'https://portal.packzy.com/api/v1',
+  apiKey: '',
+  secretKey: '',
+  baseUrl: 'https://portal.steadfast.com.bd/api/v1',
   senderName: 'Spidey Jersey Store',
   senderPhone: '01715123766',
   senderAddress: 'Dhaka, Bangladesh',
