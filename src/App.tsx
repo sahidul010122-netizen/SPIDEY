@@ -318,7 +318,14 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.settings && typeof data.settings === 'object') {
-          setSiteSettings((prev) => ({ ...prev, ...data.settings }));
+          setSiteSettings((prev) => {
+            const next = { ...prev, ...data.settings };
+            try {
+              localStorage.setItem('orifake_site_settings', JSON.stringify(next));
+              localStorage.setItem('spidey_site_settings', JSON.stringify(next));
+            } catch {}
+            return next;
+          });
         }
       }
     } catch (err) {

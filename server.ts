@@ -135,7 +135,13 @@ if (!steadfastConfig.secretKey || !steadfastConfig.secretKey.trim()) {
 if (!steadfastConfig.baseUrl || steadfastConfig.baseUrl.includes('portal.steadfast.com.bd')) {
   steadfastConfig.baseUrl = 'https://portal.packzy.com/api/v1';
 }
-saveJsonFile(STEADFAST_CONFIG_FILE, steadfastConfig);
+
+// Ensure all master persistent files exist physically on disk immediately
+if (!fs.existsSync(PRODUCTS_FILE)) saveJsonFile(PRODUCTS_FILE, products);
+if (!fs.existsSync(SETTINGS_FILE)) saveJsonFile(SETTINGS_FILE, siteSettings);
+if (!fs.existsSync(CATEGORIES_FILE)) saveJsonFile(CATEGORIES_FILE, categoryItems);
+if (!fs.existsSync(ORDERS_FILE)) saveJsonFile(ORDERS_FILE, orders);
+if (!fs.existsSync(STEADFAST_CONFIG_FILE)) saveJsonFile(STEADFAST_CONFIG_FILE, steadfastConfig);
 
 // Initialize images store
 const imageStore = new Map<string, StoredImage>();

@@ -103,6 +103,10 @@ export const SteadfastApiSection: React.FC<SteadfastApiSectionProps> = ({ onGoTo
       const res = await saveSteadfastSettings(settings);
       triggerToast(res.message || 'Steadfast API সেটিংস স্থায়ীভাবে সেভ করা হয়েছে!');
       
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('spidey-steadfast-updated', { detail: { settings } }));
+      }
+
       // Auto test after save if keys are present
       if (settings.apiKey.trim() && settings.secretKey.trim()) {
         const testRes = await testSteadfastConnection(settings);

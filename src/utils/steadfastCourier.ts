@@ -175,11 +175,18 @@ export async function getSteadfastSettings(): Promise<SteadfastSettings> {
     const res = await fetch('/api/courier/steadfast/settings');
     const data = await parseResponseSafe(res);
     if (res.ok && data && data.success && data.settings) {
+      const serverSettings = data.settings;
+      const finalApiKey = (serverSettings.apiKey && serverSettings.apiKey.trim()) || cached.apiKey || DEFAULT_STEADFAST_SETTINGS.apiKey;
+      const finalSecretKey = (serverSettings.secretKey && serverSettings.secretKey.trim()) || cached.secretKey || DEFAULT_STEADFAST_SETTINGS.secretKey;
+      const finalBaseUrl = (serverSettings.baseUrl && serverSettings.baseUrl.trim()) || cached.baseUrl || DEFAULT_STEADFAST_SETTINGS.baseUrl;
+
       const merged: SteadfastSettings = {
+        ...DEFAULT_STEADFAST_SETTINGS,
         ...cached,
-        ...data.settings,
-        apiKey: data.settings.apiKey || cached.apiKey || DEFAULT_STEADFAST_SETTINGS.apiKey,
-        secretKey: data.settings.secretKey || cached.secretKey || DEFAULT_STEADFAST_SETTINGS.secretKey
+        ...serverSettings,
+        apiKey: finalApiKey,
+        secretKey: finalSecretKey,
+        baseUrl: finalBaseUrl
       };
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));

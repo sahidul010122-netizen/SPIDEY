@@ -166,13 +166,13 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   // Load Saved Orders from server / local storage
   const fetchOrders = async () => {
     setIsLoadingOrders(true);
+    let serverOrders: Order[] = [];
     try {
       const res = await fetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.orders)) {
-          setSavedOrders(data.orders);
-          return;
+          serverOrders = data.orders;
         }
       }
     } catch (e) {
@@ -181,13 +181,70 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       setIsLoadingOrders(false);
     }
 
-    // LocalStorage fallback
+    let localOrders: Order[] = [];
     try {
       const cached = localStorage.getItem('spidey_master_orders');
       if (cached) {
-        setSavedOrders(JSON.parse(cached));
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) localOrders = parsed;
       }
     } catch {}
+
+    // Two-way intelligent merge between server database and local cache
+    if (serverOrders.length > 0 && localOrders.length > 0) {
+      const serverMap = new Map(serverOrders.map(o => [o.id, o]));
+      const merged: Order[] = [];
+      const needsServerRehydrate: Order[] = [];
+
+      for (const s of serverOrders) {
+        const l = localOrders.find(o => o.id === s.id);
+        if (l && (l.trackingCode || l.consignmentId || l.courierStatus === 'sent_to_courier') && !s.trackingCode) {
+          const combined = { ...s, ...l };
+          merged.push(combined);
+          needsServerRehydrate.push(combined);
+        } else {
+          merged.push(s);
+        }
+      }
+
+      for (const l of localOrders) {
+        if (!serverMap.has(l.id)) {
+          merged.push(l);
+          needsServerRehydrate.push(l);
+        }
+      }
+
+      setSavedOrders(merged);
+      try {
+        localStorage.setItem('spidey_master_orders', JSON.stringify(merged));
+      } catch {}
+
+      if (needsServerRehydrate.length > 0) {
+        fetch('/api/orders/bulk-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orders: needsServerRehydrate })
+        }).catch(() => {});
+      }
+      return;
+    }
+
+    if (serverOrders.length > 0) {
+      setSavedOrders(serverOrders);
+      try {
+        localStorage.setItem('spidey_master_orders', JSON.stringify(serverOrders));
+      } catch {}
+      return;
+    }
+
+    if (localOrders.length > 0) {
+      setSavedOrders(localOrders);
+      fetch('/api/orders/bulk-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders: localOrders })
+      }).catch(() => {});
+    }
   };
 
   useEffect(() => {
@@ -488,6 +545,13 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
           }
           return merged;
         });
+
+        // Permanently persist to backend server storage database
+        fetch('/api/orders/bulk-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orders: res.orders })
+        }).catch(err => console.warn('Background server order sync:', err));
       }
 
       // Always open Steadfast Dispatch Results Summary Modal so merchant sees exact status
