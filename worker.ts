@@ -1119,11 +1119,22 @@ export default {
 
         await saveStoredOrders(env, allOrders);
 
+        const results = updatedOrdersList.map(o => ({
+          orderId: o.id,
+          success: true,
+          trackingCode: o.trackingCode,
+          consignment: {
+            consignment_id: o.consignmentId,
+            tracking_code: o.trackingCode
+          }
+        }));
+
         return new Response(JSON.stringify({
           success: true,
           totalRequested: targetOrders.length,
           successfulCount: targetOrders.length,
           failedCount: 0,
+          results,
           updatedOrders: updatedOrdersList,
           message: `Steadfast Entry: ${targetOrders.length} orders dispatched successfully.`
         }), {

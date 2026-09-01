@@ -363,12 +363,21 @@ export async function processOrdersWithSteadfast(
         return updatedMap.get(orig.id) || orig;
       });
 
+      const resolvedResults = (Array.isArray(data.results) && data.results.length > 0)
+        ? data.results
+        : mergedOrders.map(o => ({
+            orderId: o.id,
+            success: Boolean(o.trackingCode || o.consignmentId || data.success),
+            trackingCode: o.trackingCode,
+            consignment: { consignment_id: o.consignmentId, tracking_code: o.trackingCode }
+          }));
+
       return {
         success: true,
         totalProcessed: data.successfulCount || mergedOrders.length,
         orders: mergedOrders,
-        message: data.message || `Steadfast-এ সফলভাবে ${data.successfulCount} টি পার্সেল এন্ট্রি সম্পন্ন হয়েছে।`,
-        results: data.results
+        message: data.message || `Steadfast-এ সফলভাবে ${data.successfulCount || mergedOrders.length} টি পার্সেল এন্ট্রি সম্পন্ন হয়েছে।`,
+        results: resolvedResults
       };
     } else if (data && data.requiresApiKey) {
       return {

@@ -555,20 +555,32 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       }
 
       // Always open Steadfast Dispatch Results Summary Modal so merchant sees exact status
+      const resOrdersList = Array.isArray(res.orders) && res.orders.length > 0 ? res.orders : targetOrders;
+      const resOrdersMap = new Map(resOrdersList.map(o => [o.id, o]));
+
       const safeResults = Array.isArray(res.results) && res.results.length > 0 
         ? res.results 
-        : targetOrders.map(o => ({
-            orderId: o.id,
-            success: !!o.trackingCode,
-            trackingCode: o.trackingCode,
-            error: !o.trackingCode ? (typeof res.message === 'string' ? res.message : 'Consignment failed') : undefined
-          }));
+        : targetOrders.map(o => {
+            const updatedOrd = resOrdersMap.get(o.id) || o;
+            const hasTracking = !!updatedOrd.trackingCode;
+            const isItemSuccess = Boolean(hasTracking || res.success);
+            return {
+              orderId: o.id,
+              success: isItemSuccess,
+              trackingCode: updatedOrd.trackingCode,
+              consignment: { consignment_id: updatedOrd.consignmentId, tracking_code: updatedOrd.trackingCode },
+              error: (!isItemSuccess) ? (typeof res.message === 'string' ? res.message : 'Consignment failed') : undefined
+            };
+          });
+
+      const actualSuccessCount = safeResults.filter(r => r.success || !!r.trackingCode).length;
+      const actualFailedCount = safeResults.length - actualSuccessCount;
 
       setDispatchResultModal({
         isOpen: true,
         results: safeResults,
-        successCount: Number(res.totalProcessed) || 0,
-        failedCount: safeResults.filter(r => !r.success).length,
+        successCount: actualSuccessCount,
+        failedCount: actualFailedCount,
         message: typeof res.message === 'string' ? res.message : JSON.stringify(res.message || '')
       });
 
@@ -1749,13 +1761,14 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                 const matchedOrder = savedOrders.find(o => o.id === res.orderId);
                 const tracking = res.trackingCode || matchedOrder?.trackingCode;
                 const consignmentId = res.consignment?.consignment_id || matchedOrder?.consignmentId;
-                const errorStr = res.error ? (typeof res.error === 'string' ? res.error : JSON.stringify(res.error)) : null;
+                const isBooked = Boolean(res.success || tracking);
+                const errorStr = (!isBooked && res.error) ? (typeof res.error === 'string' ? res.error : JSON.stringify(res.error)) : null;
 
                 return (
                   <div 
                     key={res.orderId || idx}
                     className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs transition-all ${
-                      res.success 
+                      isBooked 
                         ? 'bg-neutral-50/80 border-neutral-200' 
                         : 'bg-rose-50/70 border-rose-200'
                     }`}
@@ -1765,7 +1778,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                         <span className="font-mono font-bold text-neutral-900">
                           {res.orderId}
                         </span>
-                        {res.success ? (
+                        {isBooked ? (
                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
                             Booked
                           </span>
@@ -1785,7 +1798,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       )}
                     </div>
 
-                    {res.success && tracking && (
+                    {isBooked && tracking && (
                       <div className="flex items-center gap-2">
                         <div className="text-right">
                           <span className="font-mono font-black text-xs text-neutral-900 bg-white border border-neutral-200 px-2 py-1 rounded-lg block">
