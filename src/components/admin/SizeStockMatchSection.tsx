@@ -88,7 +88,7 @@ export const SizeStockMatchSection: React.FC<SizeStockMatchSectionProps> = ({
   const handleSaveSizeStock = async (product: JerseyProduct) => {
     setIsSavingStock(true);
     try {
-      const totalCount = Object.values(editableSizeStock).reduce((a, b) => a + (Number(b) || 0), 0);
+      const totalCount = Object.values(editableSizeStock).reduce<number>((a, b) => a + (Number(b) || 0), 0);
       const res = await fetch(`/api/products/${product.id}/stock-matrix`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -214,7 +214,7 @@ export const SizeStockMatchSection: React.FC<SizeStockMatchSectionProps> = ({
               {filteredProducts.map((product) => {
                 const isEditing = editingStockProductId === product.id;
                 const sizeStock = isEditing ? editableSizeStock : getProductSizeStock(product);
-                const totalStock = Object.values(sizeStock).reduce((a, b) => a + (Number(b) || 0), 0);
+                const totalStock = Object.values(sizeStock).reduce<number>((a, b) => a + (Number(b) || 0), 0);
                 const firstImg = product.images?.[0] || '/placeholder.jpg';
 
                 return (

@@ -947,7 +947,7 @@ async function startServer() {
     if (orderIndex === -1) {
       return res.status(404).json({
         success: false,
-        message: `কোনো অর্ডার খুঁজে পাওয়া যায়নি (Scanned Code: ${scanCode || orderId})`
+        message: `No order found matching code: ${scanCode || orderId}`
       });
     }
 
@@ -1026,8 +1026,8 @@ async function startServer() {
     return res.json({
       success: true,
       message: wasAlreadyDispatched 
-        ? `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id})`
-        : `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে এবং সাইজ অনুযায়ী স্টক ডিডাক্ট সম্পন্ন হয়েছে!`,
+        ? `Order was already dispatched (Invoice #${updatedOrder.invoiceNumber || updatedOrder.id})`
+        : `Order successfully dispatched and stock deducted per size!`,
       order: updatedOrder,
       wasAlreadyDispatched,
       wasStockDeducted,
@@ -1071,7 +1071,7 @@ async function startServer() {
     if (orderIndex === -1) {
       return res.status(404).json({
         success: false,
-        message: `কোনো অর্ডার খুঁজে পাওয়া যায়নি (Order: ${orderId || scanCode})`
+        message: `No order found matching: ${orderId || scanCode}`
       });
     }
 
@@ -1142,7 +1142,7 @@ async function startServer() {
 
     return res.json({
       success: true,
-      message: `অর্ডারটি সফলভাবে পুনরায় "পেন্ডিং (In-Warehouse)" এ নেওয়া হয়েছে এবং সাইজ অনুযায়ী স্টক রিস্টোর করা হয়েছে!`,
+      message: `Order #${updatedOrder.invoiceNumber || updatedOrder.id} reverted to Pending and stock restored!`,
       order: updatedOrder,
       restoredDetails,
       updatedProducts: products
