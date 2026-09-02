@@ -111,6 +111,81 @@ async function saveStoredSteadfastConfig(env: Env, config: WorkerSteadfastConfig
   }
 }
 
+async function callSteadfastWorkerApi(
+  env: Env,
+  endpointPath: string,
+  method: 'GET' | 'POST',
+  apiKey: string,
+  secretKey: string,
+  body?: any,
+  preferredBaseUrl?: string
+): Promise<{ ok: boolean; status: number; data: any; rawText: string; error?: string; usedUrl?: string }> {
+  const cfg = await getStoredSteadfastConfig(env);
+  const candidateUrls = [
+    preferredBaseUrl,
+    cfg.baseUrl,
+    'https://portal.packzy.com/api/v1',
+    'https://portal.steadfast.com.bd/api/v1'
+  ]
+    .filter(Boolean)
+    .map(u => (u as string).trim().replace(/\/+$/, ''));
+
+  const uniqueUrls = Array.from(new Set(candidateUrls));
+  let lastError = '';
+
+  for (const base of uniqueUrls) {
+    try {
+      const cleanPath = endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`;
+      const url = `${base}${cleanPath}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Api-Key': apiKey,
+          'Secret-Key': secretKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const rawText = await res.text();
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch (e) {
+        data = null;
+      }
+
+      if (res.ok || (res.status >= 200 && res.status < 500 && data)) {
+        return {
+          ok: res.ok,
+          status: res.status,
+          data,
+          rawText,
+          usedUrl: url
+        };
+      } else {
+        lastError = `HTTP ${res.status}: ${rawText || res.statusText}`;
+      }
+    } catch (err: any) {
+      lastError = err.message || 'Steadfast network error';
+    }
+  }
+
+  return {
+    ok: false,
+    status: 500,
+    data: null,
+    rawText: '',
+    error: lastError || 'Failed to connect to Steadfast Courier API'
+  };
+}
+
 // Helper: Load Products from R2 or fallback to initial
 async function getStoredProducts(env: Env): Promise<JerseyProduct[]> {
   if (cachedProducts) return cachedProducts;

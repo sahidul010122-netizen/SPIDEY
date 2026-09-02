@@ -504,10 +504,10 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     if (!hasKey || !hasSecret) {
       if (onNavigateToSteadfastApi) {
         onNavigateToSteadfastApi();
-        showToast('⚠️ Steadfast API সেকশনে গিয়ে API Key ও Secret Key সেভ করুন।');
+        showToast('Please configure and save your Steadfast API Key and Secret Key in Steadfast API settings.');
       } else {
         setIsSteadfastModalOpen(true);
-        showToast('⚠️ Steadfast Courier API Key ও Secret Key প্রদান করুন।');
+        showToast('Please provide your Steadfast Courier API Key and Secret Key.');
       }
       return;
     }
@@ -1845,7 +1845,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       handleRetrySteadfastDispatch(failedIds);
                     }}
                     className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all"
-                    title="পুনরায় Steadfast API-তে পার্সেল এন্ট্রি করার চেষ্টা করুন"
+                    title="Retry dispatching failed consignments to Steadfast API"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Retry Steadfast Entry ({dispatchResultModal.failedCount})</span>

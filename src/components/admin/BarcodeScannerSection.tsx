@@ -33,7 +33,8 @@ import {
   FileText,
   SlidersHorizontal,
   ChevronRight,
-  Info
+  Info,
+  Flashlight
 } from 'lucide-react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import JsBarcode from 'jsbarcode';
@@ -102,13 +103,11 @@ const MiniBarcode: React.FC<{ code: string }> = ({ code }) => {
 export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   products: initialProducts = [],
   currency = 'BDT',
+  siteSettings,
   onUpdateProduct,
   onGoToOrderProcess,
   onGoToSteadfastApi
 }) => {
-  // Navigation View: 'parcels' (Main Clean Scanner + Table) or 'stock_matrix' (Size inventory)
-  const [activeTab, setActiveTab] = useState<'parcels' | 'stock_matrix'>('parcels');
-
   // Master Data
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<JerseyProduct[]>(initialProducts);
@@ -123,6 +122,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   const [recentlyMatchedId, setRecentlyMatchedId] = useState<string | null>(null);
+  const [isTorchOn, setIsTorchOn] = useState(false);
 
   // Last Scan Feedback
   const [lastScanResult, setLastScanResult] = useState<{
@@ -149,34 +149,43 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
 
-  // Stock Matrix Editing
-  const [editingStockProductId, setEditingStockProductId] = useState<string | null>(null);
-  const [editableSizeStock, setEditableSizeStock] = useState<Record<string, number>>({});
-  const [isSavingStock, setIsSavingStock] = useState(false);
-  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  // Print Modal State
+  const [printModalState, setPrintModalState] = useState<{
+    isOpen: boolean;
+    orders: Order[];
+    paperSize: '3inch' | 'a4';
+  }>({
+    isOpen: false,
+    orders: [],
+    paperSize: '3inch'
+  });
 
-  // Camera & Decoder References
+  // Single Order Details Modal
+  const [inspectOrder, setInspectOrder] = useState<Order | null>(null);
+
+  // Camera & Video Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const zxingControlsRef = useRef<any>(null);
-  const barcodeAnimationIdRef = useRef<number | null>(null);
   const lastScannedTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
   const manualInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Toast Helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setStatusToast({ message, type });
-    setTimeout(() => setStatusToast(null), 4000);
+    setTimeout(() => {
+      setStatusToast(null);
+    }, 3500);
   };
 
-  // Sync initial products
+  // Sync initialProducts
   useEffect(() => {
-    if (initialProducts && initialProducts.length > 0) {
+    if (initialProducts.length > 0) {
       setProducts(initialProducts);
-    } else {
-      fetchProducts();
     }
   }, [initialProducts]);
 
+  // Fetch live products
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
@@ -235,7 +244,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   useEffect(() => {
     fetchOrders();
 
-    // Cross-panel live synchronization listener
     const handleOrdersSync = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail && Array.isArray(customEvent.detail.orders)) {
@@ -250,22 +258,29 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   // Clean up camera on unmount
   useEffect(() => {
     return () => {
-      stopCamera();
+      stopCameraStream();
     };
   }, []);
 
-  // Start Camera
-  const startCamera = async (targetFacing?: 'environment' | 'user') => {
+  // Full Screen Camera Setup Effect
+  useEffect(() => {
+    if (isCameraActive) {
+      initCameraStream(cameraFacing);
+    } else {
+      stopCameraStream();
+    }
+  }, [isCameraActive, cameraFacing]);
+
+  const initCameraStream = async (facing: 'environment' | 'user') => {
     unlockAudioContext();
-    const facing = targetFacing || cameraFacing;
-    stopCamera();
+    stopCameraStream();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         },
         audio: false
       });
@@ -282,7 +297,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         } catch {}
       }
 
-      // Start decoding loop
+      // Initialize ZXing Reader
       const reader = new BrowserMultiFormatReader();
       if (videoRef.current) {
         try {
@@ -293,19 +308,17 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           });
           zxingControlsRef.current = controls;
         } catch (decErr) {
-          console.warn('ZXing scanner setup catch:', decErr);
+          console.warn('ZXing scanner setup:', decErr);
         }
       }
-
-      setIsCameraActive(true);
     } catch (err: any) {
-      console.error('Camera start error:', err);
-      showToast('ক্যামেরা চালু করা সম্ভব হয়নি। অনুগ্রহ করে ক্যামেরার পারমিশন দিন।', 'error');
+      console.error('Camera stream error:', err);
+      showToast('Camera access denied or unavailable. Please grant camera permissions.', 'error');
       setIsCameraActive(false);
     }
   };
 
-  const stopCamera = () => {
+  const stopCameraStream = () => {
     if (zxingControlsRef.current) {
       try {
         zxingControlsRef.current.stop();
@@ -321,22 +334,37 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    setIsCameraActive(false);
   };
 
   const toggleCamera = () => {
     if (isCameraActive) {
-      stopCamera();
+      setIsCameraActive(false);
     } else {
-      startCamera();
+      setIsCameraActive(true);
     }
   };
 
   const switchCameraFacing = () => {
     const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
     setCameraFacing(nextFacing);
-    if (isCameraActive) {
-      startCamera(nextFacing);
+  };
+
+  const toggleTorch = async () => {
+    if (mediaStreamRef.current) {
+      const track = mediaStreamRef.current.getVideoTracks()[0];
+      if (track) {
+        const capabilities: any = track.getCapabilities?.() || {};
+        if (capabilities.torch) {
+          try {
+            await (track as any).applyConstraints({
+              advanced: [{ torch: !isTorchOn }]
+            });
+            setIsTorchOn(!isTorchOn);
+          } catch {}
+        } else {
+          showToast('Torch is not supported on this device/camera.', 'info');
+        }
+      }
     }
   };
 
@@ -347,7 +375,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     const cleanCode = rawCode.trim();
     const now = Date.now();
 
-    // Prevent double trigger within 1.5 seconds
+    // Debounce duplicate scans within 1.5 seconds
     if (lastScannedTimeRef.current.code === cleanCode && now - lastScannedTimeRef.current.time < 1500) {
       return;
     }
@@ -368,7 +396,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       if (data.success && data.order) {
         if (soundEnabled) playMatchSuccessSound();
 
-        // Update state
+        // Update orders
         setOrders(prev => {
           const updated = prev.map(o => o.id === data.order.id ? data.order : o);
           try {
@@ -380,50 +408,64 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           return updated;
         });
 
-        if (Array.isArray(data.updatedProducts)) {
+        // Update products if stock deducted
+        if (Array.isArray(data.updatedProducts) && data.updatedProducts.length > 0) {
           setProducts(data.updatedProducts);
+        } else {
+          fetchProducts();
         }
 
         setRecentlyMatchedId(data.order.id);
         setTimeout(() => setRecentlyMatchedId(null), 4000);
 
         setLastScanResult({
-          status: data.wasAlreadyDispatched ? 'warning' : 'success',
+          status: 'success',
           code: cleanCode,
           order: data.order,
-          message: data.wasAlreadyDispatched 
-            ? `পার্সেলটি ইতিমধ্যে ওয়্যারহাউস ত্যাগ করেছে (Invoice: ${data.order.invoiceNumber || data.order.id})`
-            : `✔ সফল স্ক্যান! পার্সেলটি ডিসপ্যাচ হয়েছে এবং সাইজ অনুযায়ী স্টক ডিডাক্ট সম্পন্ন হয়েছে!`,
-          deductedDetails: data.deductedDetails,
-          timestamp: now
+          message: data.message || `Done! Order #${data.order.invoiceNumber || data.order.id.slice(-6)} dispatched.`,
+          deductedDetails: data.deductedDetails || [],
+          timestamp: Date.now()
         });
+
+        showToast(`Matched: Order #${data.order.invoiceNumber || data.order.id.slice(-6)} - Done`, 'success');
+      } else if (data.alreadyDispatched) {
+        if (soundEnabled) playMatchSuccessSound();
+        setLastScanResult({
+          status: 'warning',
+          code: cleanCode,
+          order: data.order,
+          message: data.message || 'Already Dispatched / Scanned',
+          timestamp: Date.now()
+        });
+        showToast(data.message || 'Already Dispatched', 'info');
       } else {
         if (soundEnabled) playMatchFailSound();
         setLastScanResult({
           status: 'fail',
           code: cleanCode,
-          message: data.message || `✕ কোনো ম্যাচিং অর্ডার পাওয়া যায়নি (${cleanCode})।`,
-          timestamp: now
+          message: data.message || `Error/Fail: No order matched for "${cleanCode}"`,
+          timestamp: Date.now()
         });
+        showToast(data.message || `No match for code: ${cleanCode}`, 'error');
       }
     } catch (err: any) {
       if (soundEnabled) playMatchFailSound();
       setLastScanResult({
         status: 'fail',
         code: cleanCode,
-        message: 'স্ক্যান প্রসেসিং ত্রুটি: ' + (err.message || 'Network error'),
-        timestamp: now
+        message: 'Network or server error during scan verification',
+        timestamp: Date.now()
       });
+      showToast('Scan dispatch error: ' + err.message, 'error');
     } finally {
       setIsProcessingScan(false);
-      // Auto re-focus manual input for high-speed scanning gun
-      setTimeout(() => {
-        manualInputRef.current?.focus();
-      }, 100);
+      if (manualInputRef.current) {
+        manualInputRef.current.focus();
+      }
     }
   };
 
-  // Revert Order from Dispatched/Done back to Pending (Restores Inventory Stock)
+  // Revert order back to pending
   const handleRevertOrderToPending = async (order: Order) => {
     try {
       const res = await fetch('/api/warehouse/revert-scan', {
@@ -433,10 +475,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       });
 
       const data = await res.json();
-
       if (data.success && data.order) {
-        if (soundEnabled) playMatchSuccessSound();
-
         setOrders(prev => {
           const updated = prev.map(o => o.id === order.id ? data.order : o);
           try {
@@ -450,30 +489,23 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
         if (Array.isArray(data.updatedProducts)) {
           setProducts(data.updatedProducts);
+        } else {
+          fetchProducts();
         }
 
-        showToast(`অর্ডার (${order.invoiceNumber || order.id}) পুনরায় পেন্ডিং করা হয়েছে এবং স্টক রিস্টোর হয়েছে!`, 'success');
-        
-        // Clear or update last scan banner
-        if (lastScanResult && lastScanResult.order?.id === order.id) {
-          setLastScanResult(null);
-        }
+        setLastScanResult(null);
+        showToast(`Order #${order.invoiceNumber || order.id.slice(-6)} reverted to pending and stock restored!`, 'success');
       } else {
-        showToast(data.message || 'পেন্ডিং এ ফেরত নেওয়া সম্ভব হয়নি', 'error');
+        showToast(data.message || 'Failed to revert order', 'error');
       }
     } catch (err: any) {
-      showToast('সার্ভার এরর: ' + err.message, 'error');
+      showToast('Revert error: ' + err.message, 'error');
     }
   };
 
-  // Single Order Dispatch Trigger
-  const handleDirectDispatch = async (order: Order) => {
-    await handleIncomingBarcode(order.invoiceNumber || order.trackingCode || order.id);
-  };
-
-  // Delete Single Order Permanently
+  // Delete Single Order
   const handleDeleteOrder = async (order: Order) => {
-    if (!window.confirm(`আপনি কি নিশ্চিত যে অর্ডারটি (${order.customerName} - ${order.invoiceNumber || order.id}) স্থায়ীভাবে ডিলিট করতে চান?`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete order #${order.invoiceNumber || order.id.slice(-6)}?`)) {
       return;
     }
 
@@ -502,23 +534,23 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           return next;
         });
 
-        showToast('অর্ডার সফলভাবে স্থায়ীভাবে ডিলিট করা হয়েছে।', 'info');
+        showToast('Order permanently deleted.', 'info');
       } else {
-        showToast(data.message || 'ডিলিট সম্পন্ন করা যায়নি', 'error');
+        showToast(data.message || 'Failed to delete order', 'error');
       }
     } catch (err: any) {
-      showToast('ডিলিট এরর: ' + err.message, 'error');
+      showToast('Delete error: ' + err.message, 'error');
     } finally {
       setDeletingOrderId(null);
     }
   };
 
-  // Bulk Delete Selected Orders
+  // Bulk Delete
   const handleBulkDeleteSelected = async () => {
     const ids = Array.from(selectedOrderIds);
     if (ids.length === 0) return;
 
-    if (!window.confirm(`আপনি কি নিশ্চিত যে নির্বাচিত ${ids.length} টি অর্ডার স্থায়ীভাবে ডিলিট করতে চান?`)) {
+    if (!window.confirm(`Permanently delete selected ${ids.length} orders?`)) {
       return;
     }
 
@@ -544,23 +576,23 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         });
 
         setSelectedOrderIds(new Set());
-        showToast(`${ids.length} টি অর্ডার স্থায়ীভাবে ডিলিট সম্পন্ন হয়েছে।`, 'info');
+        showToast(`${ids.length} orders permanently deleted.`, 'info');
       } else {
-        showToast(data.message || 'বাল্ক ডিলিট ব্যর্থ হয়েছে', 'error');
+        showToast(data.message || 'Bulk delete failed', 'error');
       }
     } catch (err: any) {
-      showToast('বাল্ক ডিলিট এরর: ' + err.message, 'error');
+      showToast('Bulk delete error: ' + err.message, 'error');
     } finally {
       setIsBulkDeleting(false);
     }
   };
 
-  // Bulk Revert Selected to Pending
+  // Bulk Revert
   const handleBulkRevertToPending = async () => {
     const ids = Array.from(selectedOrderIds);
     if (ids.length === 0) return;
 
-    let successCount = 0;
+    let count = 0;
     for (const id of ids) {
       const target = orders.find(o => o.id === id);
       if (target) {
@@ -572,11 +604,8 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           });
           const data = await res.json();
           if (data.success && data.order) {
-            successCount++;
+            count++;
             setOrders(prev => prev.map(o => o.id === id ? data.order : o));
-            if (Array.isArray(data.updatedProducts)) {
-              setProducts(data.updatedProducts);
-            }
           }
         } catch {}
       }
@@ -584,15 +613,16 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
     setSelectedOrderIds(new Set());
     fetchOrders();
-    showToast(`${successCount} টি অর্ডার সফলভাবে পেন্ডিং এ নেওয়া হয়েছে এবং স্টক রিস্টোর হয়েছে!`, 'success');
+    fetchProducts();
+    showToast(`${count} orders reverted to pending and stock restored.`, 'success');
   };
 
-  // Bulk Dispatch Selected
+  // Bulk Dispatch
   const handleBulkDispatchSelected = async () => {
     const ids = Array.from(selectedOrderIds);
     if (ids.length === 0) return;
 
-    let successCount = 0;
+    let count = 0;
     for (const id of ids) {
       const target = orders.find(o => o.id === id);
       if (target) {
@@ -604,11 +634,8 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           });
           const data = await res.json();
           if (data.success && data.order) {
-            successCount++;
+            count++;
             setOrders(prev => prev.map(o => o.id === id ? data.order : o));
-            if (Array.isArray(data.updatedProducts)) {
-              setProducts(data.updatedProducts);
-            }
           }
         } catch {}
       }
@@ -616,14 +643,15 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
     setSelectedOrderIds(new Set());
     fetchOrders();
-    showToast(`${successCount} টি অর্ডার সফলভাবে ডিসপ্যাচ করা হয়েছে এবং স্টক ডিডাক্ট হয়েছে!`, 'success');
+    fetchProducts();
+    showToast(`${count} orders dispatched and stock deducted.`, 'success');
   };
 
   // Sync Steadfast Status
   const handleSyncCourierStatus = async () => {
     try {
       setIsSyncingCourier(true);
-      showToast('Steadfast API থেকে লাইভ স্ট্যাটাস সিঙ্ক হচ্ছে...', 'info');
+      showToast('Syncing live tracking status from Steadfast API...', 'info');
 
       const res = await fetch('/api/courier/steadfast/sync-all-status', {
         method: 'POST',
@@ -641,57 +669,14 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
             window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: data.orders } }));
           }
         }
-        showToast(data.message || `সিঙ্ক সম্পন্ন (${data.updatedCount} টি পার্সেল আপডেট)`, 'success');
+        showToast(data.message || `Sync completed (${data.updatedCount || 0} parcels updated)`, 'success');
       } else {
-        showToast(data.message || 'Steadfast সিঙ্ক সম্পন্ন করা যায়নি।', 'error');
+        showToast(data.message || 'Steadfast sync failed', 'error');
       }
     } catch (err: any) {
-      showToast('কুরিয়ার সিঙ্ক সমস্যা: ' + err.message, 'error');
+      showToast('Courier sync error: ' + err.message, 'error');
     } finally {
       setIsSyncingCourier(false);
-    }
-  };
-
-  // Stock Matrix Quick Edit
-  const handleOpenEditStock = (product: JerseyProduct) => {
-    setEditingStockProductId(product.id);
-    setEditableSizeStock(getProductSizeStock(product));
-  };
-
-  const handleSizeStockChange = (size: string, value: number) => {
-    const safeVal = Math.max(0, isNaN(value) ? 0 : value);
-    setEditableSizeStock(prev => ({
-      ...prev,
-      [size]: safeVal
-    }));
-  };
-
-  const handleSaveSizeStock = async (product: JerseyProduct) => {
-    setIsSavingStock(true);
-    try {
-      const totalCount = Object.values(editableSizeStock).reduce((a, b) => a + (Number(b) || 0), 0);
-      const res = await fetch(`/api/products/${product.id}/stock-matrix`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sizeStock: editableSizeStock,
-          stockCount: totalCount,
-          inStock: totalCount > 0
-        })
-      });
-
-      const data = await res.json();
-      if (data.success && data.product) {
-        setProducts(prev => prev.map(p => p.id === product.id ? data.product : p));
-        setEditingStockProductId(null);
-        showToast(`'${product.title}' সাইজ স্টক সফলভাবে সেভ হয়েছে! (মোট: ${totalCount})`, 'success');
-      } else {
-        showToast(data.message || 'স্টক সেভ ব্যর্থ হয়েছে', 'error');
-      }
-    } catch (err: any) {
-      showToast('স্টক সেভ ত্রুটি: ' + err.message, 'error');
-    } finally {
-      setIsSavingStock(false);
     }
   };
 
@@ -721,7 +706,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     });
   }, [orders, searchQuery, filterTab]);
 
-  // Metrics
+  // Metrics (Top Placement)
   const metrics = useMemo(() => {
     const total = orders.length;
     const pending = orders.filter(o => o.status !== 'shipped' && o.status !== 'dispatched' && o.status !== 'delivered' && !o.barcodeScanned).length;
@@ -774,7 +759,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         </div>
       )}
 
-      {/* 1. TOP HEADER & METRIC SUMMARY CARDS */}
+      {/* 1. TOP HEADER */}
       <div className="p-4 sm:p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center shadow-xs shrink-0">
@@ -783,729 +768,631 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base sm:text-lg font-black text-neutral-900 tracking-tight">
-                ওয়্যারহাউস বারকোড স্ক্যানার ও স্টক ডিসপ্যাচ
+                Continuous Live Camera Scanning & Auto Matching
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/60">
-                অটো স্টক ডিডাক্ট
-              </span>
             </div>
             <p className="text-xs text-neutral-500 mt-0.5">
-              বারকোড বা ইনভয়েস স্ক্যান করলেই পার্সেল ডিসপ্যাচ হবে এবং সাইজ অনুযায়ী স্টক স্বয়ংক্রিয়ভাবে কমে যাবে।
+              Instant parcel dispatch and automated stock deduction per size.
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Sub-tab Switcher */}
-          <div className="p-1 bg-neutral-100 rounded-2xl flex items-center gap-1 border border-neutral-200/60">
-            <button
-              onClick={() => setActiveTab('parcels')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'parcels'
-                  ? 'bg-white text-neutral-900 shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              <Truck className="w-3.5 h-3.5 text-rose-500" />
-              <span>পার্সেল স্ক্যানার ({orders.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('stock_matrix')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'stock_matrix'
-                  ? 'bg-white text-neutral-900 shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5 text-amber-500" />
-              <span>সাইজ স্টক ম্যাট্রিক্স</span>
-            </button>
-          </div>
-
           {/* Steadfast Status Sync Button */}
           <button
             onClick={handleSyncCourierStatus}
             disabled={isSyncingCourier}
             className="px-3.5 py-2 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50"
-            title="Steadfast API থেকে ট্র্যাকিং স্ট্যাটাস আপডেট করুন"
+            title="Sync tracking status from Steadfast API"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCourier ? 'animate-spin' : ''}`} />
-            <span>{isSyncingCourier ? 'সিঙ্ক হচ্ছে...' : 'Steadfast সিঙ্ক'}</span>
+            <span>{isSyncingCourier ? 'Syncing...' : 'Sync Steadfast'}</span>
           </button>
         </div>
       </div>
 
-      {/* 2. STATS OVERVIEW CARDS */}
+      {/* 2. OVERVIEW BOX METRICS (Moved to Top) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* Metric 1: Total Parcels */}
+        {/* Metric 1: Total Orders */}
         <div 
-          onClick={() => { setActiveTab('parcels'); setFilterTab('all'); }}
+          onClick={() => setFilterTab('all')}
           className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-            filterTab === 'all' && activeTab === 'parcels'
+            filterTab === 'all'
               ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm'
               : 'bg-white text-neutral-900 border-neutral-200/80 hover:border-neutral-400'
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold opacity-75">
-            <span>মোট অর্ডার</span>
+            <span>Total Orders</span>
             <Package className="w-4 h-4" />
           </div>
           <div className="text-2xl font-black mt-1 font-mono">{metrics.total}</div>
-          <span className="text-[10px] opacity-60 block mt-0.5">সবগুলো পার্সেল</span>
+          <span className="text-[10px] opacity-60 block mt-0.5">All parcel records</span>
         </div>
 
-        {/* Metric 2: Pending Warehouse Scan */}
+        {/* Metric 2: Pending Scan */}
         <div 
-          onClick={() => { setActiveTab('parcels'); setFilterTab('pending'); }}
+          onClick={() => setFilterTab('pending')}
           className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-            filterTab === 'pending' && activeTab === 'parcels'
+            filterTab === 'pending'
               ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
               : 'bg-white text-neutral-900 border-neutral-200/80 hover:border-amber-400'
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold text-amber-600">
-            <span className={filterTab === 'pending' && activeTab === 'parcels' ? 'text-white' : 'text-amber-600'}>স্ক্যান বাকি (Pending)</span>
+            <span className={filterTab === 'pending' ? 'text-white' : 'text-amber-600'}>Pending</span>
             <Clock className="w-4 h-4" />
           </div>
-          <div className={`text-2xl font-black mt-1 font-mono ${filterTab === 'pending' && activeTab === 'parcels' ? 'text-white' : 'text-amber-600'}`}>
+          <div className={`text-2xl font-black mt-1 font-mono ${filterTab === 'pending' ? 'text-white' : 'text-amber-600'}`}>
             {metrics.pending}
           </div>
-          <span className="text-[10px] opacity-60 block mt-0.5">ওয়্যারহাউসে প্রস্তুত আছে</span>
+          <span className="text-[10px] opacity-60 block mt-0.5">Ready for scanning</span>
         </div>
 
-        {/* Metric 3: Dispatched / Done */}
+        {/* Metric 3: Done / Dispatched */}
         <div 
-          onClick={() => { setActiveTab('parcels'); setFilterTab('dispatched'); }}
+          onClick={() => setFilterTab('dispatched')}
           className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-            filterTab === 'dispatched' && activeTab === 'parcels'
+            filterTab === 'dispatched'
               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
               : 'bg-white text-neutral-900 border-neutral-200/80 hover:border-emerald-400'
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold text-emerald-600">
-            <span className={filterTab === 'dispatched' && activeTab === 'parcels' ? 'text-white' : 'text-emerald-600'}>ডিসপ্যাচ সম্পন্ন (Done)</span>
+            <span className={filterTab === 'dispatched' ? 'text-white' : 'text-emerald-600'}>Done (Dispatched)</span>
             <PackageCheck className="w-4 h-4" />
           </div>
-          <div className={`text-2xl font-black mt-1 font-mono ${filterTab === 'dispatched' && activeTab === 'parcels' ? 'text-white' : 'text-emerald-600'}`}>
+          <div className={`text-2xl font-black mt-1 font-mono ${filterTab === 'dispatched' ? 'text-white' : 'text-emerald-600'}`}>
             {metrics.dispatched}
           </div>
-          <span className="text-[10px] opacity-60 block mt-0.5">স্টক ডিডাক্ট সম্পন্ন</span>
+          <span className="text-[10px] opacity-60 block mt-0.5">Stock deducted</span>
         </div>
 
         {/* Metric 4: Delivered */}
         <div className="p-4 rounded-2xl bg-white border border-neutral-200/80">
           <div className="flex items-center justify-between text-xs font-bold text-purple-600">
-            <span>ডেলিভার্ড</span>
+            <span>Delivered</span>
             <CheckCheck className="w-4 h-4" />
           </div>
           <div className="text-2xl font-black text-purple-600 mt-1 font-mono">{metrics.delivered}</div>
-          <span className="text-[10px] text-neutral-400 block mt-0.5">সফলভাবে হস্তান্তর</span>
+          <span className="text-[10px] text-neutral-400 block mt-0.5">Successfully delivered</span>
         </div>
       </div>
 
-      {activeTab === 'parcels' ? (
-        <>
-          {/* 3. COMPACT & CLEAN SCANNER BAR */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              {/* Manual Barcode Input */}
-              <div className="relative flex-1">
-                <ScanLine className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  ref={manualInputRef}
-                  type="text"
-                  value={manualCodeInput}
-                  onChange={(e) => setManualCodeInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && manualCodeInput.trim()) {
-                      handleIncomingBarcode(manualCodeInput);
-                    }
-                  }}
-                  placeholder="বারকোড / ইনভয়েস / ট্র্যাকিং নম্বর স্ক্যান বা টাইপ করুন (Enter চাপুন)..."
-                  className="w-full pl-11 pr-24 py-3 rounded-2xl bg-neutral-50 border border-neutral-200 text-sm font-medium text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:border-neutral-900 focus:outline-hidden transition-all"
-                  autoFocus
-                />
-                <button
-                  onClick={() => handleIncomingBarcode(manualCodeInput)}
-                  disabled={!manualCodeInput.trim() || isProcessingScan}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-30"
-                >
-                  <Zap className="w-3.5 h-3.5 text-rose-400" />
-                  <span>{isProcessingScan ? '...' : 'ডিসপ্যাচ'}</span>
-                </button>
-              </div>
+      {/* 3. SCANNER INPUT & CAMERA BUTTON */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          {/* Manual Input Field */}
+          <div className="relative flex-1">
+            <ScanLine className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              ref={manualInputRef}
+              type="text"
+              value={manualCodeInput}
+              onChange={(e) => setManualCodeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && manualCodeInput.trim()) {
+                  handleIncomingBarcode(manualCodeInput);
+                }
+              }}
+              placeholder="Scan or enter barcode / invoice / tracking number..."
+              className="w-full pl-11 pr-24 py-3 rounded-2xl bg-neutral-50 border border-neutral-200 text-sm font-medium text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:border-neutral-900 focus:outline-hidden transition-all"
+            />
+            <button
+              onClick={() => handleIncomingBarcode(manualCodeInput)}
+              disabled={!manualCodeInput.trim() || isProcessingScan}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-30 cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-rose-400" />
+              <span>{isProcessingScan ? '...' : 'Dispatch'}</span>
+            </button>
+          </div>
 
-              {/* Camera Scanner Toggle Button */}
-              <button
-                onClick={toggleCamera}
-                className={`px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all shrink-0 ${
-                  isCameraActive
-                    ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border border-neutral-200/60'
-                }`}
-              >
-                {isCameraActive ? (
-                  <>
-                    <CameraOff className="w-4 h-4 text-rose-600" />
-                    <span>ক্যামেরা বন্ধ করুন</span>
-                  </>
+          {/* Full Screen Camera Scanner Toggle Button */}
+          <button
+            onClick={toggleCamera}
+            className="px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all shrink-0 bg-neutral-900 hover:bg-black text-white shadow-sm cursor-pointer"
+          >
+            <Camera className="w-4 h-4 text-rose-400" />
+            <span>Open Camera Scanner</span>
+          </button>
+
+          {/* Sound Toggle */}
+          <button
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={`p-3 rounded-2xl border transition-all shrink-0 flex items-center justify-center cursor-pointer ${
+              soundEnabled
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-neutral-50 text-neutral-400 border-neutral-200'
+            }`}
+            title={soundEnabled ? 'Sound On' : 'Sound Off'}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* Live Scan Result Banner */}
+        {lastScanResult && (
+          <div className={`p-4 rounded-2xl border transition-all animate-fadeIn flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            lastScanResult.status === 'success'
+              ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+              : lastScanResult.status === 'warning'
+              ? 'bg-amber-50/80 border-amber-200 text-amber-950'
+              : 'bg-rose-50/80 border-rose-200 text-rose-950'
+          }`}>
+            <div className="flex items-start gap-3">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                lastScanResult.status === 'success'
+                  ? 'bg-emerald-600 text-white'
+                  : lastScanResult.status === 'warning'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-rose-600 text-white'
+              }`}>
+                {lastScanResult.status === 'success' ? (
+                  <CheckCircle2 className="w-5 h-5" />
+                ) : lastScanResult.status === 'warning' ? (
+                  <AlertTriangle className="w-5 h-5" />
                 ) : (
-                  <>
-                    <Camera className="w-4 h-4 text-neutral-600" />
-                    <span>ক্যামেরা স্ক্যানার চালু</span>
-                  </>
+                  <XCircle className="w-5 h-5" />
                 )}
-              </button>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">{lastScanResult.message}</span>
+                  {lastScanResult.order?.invoiceNumber && (
+                    <span className="px-2 py-0.5 rounded-md bg-white text-xs font-mono font-bold border border-neutral-200">
+                      #{lastScanResult.order.invoiceNumber}
+                    </span>
+                  )}
+                </div>
+                {lastScanResult.order && (
+                  <div className="text-xs text-neutral-600 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>Customer: <b>{lastScanResult.order.customerName}</b> ({lastScanResult.order.phoneNumber})</span>
+                    {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
+                      <span className="text-emerald-700 font-semibold">
+                        Deducted Size Stock: {lastScanResult.deductedDetails.map(d => `${d.productTitle} (${d.size}: ${d.previousStock} ➔ ${d.newStock})`).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
 
-              {/* Sound Feedback Toggle */}
+            {/* Instant Revert Button */}
+            {lastScanResult.order && (
               <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={`p-3 rounded-2xl border transition-all shrink-0 flex items-center justify-center ${
-                  soundEnabled
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-neutral-50 text-neutral-400 border-neutral-200'
-                }`}
-                title={soundEnabled ? 'সাউন্ড অন' : 'সাউন্ড অফ'}
+                onClick={() => handleRevertOrderToPending(lastScanResult.order!)}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 text-neutral-800 text-xs font-bold border border-neutral-300 flex items-center gap-1.5 self-start sm:self-center shrink-0 shadow-xs transition-all cursor-pointer"
               >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                <Undo2 className="w-3.5 h-3.5 text-amber-600" />
+                <span>Revert to Pending</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 4. ORDERS LIST & BULK ACTIONS */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
+        {/* Filter Tabs & Search Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Segmented Filter Tabs */}
+          <div className="p-1 bg-neutral-100 rounded-2xl flex items-center gap-1 border border-neutral-200/60 shrink-0">
+            <button
+              onClick={() => setFilterTab('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                filterTab === 'all'
+                  ? 'bg-white text-neutral-900 shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              All ({orders.length})
+            </button>
+            <button
+              onClick={() => setFilterTab('pending')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'pending'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <span>Pending</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-black/10 text-[10px]">
+                {metrics.pending}
+              </span>
+            </button>
+            <button
+              onClick={() => setFilterTab('dispatched')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                filterTab === 'dispatched'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <span>Done</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-black/10 text-[10px]">
+                {metrics.dispatched}
+              </span>
+            </button>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by customer, phone, invoice, item..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-neutral-50 border border-neutral-200 text-xs font-medium text-neutral-900 focus:outline-hidden focus:bg-white focus:border-neutral-900 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Bulk Action Toolbar */}
+        {selectedOrderIds.size > 0 && (
+          <div className="p-3 bg-neutral-900 text-white rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-md animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold bg-white/20 px-2.5 py-1 rounded-xl">
+                {selectedOrderIds.size} Selected
+              </span>
+              <button
+                onClick={() => setSelectedOrderIds(new Set())}
+                className="text-xs text-neutral-400 hover:text-white underline cursor-pointer"
+              >
+                Clear Selection
               </button>
             </div>
 
-            {/* Live Camera Viewfinder (If Active) */}
-            {isCameraActive && (
-              <div className="relative rounded-2xl overflow-hidden bg-neutral-950 aspect-video max-h-72 border border-neutral-800 shadow-inner flex items-center justify-center">
-                <video ref={videoRef} className="w-full h-full object-cover" />
-                
-                {/* Laser scan line overlay */}
-                <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                  <div className="w-64 h-36 border-2 border-dashed border-rose-500/80 rounded-xl relative shadow-2xl">
-                    <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-rose-500 shadow-[0_0_12px_#f43f5e] animate-pulse" />
-                  </div>
-                  <span className="text-[11px] text-white/80 bg-neutral-900/80 px-2.5 py-1 rounded-full mt-3 backdrop-blur-xs">
-                    পার্সেলের বারকোড বক্সের ভেতরে ধরুন
-                  </span>
-                </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Bulk Dispatch */}
+              <button
+                onClick={handleBulkDispatchSelected}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <PackageCheck className="w-3.5 h-3.5" />
+                <span>Dispatch & Deduct Stock</span>
+              </button>
 
-                {/* Switch Camera Button */}
-                <button
-                  onClick={switchCameraFacing}
-                  className="absolute top-3 right-3 p-2 rounded-xl bg-neutral-900/80 text-white hover:bg-neutral-900 text-xs flex items-center gap-1.5 backdrop-blur-xs border border-white/10"
-                >
-                  <SwitchCamera className="w-4 h-4" />
-                  <span>ক্যামেরা পরিবর্তন</span>
-                </button>
-              </div>
-            )}
+              {/* Bulk Revert */}
+              <button
+                onClick={handleBulkRevertToPending}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                <span>Revert to Pending</span>
+              </button>
 
-            {/* Live Scan Result Banner */}
-            {lastScanResult && (
-              <div className={`p-4 rounded-2xl border transition-all animate-fadeIn flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                lastScanResult.status === 'success'
-                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
-                  : lastScanResult.status === 'warning'
-                  ? 'bg-amber-50/80 border-amber-200 text-amber-950'
-                  : 'bg-rose-50/80 border-rose-200 text-rose-950'
-              }`}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                    lastScanResult.status === 'success'
-                      ? 'bg-emerald-600 text-white'
-                      : lastScanResult.status === 'warning'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-rose-600 text-white'
-                  }`}>
-                    {lastScanResult.status === 'success' ? (
-                      <CheckCircle2 className="w-5 h-5" />
-                    ) : lastScanResult.status === 'warning' ? (
-                      <AlertTriangle className="w-5 h-5" />
-                    ) : (
-                      <XCircle className="w-5 h-5" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm">{lastScanResult.message}</span>
-                      {lastScanResult.order?.invoiceNumber && (
-                        <span className="px-2 py-0.5 rounded-md bg-white text-xs font-mono font-bold border border-neutral-200">
-                          #{lastScanResult.order.invoiceNumber}
-                        </span>
-                      )}
-                    </div>
-                    {lastScanResult.order && (
-                      <div className="text-xs text-neutral-600 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span>গ্রাহক: <b>{lastScanResult.order.customerName}</b> ({lastScanResult.order.phoneNumber})</span>
-                        {lastScanResult.deductedDetails && lastScanResult.deductedDetails.length > 0 && (
-                          <span className="text-emerald-700 font-semibold">
-                            ডিডাক্টেড সাইজ স্টক: {lastScanResult.deductedDetails.map(d => `${d.productTitle} (${d.size}: ${d.previousStock} ➔ ${d.newStock})`).join(', ')}
+              {/* Bulk Print 3-Inch */}
+              <button
+                onClick={() => setPrintModalState({ isOpen: true, orders: selectedOrdersList, paperSize: '3inch' })}
+                className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-white/10"
+              >
+                <Printer className="w-3.5 h-3.5 text-rose-400" />
+                <span>Print 3-Inch</span>
+              </button>
+
+              {/* Bulk Delete */}
+              <button
+                onClick={handleBulkDeleteSelected}
+                disabled={isBulkDeleting}
+                className="px-3 py-1.5 rounded-xl bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete ({selectedOrderIds.size})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Orders Table */}
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200/80">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-neutral-50 text-neutral-600 uppercase text-[10px] tracking-wider border-b border-neutral-200">
+              <tr>
+                <th className="p-3.5 w-8">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={handleToggleSelectAll}
+                    className="rounded-md border-neutral-300 text-neutral-900 focus:ring-0 cursor-pointer"
+                  />
+                </th>
+                <th className="p-3.5 font-bold">Invoice & Barcode</th>
+                <th className="p-3.5 font-bold">Customer</th>
+                <th className="p-3.5 font-bold">Items & Sizes</th>
+                <th className="p-3.5 font-bold">COD / Price</th>
+                <th className="p-3.5 font-bold text-center">Status</th>
+                <th className="p-3.5 font-bold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200/80">
+              {filteredOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-neutral-400">
+                    No orders found matching the filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((order) => {
+                  const isSelected = selectedOrderIds.has(order.id);
+                  const isDispatched = order.status === 'shipped' || order.status === 'dispatched' || order.status === 'delivered' || order.barcodeScanned;
+                  const isJustMatched = recentlyMatchedId === order.id;
+
+                  return (
+                    <tr 
+                      key={order.id} 
+                      className={`transition-colors ${
+                        isJustMatched 
+                          ? 'bg-emerald-50/80' 
+                          : isSelected 
+                          ? 'bg-neutral-50' 
+                          : 'hover:bg-neutral-50/50'
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="p-3.5">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectOrder(order.id)}
+                          className="rounded-md border-neutral-300 text-neutral-900 focus:ring-0 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Invoice & Barcode */}
+                      <td className="p-3.5">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 font-mono font-bold text-neutral-900">
+                            <span>#{order.invoiceNumber || order.id.slice(-6)}</span>
+                            {order.trackingCode && (
+                              <span className="text-[10px] text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200/60 font-mono font-bold">
+                                {order.trackingCode}
+                              </span>
+                            )}
+                          </div>
+                          <MiniBarcode code={order.invoiceNumber || order.trackingCode || order.id} />
+                        </div>
+                      </td>
+
+                      {/* Customer */}
+                      <td className="p-3.5">
+                        <div className="font-bold text-neutral-900">{order.customerName || 'Anonymous'}</div>
+                        <div className="text-neutral-500 font-mono text-[11px] flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 text-neutral-400" />
+                          <span>{order.phoneNumber}</span>
+                        </div>
+                        <div className="text-neutral-400 text-[10px] truncate max-w-[180px] mt-0.5">
+                          {order.deliveryAddress}
+                        </div>
+                      </td>
+
+                      {/* Items & Sizes */}
+                      <td className="p-3.5">
+                        <div className="space-y-1">
+                          {order.items?.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5">
+                              <span className="font-medium text-neutral-800 truncate max-w-[160px]">
+                                {item.product?.title || 'Jersey'}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded-md bg-neutral-100 text-neutral-700 font-mono text-[10px] font-bold border border-neutral-200">
+                                {item.size}
+                              </span>
+                              <span className="text-neutral-400 text-[10px]">
+                                x{item.quantity}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+
+                      {/* COD / Price */}
+                      <td className="p-3.5 font-mono font-bold text-neutral-900">
+                        {formatPrice(order.totalAmount || 0, currency)}
+                      </td>
+
+                      {/* Status */}
+                      <td className="p-3.5 text-center">
+                        {isDispatched ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Done</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>Pending</span>
                           </span>
                         )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Print Invoice */}
+                          <button
+                            onClick={() => setPrintModalState({ isOpen: true, orders: [order], paperSize: '3inch' })}
+                            className="p-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition-colors cursor-pointer"
+                            title="Print Invoice"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Revert / Dispatch Action */}
+                          {isDispatched ? (
+                            <button
+                              onClick={() => handleRevertOrderToPending(order)}
+                              className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                              title="Revert to Pending"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleIncomingBarcode(order.invoiceNumber || order.trackingCode || order.id)}
+                              className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors cursor-pointer"
+                              title="Dispatch Now"
+                            >
+                              <Zap className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* Delete Order */}
+                          <button
+                            onClick={() => handleDeleteOrder(order)}
+                            disabled={deletingOrderId === order.id}
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer disabled:opacity-40"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 5. FULL SCREEN CAMERA OVERLAY (Direct Full-Screen Auto Scanner Mode) */}
+      {isCameraActive && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden animate-fadeIn">
+          {/* Top Bar Controls */}
+          <div className="relative z-20 flex items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-black/80 to-transparent">
+            <div className="flex items-center gap-2 text-white">
+              <ScanLine className="w-5 h-5 text-rose-500 animate-pulse" />
+              <span className="font-mono font-bold text-sm tracking-wide uppercase">
+                Live Scanner
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Torch Toggle */}
+              <button
+                onClick={toggleTorch}
+                className={`p-3 rounded-full text-white backdrop-blur-md transition-all cursor-pointer ${
+                  isTorchOn ? 'bg-amber-500 text-neutral-950' : 'bg-white/10 hover:bg-white/20'
+                }`}
+                title="Toggle Torch"
+              >
+                <Flashlight className="w-5 h-5" />
+              </button>
+
+              {/* Camera Switch */}
+              <button
+                onClick={switchCameraFacing}
+                className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer"
+                title="Switch Camera"
+              >
+                <SwitchCamera className="w-5 h-5" />
+              </button>
+
+              {/* Sound Toggle */}
+              <button
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className={`p-3 rounded-full backdrop-blur-md transition-all cursor-pointer ${
+                  soundEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-white/10 text-white/60'
+                }`}
+                title="Toggle Audio Tone"
+              >
+                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </button>
+
+              {/* Close Full Screen Scanner */}
+              <button
+                onClick={() => setIsCameraActive(false)}
+                className="p-3 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg transition-all cursor-pointer"
+                title="Close Scanner"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Full Screen Video Stream */}
+          <div className="absolute inset-0 z-10 flex items-center justify-center">
+            <video 
+              ref={videoRef} 
+              className="w-full h-full object-cover" 
+              playsInline 
+              muted 
+              autoPlay 
+            />
+
+            {/* Viewfinder Target Frame & Laser Scan Line */}
+            <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
+              <div className="w-72 sm:w-96 h-48 sm:h-64 border-2 border-dashed border-rose-500/80 rounded-3xl relative shadow-[0_0_50px_rgba(244,63,94,0.3)] backdrop-blur-[1px]">
+                {/* Laser scan line animation */}
+                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-rose-500 shadow-[0_0_16px_#f43f5e] animate-pulse" />
+                
+                {/* Corner Accents */}
+                <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-rose-500 rounded-tl-xl" />
+                <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-rose-500 rounded-tr-xl" />
+                <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-rose-500 rounded-bl-xl" />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-rose-500 rounded-br-xl" />
+              </div>
+
+              <div className="mt-6 px-4 py-2 rounded-full bg-neutral-950/80 border border-white/10 text-white/90 text-xs font-mono backdrop-blur-md">
+                Align barcode inside the box for continuous auto-detection
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom HUD - Last Scan Result */}
+          <div className="relative z-20 p-4 sm:p-6 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+            {lastScanResult ? (
+              <div className={`p-4 rounded-2xl border backdrop-blur-md animate-slideUp flex items-center justify-between gap-3 ${
+                lastScanResult.status === 'success'
+                  ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-200'
+                  : lastScanResult.status === 'warning'
+                  ? 'bg-amber-950/80 border-amber-500/60 text-amber-200'
+                  : 'bg-rose-950/80 border-rose-500/60 text-rose-200'
+              }`}>
+                <div className="flex items-center gap-3">
+                  {lastScanResult.status === 'success' ? (
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500 text-neutral-950 flex items-center justify-center font-bold">
+                      <Check className="w-6 h-6 stroke-[3]" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold">
+                      <X className="w-6 h-6 stroke-[3]" />
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-bold text-sm text-white">{lastScanResult.message}</div>
+                    {lastScanResult.order && (
+                      <div className="text-xs opacity-80 mt-0.5">
+                        Customer: {lastScanResult.order.customerName} ({lastScanResult.order.phoneNumber})
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Instant Revert Button if scanned by mistake */}
-                {lastScanResult.order && (
-                  <button
-                    onClick={() => handleRevertOrderToPending(lastScanResult.order!)}
-                    className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 text-neutral-800 text-xs font-bold border border-neutral-300 flex items-center gap-1.5 self-start sm:self-center shrink-0 shadow-xs transition-all"
-                  >
-                    <Undo2 className="w-3.5 h-3.5 text-amber-600" />
-                    <span>ভুলে স্ক্যান হয়েছে? (পেন্ডিং করুন)</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 4. ORDERS LIST & BULK ACTIONS TOOLBAR */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-            {/* Filter Tabs & Search Bar */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-              {/* Segmented Filter Tabs */}
-              <div className="p-1 bg-neutral-100 rounded-2xl flex items-center gap-1 border border-neutral-200/60 shrink-0">
-                <button
-                  onClick={() => setFilterTab('all')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    filterTab === 'all'
-                      ? 'bg-white text-neutral-900 shadow-xs'
-                      : 'text-neutral-600 hover:text-neutral-900'
-                  }`}
-                >
-                  সবগুলো ({orders.length})
-                </button>
-                <button
-                  onClick={() => setFilterTab('pending')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    filterTab === 'pending'
-                      ? 'bg-amber-500 text-white shadow-xs'
-                      : 'text-neutral-600 hover:text-neutral-900'
-                  }`}
-                >
-                  <span>⏳ স্ক্যান বাকি</span>
-                  <span className="px-1.5 py-0.2 rounded-full bg-black/10 text-[10px]">
-                    {metrics.pending}
-                  </span>
-                </button>
-                <button
-                  onClick={() => setFilterTab('dispatched')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    filterTab === 'dispatched'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-neutral-600 hover:text-neutral-900'
-                  }`}
-                >
-                  <span>✅ ডিসপ্যাচড</span>
-                  <span className="px-1.5 py-0.2 rounded-full bg-black/10 text-[10px]">
-                    {metrics.dispatched}
-                  </span>
-                </button>
-              </div>
-
-              {/* Search Box */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="নাম, ফোন, ইনভয়েস বা ট্র্যাকিং কোড দিয়ে খুঁজুন..."
-                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-neutral-50 border border-neutral-200 text-xs font-medium text-neutral-900 placeholder:text-neutral-400 focus:bg-white focus:border-neutral-900 focus:outline-hidden transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Bulk Action Toolbar (When Items are Selected) */}
-            {selectedOrderIds.size > 0 && (
-              <div className="p-3 rounded-2xl bg-neutral-900 text-white flex flex-wrap items-center justify-between gap-3 shadow-md animate-fadeIn">
-                <div className="flex items-center gap-2 text-xs font-bold">
-                  <span className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center font-mono">
-                    {selectedOrderIds.size}
-                  </span>
-                  <span>টি অর্ডার নির্বাচিত হয়েছে</span>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Bulk Mark as Pending (Restores Stock) */}
-                  <button
-                    onClick={handleBulkRevertToPending}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
-                    title="নির্বাচিত অর্ডারগুলোকে পুনরায় পেন্ডিং করুন এবং সাইজ স্টক রিস্টোর করুন"
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                    <span>পেন্ডিং করুন (স্টক রিস্টোর)</span>
-                  </button>
-
-                  {/* Bulk Dispatch (Deducts Stock) */}
-                  <button
-                    onClick={handleBulkDispatchSelected}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
-                    title="নির্বাচিত অর্ডারগুলোকে ডিসপ্যাচ করুন এবং সাইজ স্টক ডিডাক্ট করুন"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>ডিসপ্যাচ করুন (স্টক ডিডাক্ট)</span>
-                  </button>
-
-                  {/* Bulk Print */}
-                  <button
-                    onClick={() => setIsBulkPrinting(true)}
-                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1.5 transition-all"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>প্রিন্ট ইনভয়েস</span>
-                  </button>
-
-                  {/* Bulk Delete Permanently */}
-                  <button
-                    onClick={handleBulkDeleteSelected}
-                    disabled={isBulkDeleting}
-                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>{isBulkDeleting ? 'মুছছে...' : 'ডিলিট করুন'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Orders Table */}
-            {isLoading ? (
-              <div className="py-12 text-center text-neutral-400 text-xs font-medium flex flex-col items-center gap-2">
-                <RefreshCw className="w-6 h-6 animate-spin text-neutral-400" />
-                <span>অর্ডার লোড হচ্ছে...</span>
-              </div>
-            ) : filteredOrders.length === 0 ? (
-              <div className="py-12 text-center text-neutral-400 text-xs font-medium flex flex-col items-center gap-2">
-                <Package className="w-8 h-8 text-neutral-300" />
-                <span>কোনো ম্যাচিং অর্ডার পাওয়া যায়নি।</span>
+                <span className="font-mono text-xs px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-white font-bold">
+                  {lastScanResult.status === 'success' ? 'DONE' : 'FAIL'}
+                </span>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-neutral-200/80">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-neutral-50/90 text-neutral-600 uppercase text-[10px] tracking-wider border-b border-neutral-200">
-                    <tr>
-                      <th className="p-3.5 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isAllSelected}
-                          onChange={handleToggleSelectAll}
-                          className="rounded-md border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
-                        />
-                      </th>
-                      <th className="p-3.5 font-bold">ইনভয়েস ও ট্র্যাকিং</th>
-                      <th className="p-3.5 font-bold">গ্রাহকের তথ্য</th>
-                      <th className="p-3.5 font-bold">জার্সি ও সাইজ</th>
-                      <th className="p-3.5 font-bold">টাকার পরিমাণ</th>
-                      <th className="p-3.5 font-bold">স্ট্যাটাস</th>
-                      <th className="p-3.5 font-bold text-right">অ্যাকশন</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-200/80">
-                    {filteredOrders.map((order) => {
-                      const isDispatched = order.status === 'shipped' || order.status === 'dispatched' || order.status === 'delivered' || order.barcodeScanned;
-                      const isDelivered = order.status === 'delivered' || order.courierStatus === 'delivered';
-                      const isSelected = selectedOrderIds.has(order.id);
-                      const isRecentlyMatched = recentlyMatchedId === order.id;
-
-                      return (
-                        <tr
-                          key={order.id}
-                          className={`transition-colors hover:bg-neutral-50/60 ${
-                            isRecentlyMatched
-                              ? 'bg-emerald-50/90 font-medium'
-                              : isSelected
-                              ? 'bg-neutral-50'
-                              : ''
-                          }`}
-                        >
-                          {/* Checkbox */}
-                          <td className="p-3.5 text-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleSelectOrder(order.id)}
-                              className="rounded-md border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
-                            />
-                          </td>
-
-                          {/* Invoice & Tracking Barcode */}
-                          <td className="p-3.5">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono font-bold text-neutral-900 text-xs">
-                                  #{order.invoiceNumber || order.id}
-                                </span>
-                              </div>
-
-                              {/* Steadfast Tracking Code */}
-                              {order.trackingCode ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 font-mono text-[10px] font-bold border border-rose-200/60">
-                                    {order.trackingCode}
-                                  </span>
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(order.trackingCode!);
-                                      showToast('ট্র্যাকিং কোড কপি করা হয়েছে: ' + order.trackingCode);
-                                    }}
-                                    className="text-neutral-400 hover:text-neutral-700"
-                                    title="কপি করুন"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <MiniBarcode code={order.invoiceNumber || order.id} />
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Customer Info */}
-                          <td className="p-3.5">
-                            <div>
-                              <div className="font-bold text-neutral-900">{order.customerName}</div>
-                              <div className="text-neutral-500 font-mono text-[11px] flex items-center gap-1 mt-0.5">
-                                <Phone className="w-3 h-3 text-neutral-400" />
-                                <span>{order.phoneNumber || 'N/A'}</span>
-                              </div>
-                              <div className="text-neutral-400 text-[10px] truncate max-w-[180px] mt-0.5" title={order.shippingAddress}>
-                                {order.shippingAddress}
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Items & Sizes */}
-                          <td className="p-3.5">
-                            <div className="space-y-1 max-w-[220px]">
-                              {Array.isArray(order.items) && order.items.map((it, idx) => (
-                                <div key={idx} className="flex items-center gap-1 text-[11px] text-neutral-800">
-                                  <span className="font-medium truncate">{it.product?.title || 'Jersey'}</span>
-                                  <span className="px-1.5 py-0.2 rounded-md bg-neutral-100 text-neutral-700 font-mono font-bold text-[10px] shrink-0">
-                                    {it.selectedSize || 'L'} × {it.quantity || 1}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-
-                          {/* Amount */}
-                          <td className="p-3.5 font-mono font-bold text-neutral-900">
-                            {formatPrice(order.totalAmount || order.codAmount || 0, currency)}
-                          </td>
-
-                          {/* Status Badge */}
-                          <td className="p-3.5">
-                            {isDelivered ? (
-                              <span className="px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 font-bold text-[10px] flex items-center gap-1 w-fit border border-purple-200/60">
-                                <CheckCheck className="w-3 h-3" />
-                                <span>ডেলিভার্ড</span>
-                              </span>
-                            ) : isDispatched ? (
-                              <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] flex items-center gap-1 w-fit border border-emerald-200/60">
-                                <PackageCheck className="w-3 h-3" />
-                                <span>ডিসপ্যাচ সম্পন্ন</span>
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-bold text-[10px] flex items-center gap-1 w-fit border border-amber-200/60">
-                                <Clock className="w-3 h-3" />
-                                <span>স্ক্যান বাকি (Pending)</span>
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Action Buttons */}
-                          <td className="p-3.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Revert / Dispatch Toggle Button */}
-                              {isDispatched ? (
-                                <button
-                                  onClick={() => handleRevertOrderToPending(order)}
-                                  className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200/70 flex items-center gap-1 transition-all"
-                                  title="অর্ডারটি পুনরায় পেন্ডিং করুন এবং সাইজ স্টক রিস্টোর করুন"
-                                >
-                                  <Undo2 className="w-3.5 h-3.5 text-amber-600" />
-                                  <span>পেন্ডিং করুন</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleDirectDispatch(order)}
-                                  className="px-2.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs"
-                                  title="ডিসপ্যাচ করুন এবং সাইজ স্টক ডিডাক্ট করুন"
-                                >
-                                  <Zap className="w-3.5 h-3.5 text-rose-400" />
-                                  <span>ডিসপ্যাচ</span>
-                                </button>
-                              )}
-
-                              {/* Delete Single Order Button */}
-                              <button
-                                onClick={() => handleDeleteOrder(order)}
-                                disabled={deletingOrderId === order.id}
-                                className="p-1.5 rounded-xl text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
-                                title="অর্ডার স্থায়ীভাবে ডিলিট করুন"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="text-center text-xs text-neutral-400 font-mono">
+                Scanner active • Ready for continuous barcode capture
               </div>
             )}
-          </div>
-        </>
-      ) : (
-        /* 5. SIZE STOCK MATRIX SUB-TAB */
-        <div className="p-4 sm:p-5 rounded-3xl bg-white border border-neutral-200/80 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-bold text-neutral-900">জার্সি সাইজ স্টক ম্যাট্রিক্স (Live Inventory)</h3>
-              <p className="text-xs text-neutral-500">প্রতিটি জার্সির সাইজ অনুযায়ী ফিজিক্যাল স্টক পর্যবেক্ষণ ও পরিবর্তন করুন।</p>
-            </div>
-
-            {/* Search */}
-            <div className="relative max-w-xs">
-              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={stockSearchQuery}
-                onChange={(e) => setStockSearchQuery(e.target.value)}
-                placeholder="জার্সি সার্চ করুন..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs font-medium text-neutral-900 focus:outline-hidden focus:bg-white"
-              />
-            </div>
-          </div>
-
-          {/* Product Stock Table */}
-          <div className="overflow-x-auto rounded-2xl border border-neutral-200/80">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-neutral-50 text-neutral-600 uppercase text-[10px] tracking-wider border-b border-neutral-200">
-                <tr>
-                  <th className="p-3.5 font-bold">জার্সি নাম ও কোড</th>
-                  {STANDARD_SIZES.map(sz => (
-                    <th key={sz} className="p-3.5 font-bold text-center">{sz}</th>
-                  ))}
-                  <th className="p-3.5 font-bold text-center">মোট স্টক</th>
-                  <th className="p-3.5 font-bold text-right">অ্যাকশন</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200/80">
-                {products
-                  .filter(p => !stockSearchQuery || p.title.toLowerCase().includes(stockSearchQuery.toLowerCase()) || (p.code && p.code.toLowerCase().includes(stockSearchQuery.toLowerCase())))
-                  .map((product) => {
-                    const isEditing = editingStockProductId === product.id;
-                    const sizeStock = isEditing ? editableSizeStock : getProductSizeStock(product);
-                    const totalStock = Object.values(sizeStock).reduce((a, b) => a + (Number(b) || 0), 0);
-
-                    return (
-                      <tr key={product.id} className="hover:bg-neutral-50/50">
-                        <td className="p-3.5">
-                          <div className="font-bold text-neutral-900">{product.title}</div>
-                          <div className="text-[10px] text-neutral-400 font-mono">{product.code || product.id}</div>
-                        </td>
-
-                        {/* Sizes Columns */}
-                        {STANDARD_SIZES.map(sz => (
-                          <td key={sz} className="p-3.5 text-center font-mono">
-                            {isEditing ? (
-                              <div className="inline-flex items-center gap-1">
-                                <button
-                                  onClick={() => handleSizeStockChange(sz, (editableSizeStock[sz] || 0) - 1)}
-                                  className="w-5 h-5 rounded-md bg-neutral-200 hover:bg-neutral-300 text-neutral-800 flex items-center justify-center font-bold"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={editableSizeStock[sz] !== undefined ? editableSizeStock[sz] : 0}
-                                  onChange={(e) => handleSizeStockChange(sz, parseInt(e.target.value) || 0)}
-                                  className="w-10 text-center py-1 rounded-md border border-neutral-300 font-mono font-bold text-xs"
-                                />
-                                <button
-                                  onClick={() => handleSizeStockChange(sz, (editableSizeStock[sz] || 0) + 1)}
-                                  className="w-5 h-5 rounded-md bg-neutral-200 hover:bg-neutral-300 text-neutral-800 flex items-center justify-center font-bold"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            ) : (
-                              <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                                (sizeStock[sz] || 0) > 0 ? 'bg-neutral-100 text-neutral-800' : 'bg-rose-50 text-rose-600'
-                              }`}>
-                                {sizeStock[sz] || 0}
-                              </span>
-                            )}
-                          </td>
-                        ))}
-
-                        {/* Total Stock */}
-                        <td className="p-3.5 text-center font-mono font-bold text-neutral-900">
-                          <span className={`px-2.5 py-1 rounded-full text-xs ${
-                            totalStock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                          }`}>
-                            {totalStock}
-                          </span>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="p-3.5 text-right">
-                          {isEditing ? (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleSaveSizeStock(product)}
-                                disabled={isSavingStock}
-                                className="px-2.5 py-1.5 rounded-xl bg-neutral-900 text-white text-xs font-bold flex items-center gap-1"
-                              >
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                <span>সেভ</span>
-                              </button>
-                              <button
-                                onClick={() => setEditingStockProductId(null)}
-                                className="px-2.5 py-1.5 rounded-xl bg-neutral-100 text-neutral-600 text-xs font-bold"
-                              >
-                                বাতিল
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => handleOpenEditStock(product)}
-                              className="px-2.5 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-1 ml-auto"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
-                              <span>স্টক এডিট</span>
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
 
-      {/* Bulk Invoice Print Modal */}
-      {isBulkPrinting && (
+      {/* 6. COMPACT INVOICE PRINT MODAL */}
+      {printModalState.isOpen && (
         <CompactInvoicePrintView
-          orders={selectedOrdersList}
-          siteSettings={siteSettings}
+          orders={printModalState.orders}
+          paperSize={printModalState.paperSize}
           currency={currency}
-          onClose={() => setIsBulkPrinting(false)}
+          siteSettings={siteSettings}
+          onClose={() => setPrintModalState({ isOpen: false, orders: [], paperSize: '3inch' })}
         />
       )}
     </div>
