@@ -1512,17 +1512,25 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                         )}
                       </td>
 
-                      {/* Type / Exchange */}
+                      {/* Type / Exchange / Gift Box */}
                       <td className="py-3 px-3">
-                        {order.isExchange ? (
-                          <span className="px-2 py-0.5 rounded-full bg-neutral-900 text-white font-bold text-[10px]">
-                            EXCHANGE
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-700 text-[10px]">
-                            Standard
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1 items-start">
+                          {order.isExchange && (
+                            <span className="px-2 py-0.5 rounded-full bg-neutral-900 text-white font-bold text-[10px]">
+                              EXCHANGE
+                            </span>
+                          )}
+                          {order.hasGiftBox && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px]">
+                              🎁 {order.giftBoxType || 'GIFT BOX'}
+                            </span>
+                          )}
+                          {!order.isExchange && !order.hasGiftBox && (
+                            <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-700 text-[10px]">
+                              Standard
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions */}

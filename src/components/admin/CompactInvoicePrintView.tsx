@@ -312,13 +312,22 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
         </div>
 
         {/* =========================================================================
-            3. OPTIONAL EXCHANGE PARCEL NOTICE
+            3. OPTIONAL GIFT BOX & EXCHANGE PARCEL NOTICES
             ========================================================================= */}
-        {order.isExchange && (
-          <div className="border-t border-neutral-200 pt-0.5">
-            <div className="bg-neutral-900 text-white px-1.5 py-0.5 font-bold text-center uppercase tracking-wider rounded text-[8px] leading-tight">
-              ⚠️ EXCHANGE (রিসিভ করে রিটার্ন নিন)
-            </div>
+        {(order.hasGiftBox || order.isExchange) && (
+          <div className="border-t border-neutral-200 pt-0.5 space-y-0.5">
+            {order.hasGiftBox && (
+              <div className="bg-neutral-950 text-amber-300 border border-amber-400/50 px-1.5 py-0.5 font-bold text-center uppercase tracking-wider rounded text-[8.5px] leading-tight flex items-center justify-center gap-1 shadow-xs">
+                <span>🎁 GIFT BOX:</span>
+                <span className="text-white font-black">{order.giftBoxType || 'PREMIUM GIFT BOX'}</span>
+                {order.giftBoxPrice ? <span className="text-amber-300">({order.giftBoxPrice}৳)</span> : null}
+              </div>
+            )}
+            {order.isExchange && (
+              <div className="bg-neutral-900 text-white px-1.5 py-0.5 font-bold text-center uppercase tracking-wider rounded text-[8px] leading-tight">
+                ⚠️ EXCHANGE (রিসিভ করে রিটার্ন নিন)
+              </div>
+            )}
           </div>
         )}
 

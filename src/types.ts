@@ -48,6 +48,9 @@ export interface Order {
   shippingAddress: string;
   paymentMethod: string;
   isExchange?: boolean;
+  hasGiftBox?: boolean;
+  giftBoxType?: string;
+  giftBoxPrice?: number;
   orderNote?: string;
   orderType?: 'standard' | 'quick_form' | 'bulk_entry';
   subtotal: number;

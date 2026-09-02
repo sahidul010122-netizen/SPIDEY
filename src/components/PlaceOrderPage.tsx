@@ -85,6 +85,10 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   const [isExchangeParcel, setIsExchangeParcel] = useState(false);
   const [exchangeDetails, setExchangeDetails] = useState('');
 
+  // Box 4: Gift Box Option (Default OFF)
+  const [hasGiftBox, setHasGiftBox] = useState(false);
+  const [giftBoxType, setGiftBoxType] = useState('Premium Gift Box');
+
   // Validation States
   const [sizeErrors, setSizeErrors] = useState<{ [key: string]: boolean }>({});
   const [phoneError, setPhoneError] = useState<string | null>(null);
@@ -280,6 +284,8 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
         shippingAddress: address.trim(),
         paymentMethod: 'Cash On Delivery (COD)',
         isExchange: isExchangeParcel,
+        hasGiftBox: hasGiftBox,
+        giftBoxType: hasGiftBox ? (giftBoxType.trim() || 'Premium Gift Box') : undefined,
         orderNote: isExchangeParcel && exchangeDetails ? `Exchange: ${exchangeDetails.trim()}` : undefined,
         orderType: 'quick_form',
         subtotal: parsedCodAmount,
@@ -328,6 +334,9 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
     const exchangeLine = order.isExchange 
       ? `\nExchange Parcel: YES${order.orderNote ? `\nExchange Note: ${order.orderNote}` : ''}`
       : '';
+    const giftBoxLine = order.hasGiftBox
+      ? `\nGift Box: YES (${order.giftBoxType || 'Premium Gift Box'})`
+      : '';
 
     return `Name: ${order.customerName}
 Mobile: ${order.phoneNumber}
@@ -335,7 +344,7 @@ Address: ${order.shippingAddress}
 
 ITEMS:
 ${itemsFormatted}
-Amount: ${amountDisplay}${exchangeLine}`;
+Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
   };
 
   // Copy Entire Text
@@ -367,6 +376,8 @@ Amount: ${amountDisplay}${exchangeLine}`;
     setCodAmount('');
     setIsExchangeParcel(false);
     setExchangeDetails('');
+    setHasGiftBox(false);
+    setGiftBoxType('Premium Gift Box');
     setSizeErrors({});
     setPhoneError(null);
     setGeneralError(null);
@@ -863,6 +874,71 @@ Amount: ${amountDisplay}${exchangeLine}`;
                     onChange={(e) => setExchangeDetails(e.target.value)}
                     placeholder="Exchange reason or original order ID..."
                     className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-neutral-400 transition-all"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* BOX 4: GIFT BOX TOGGLE SWITCH (Default OFF) */}
+            <div className="p-4 rounded-3xl bg-white border border-neutral-200/90 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-neutral-800 block">
+                      Gift Box
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                      🎁 Premium
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-neutral-500">
+                    Enable to add a custom branded gift box for this order
+                  </span>
+                </div>
+
+                {/* Smooth iOS-style Toggle Switch */}
+                <button
+                  type="button"
+                  onClick={() => setHasGiftBox(!hasGiftBox)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out cursor-pointer ${
+                    hasGiftBox ? 'bg-amber-600' : 'bg-neutral-200'
+                  }`}
+                  aria-pressed={hasGiftBox}
+                >
+                  <div
+                    className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${
+                      hasGiftBox ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Optional Gift Box Details if ON */}
+              {hasGiftBox && (
+                <div className="pt-2 border-t border-neutral-100 space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Premium Gift Box', 'Luxury Magnetic Box', 'Special Birthday Box', 'Custom Gift Packaging'].map((boxOption) => (
+                      <button
+                        key={boxOption}
+                        type="button"
+                        onClick={() => setGiftBoxType(boxOption)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all cursor-pointer ${
+                          giftBoxType === boxOption
+                            ? 'bg-amber-500 text-neutral-950 font-bold shadow-xs'
+                            : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                        }`}
+                      >
+                        {boxOption}
+                      </button>
+                    ))}
+                  </div>
+
+                  <input
+                    type="text"
+                    value={giftBoxType}
+                    onChange={(e) => setGiftBoxType(e.target.value)}
+                    placeholder="Enter or customize Gift Box type/note..."
+                    className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-amber-400 transition-all"
                   />
                 </div>
               )}

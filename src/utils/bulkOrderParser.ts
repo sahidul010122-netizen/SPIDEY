@@ -21,6 +21,8 @@ export interface ParsedOrder {
   items: ParsedOrderItem[];
   codAmount: number;
   isExchange: boolean;
+  hasGiftBox?: boolean;
+  giftBoxType?: string;
   orderNote?: string;
   isValid: boolean;
   validationErrors: string[];
@@ -210,6 +212,8 @@ export function parseSingleOrderBlock(block: string, products: JerseyProduct[], 
   let shippingAddress = '';
   let codAmount = 0;
   let isExchange = false;
+  let hasGiftBox = false;
+  let giftBoxType = '';
   let orderNote = '';
 
   const itemLines: string[] = [];
@@ -254,6 +258,18 @@ export function parseSingleOrderBlock(block: string, products: JerseyProduct[], 
       const noteMatch = line.match(/note\s*[:\-]\s*(.*)/i);
       if (noteMatch) {
         orderNote = noteMatch[1].trim();
+      }
+      continue;
+    }
+
+    // 5.1 Check for Gift Box:
+    if (/(?:gift\s*box|giftbox|গিফট\s*বক্স)\s*[:\-]?/i.test(line)) {
+      hasGiftBox = /yes|true|হ্যাঁ|1|premium|magnetic|birthday|special/i.test(line) || true;
+      const typeMatch = line.match(/(?:gift\s*box|giftbox|গিফট\s*বক্স)\s*[:\-]\s*(.*)/i);
+      if (typeMatch && typeMatch[1].trim()) {
+        giftBoxType = typeMatch[1].trim().replace(/^(?:yes|true|হ্যাঁ)\s*[\(\-]?/i, '').replace(/[\)]$/, '').trim() || 'Premium Gift Box';
+      } else {
+        giftBoxType = 'Premium Gift Box';
       }
       continue;
     }
@@ -340,6 +356,8 @@ export function parseSingleOrderBlock(block: string, products: JerseyProduct[], 
     items: parsedItems,
     codAmount: codAmount,
     isExchange: isExchange,
+    hasGiftBox: hasGiftBox,
+    giftBoxType: hasGiftBox ? (giftBoxType || 'Premium Gift Box') : undefined,
     orderNote: orderNote || undefined,
     isValid: errors.length === 0,
     validationErrors: errors
@@ -403,6 +421,8 @@ export function convertParsedOrderToMasterOrder(parsed: ParsedOrder, index: numb
     shippingAddress: parsed.shippingAddress.trim(),
     paymentMethod: 'Cash On Delivery (COD)',
     isExchange: parsed.isExchange,
+    hasGiftBox: parsed.hasGiftBox,
+    giftBoxType: parsed.giftBoxType,
     orderNote: parsed.orderNote,
     orderType: 'bulk_entry',
     subtotal: parsed.codAmount,

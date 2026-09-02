@@ -153,7 +153,9 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const zxingControlsRef = useRef<IScannerControls | null>(null);
   const detectorIntervalRef = useRef<any>(null);
+  const isDetectingFrameRef = useRef<boolean>(false);
   const lastScannedTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
+  const lastProcessedCodeRef = useRef<string>(''); // Locks out same barcode until a DIFFERENT ID comes into view
   const manualInputRef = useRef<HTMLInputElement | null>(null);
   const scanResultTimeoutRef = useRef<any>(null);
 
@@ -353,9 +355,9 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     }, 1100);
   };
 
-  // Main Barcode Dispatch Handler (Fully stable reference without camera restarts)
+  // Main Barcode Dispatch Handler (Fully stable reference without camera restarts & Smart Duplicate Prevention)
   const handleIncomingBarcode = useCallback(async (rawCode: string) => {
-    if (!rawCode || !rawCode.trim() || isProcessingScanRef.current) return;
+    if (!rawCode || !rawCode.trim()) return;
 
     let cleanCode = rawCode.trim();
     // Strip common barcode prefixes / invoice URL fragments
@@ -366,13 +368,25 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     if (cleanCode.startsWith('#')) {
       cleanCode = cleanCode.slice(1);
     }
+    cleanCode = cleanCode.trim();
+    if (!cleanCode) return;
 
-    const now = Date.now();
-    // Debounce duplicate scans within 1.0 second
-    if (lastScannedTimeRef.current.code.toLowerCase() === cleanCode.toLowerCase() && now - lastScannedTimeRef.current.time < 1000) {
+    const lookupCode = cleanCode.toLowerCase();
+
+    // =========================================================================
+    // SMART DUPLICATE PREVENTION & SOUND LOGIC:
+    // Once an ID is scanned & processed, ignore it completely until a NEW,
+    // DIFFERENT ID comes into camera view. No multiple beeps, no repeat lag.
+    // =========================================================================
+    if (lastProcessedCodeRef.current && lastProcessedCodeRef.current === lookupCode) {
       return;
     }
-    lastScannedTimeRef.current = { code: cleanCode, time: now };
+
+    if (isProcessingScanRef.current) return;
+
+    // Register this new ID as the active locked ID
+    lastProcessedCodeRef.current = lookupCode;
+    lastScannedTimeRef.current = { code: cleanCode, time: Date.now() };
 
     setIsProcessingScan(true);
     isProcessingScanRef.current = true;
@@ -381,8 +395,89 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     // Unlock Web Audio Context
     unlockAudioContext();
 
+    // -------------------------------------------------------------------------
+    // 1. ULTRA-FAST ZERO-LAG LOCAL MATCH (0ms Instant Feedback & Sound)
+    // -------------------------------------------------------------------------
+    const currentOrders = ordersRef.current;
+    const localMatch = currentOrders.find(o => {
+      const inv = (o.invoiceNumber || '').toLowerCase();
+      const trk = (o.trackingCode || '').toLowerCase();
+      const cid = (o.consignmentId || '').toLowerCase();
+      const oid = (o.id || '').toLowerCase();
+      const ph = (o.phoneNumber || '').replace(/[^0-9]/g, '');
+      const cleanDigits = lookupCode.replace(/[^0-9]/g, '');
+
+      return (
+        (inv && (inv === lookupCode || inv.endsWith(lookupCode) || lookupCode.endsWith(inv))) ||
+        (trk && (trk === lookupCode || lookupCode.includes(trk))) ||
+        (cid && (cid === lookupCode || lookupCode.includes(cid))) ||
+        (oid && (oid === lookupCode || oid.includes(lookupCode))) ||
+        (ph && cleanDigits.length >= 10 && ph.includes(cleanDigits))
+      );
+    });
+
+    if (localMatch) {
+      // PLAY SINGLE SUCCESS SOUND INSTANTLY
+      if (soundEnabledRef.current) {
+        playMatchSuccessSound();
+      }
+
+      const wasAlreadyDispatched = localMatch.outboundStockDeducted || localMatch.status === 'shipped' || localMatch.barcodeScanned;
+      const nowIso = new Date().toISOString();
+
+      const updatedOrder: Order = {
+        ...localMatch,
+        status: 'shipped',
+        barcodeScanned: true,
+        scannedAt: localMatch.scannedAt || nowIso,
+        outboundScannedAt: localMatch.outboundScannedAt || nowIso,
+        outboundStockDeducted: true,
+        courierStatus: localMatch.courierStatus === 'delivered' ? 'delivered' : 'sent_to_courier'
+      };
+
+      const nextOrders = currentOrders.map(o => o.id === localMatch.id ? updatedOrder : o);
+      setOrders(nextOrders);
+      try {
+        localStorage.setItem('spidey_master_orders', JSON.stringify(nextOrders));
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: nextOrders } }));
+      }
+
+      setRecentlyMatchedId(updatedOrder.id);
+      setTimeout(() => setRecentlyMatchedId(null), 3000);
+
+      triggerAutoDismissScanResult({
+        status: 'success',
+        code: cleanCode,
+        order: updatedOrder,
+        message: wasAlreadyDispatched 
+          ? `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)})`
+          : `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)})`,
+        timestamp: Date.now()
+      });
+
+      // Synchronize in background non-blockingly
+      fetch('/api/warehouse/scan-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scanCode: cleanCode })
+      }).then(res => res.json()).then(data => {
+        if (Array.isArray(data.updatedProducts) && data.updatedProducts.length > 0) {
+          setProducts(data.updatedProducts);
+        }
+      }).catch(() => {});
+
+      setIsProcessingScan(false);
+      isProcessingScanRef.current = false;
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. SERVER FALLBACK MATCH (If not in memory)
+    // -------------------------------------------------------------------------
     try {
-      // 1. Try server-side scan dispatch
       const res = await fetch('/api/warehouse/scan-dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -396,7 +491,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           playMatchSuccessSound();
         }
 
-        // Update local orders
         setOrders(prev => {
           const updated = prev.map(o => o.id === data.order.id ? data.order : o);
           try {
@@ -408,7 +502,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           return updated;
         });
 
-        // Update products if stock deducted
         if (Array.isArray(data.updatedProducts) && data.updatedProducts.length > 0) {
           setProducts(data.updatedProducts);
         } else {
@@ -422,7 +515,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           status: 'success',
           code: cleanCode,
           order: data.order,
-          message: data.message || `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${data.order.invoiceNumber || data.order.id.slice(-6)})`,
+          message: data.message || `অর্ডার সফলভাবে ডিসপ্যাচ হয়েছে (Invoice: ${data.order.invoiceNumber || data.order.id.slice(-6)})`,
           deductedDetails: data.deductedDetails || [],
           timestamp: Date.now()
         });
@@ -442,74 +535,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         return;
       }
 
-      // 2. Client-side Local Fallback Matching
-      const currentOrders = ordersRef.current;
-      const lookupCode = cleanCode.toLowerCase();
-      const matchedOrder = currentOrders.find(o => {
-        const inv = (o.invoiceNumber || '').toLowerCase();
-        const trk = (o.trackingCode || '').toLowerCase();
-        const cid = (o.consignmentId || '').toLowerCase();
-        const oid = (o.id || '').toLowerCase();
-        const ph = (o.phoneNumber || '').replace(/[^0-9]/g, '');
-        const cleanDigits = lookupCode.replace(/[^0-9]/g, '');
-
-        return (
-          (inv && (inv === lookupCode || inv.endsWith(lookupCode) || lookupCode.endsWith(inv))) ||
-          (trk && (trk === lookupCode || lookupCode.includes(trk))) ||
-          (cid && (cid === lookupCode || lookupCode.includes(cid))) ||
-          (oid && (oid === lookupCode || oid.includes(lookupCode))) ||
-          (ph && cleanDigits.length >= 10 && ph.includes(cleanDigits))
-        );
-      });
-
-      if (matchedOrder) {
-        if (soundEnabledRef.current) {
-          playMatchSuccessSound();
-        }
-
-        const nowIso = new Date().toISOString();
-        const updatedOrder: Order = {
-          ...matchedOrder,
-          status: 'shipped',
-          barcodeScanned: true,
-          scannedAt: nowIso,
-          outboundScannedAt: matchedOrder.outboundScannedAt || nowIso,
-          outboundStockDeducted: true,
-          courierStatus: matchedOrder.courierStatus === 'delivered' ? 'delivered' : 'sent_to_courier'
-        };
-
-        const nextOrders = currentOrders.map(o => o.id === matchedOrder.id ? updatedOrder : o);
-        setOrders(nextOrders);
-        try {
-          localStorage.setItem('spidey_master_orders', JSON.stringify(nextOrders));
-        } catch {}
-
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('spidey-orders-updated', { detail: { orders: nextOrders } }));
-        }
-
-        // Sync with backend API
-        fetch('/api/orders/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orders: [updatedOrder] })
-        }).catch(() => {});
-
-        setRecentlyMatchedId(updatedOrder.id);
-        setTimeout(() => setRecentlyMatchedId(null), 3000);
-
-        triggerAutoDismissScanResult({
-          status: 'success',
-          code: cleanCode,
-          order: updatedOrder,
-          message: `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)})`,
-          timestamp: Date.now()
-        });
-
-        return;
-      }
-
-      // 3. No match found - Play Error Buzz and show Fail State
+      // 3. No match found on server or locally
       if (soundEnabledRef.current) {
         playMatchFailSound();
       }
@@ -522,44 +548,13 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       });
 
     } catch (err: any) {
-      // Local fallback on network error
-      const currentOrders = ordersRef.current;
-      const lookupCode = cleanCode.toLowerCase();
-      const localMatch = currentOrders.find(o => 
-        (o.invoiceNumber && o.invoiceNumber.toLowerCase() === lookupCode) ||
-        (o.trackingCode && o.trackingCode.toLowerCase() === lookupCode) ||
-        (o.id && o.id.toLowerCase().includes(lookupCode))
-      );
-
-      if (localMatch) {
-        if (soundEnabledRef.current) playMatchSuccessSound();
-        const updatedOrder: Order = {
-          ...localMatch,
-          status: 'shipped',
-          barcodeScanned: true,
-          outboundStockDeducted: true
-        };
-        const nextOrders = currentOrders.map(o => o.id === localMatch.id ? updatedOrder : o);
-        setOrders(nextOrders);
-        try {
-          localStorage.setItem('spidey_master_orders', JSON.stringify(nextOrders));
-        } catch {}
-        triggerAutoDismissScanResult({
-          status: 'success',
-          code: cleanCode,
-          order: updatedOrder,
-          message: `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)})`,
-          timestamp: Date.now()
-        });
-      } else {
-        if (soundEnabledRef.current) playMatchFailSound();
-        triggerAutoDismissScanResult({
-          status: 'fail',
-          code: cleanCode,
-          message: 'Error verifying barcode. Please retry.',
-          timestamp: Date.now()
-        });
-      }
+      if (soundEnabledRef.current) playMatchFailSound();
+      triggerAutoDismissScanResult({
+        status: 'fail',
+        code: cleanCode,
+        message: 'Error verifying barcode. Please retry.',
+        timestamp: Date.now()
+      });
     } finally {
       setIsProcessingScan(false);
       isProcessingScanRef.current = false;
@@ -572,18 +567,20 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   const handleIncomingBarcodeRef = useRef(handleIncomingBarcode);
   handleIncomingBarcodeRef.current = handleIncomingBarcode;
 
-  // Start Camera Stream & ZXing Reader
+  // Start Camera Stream & High-Performance Single-Engine Reader
   const initCameraStream = useCallback(async (facing: 'environment' | 'user' = 'environment') => {
     unlockAudioContext();
     stopCameraStream();
     setCameraPermissionError(null);
+    lastProcessedCodeRef.current = '';
 
     try {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: facing },
-          width: { ideal: 1920, min: 640 },
-          height: { ideal: 1080, min: 480 }
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          frameRate: { ideal: 30, max: 60 }
         },
         audio: false
       };
@@ -603,6 +600,8 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           console.warn('Video play error:', playErr);
         }
 
+        let isNativeEngineActive = false;
+
         // 1. Hardware Accelerated Native BarcodeDetector (Chrome / Android / iOS 17+)
         if ('BarcodeDetector' in window) {
           try {
@@ -611,31 +610,39 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
             });
 
             detectorIntervalRef.current = setInterval(async () => {
+              if (isDetectingFrameRef.current) return;
               if (videoRef.current && videoRef.current.readyState >= 2 && !videoRef.current.paused) {
+                isDetectingFrameRef.current = true;
                 try {
                   const barcodes = await barcodeDetector.detect(videoRef.current);
                   if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
                     handleIncomingBarcodeRef.current(barcodes[0].rawValue);
                   }
-                } catch {}
+                } catch {} finally {
+                  isDetectingFrameRef.current = false;
+                }
               }
-            }, 90);
+            }, 50);
+
+            isNativeEngineActive = true;
           } catch (detErr) {
-            console.warn('Native BarcodeDetector fallback to ZXing:', detErr);
+            console.warn('Native BarcodeDetector init failed, will use ZXing fallback:', detErr);
           }
         }
 
-        // 2. High-Performance ZXing MultiFormat Reader Fallback
-        const reader = new BrowserMultiFormatReader();
-        try {
-          const controls = await reader.decodeFromStream(stream, videoRef.current, (result) => {
-            if (result) {
-              handleIncomingBarcodeRef.current(result.getText());
-            }
-          });
-          zxingControlsRef.current = controls;
-        } catch (zxErr) {
-          console.warn('ZXing decodeFromStream fallback setup:', zxErr);
+        // 2. High-Performance ZXing Reader ONLY as fallback (avoids double engine lag)
+        if (!isNativeEngineActive) {
+          const reader = new BrowserMultiFormatReader();
+          try {
+            const controls = await reader.decodeFromStream(stream, videoRef.current, (result) => {
+              if (result) {
+                handleIncomingBarcodeRef.current(result.getText());
+              }
+            });
+            zxingControlsRef.current = controls;
+          } catch (zxErr) {
+            console.warn('ZXing decodeFromStream fallback setup error:', zxErr);
+          }
         }
       }
     } catch (err: any) {
