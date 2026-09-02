@@ -155,6 +155,15 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
   const detectorIntervalRef = useRef<any>(null);
   const lastScannedTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
   const manualInputRef = useRef<HTMLInputElement | null>(null);
+  const scanResultTimeoutRef = useRef<any>(null);
+
+  // Stable references to prevent camera unmount / blink re-renders
+  const ordersRef = useRef<Order[]>([]);
+  ordersRef.current = orders;
+  const soundEnabledRef = useRef<boolean>(soundEnabled);
+  soundEnabledRef.current = soundEnabled;
+  const isProcessingScanRef = useRef<boolean>(isProcessingScan);
+  isProcessingScanRef.current = isProcessingScan;
 
   // Toast Helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -333,9 +342,20 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     setIsTorchOn(false);
   };
 
-  // Main Barcode Dispatch Handler
+  // Helper to trigger 1-second auto-dismiss of scan result
+  const triggerAutoDismissScanResult = (result: any) => {
+    setLastScanResult(result);
+    if (scanResultTimeoutRef.current) {
+      clearTimeout(scanResultTimeoutRef.current);
+    }
+    scanResultTimeoutRef.current = setTimeout(() => {
+      setLastScanResult(null);
+    }, 1100);
+  };
+
+  // Main Barcode Dispatch Handler (Fully stable reference without camera restarts)
   const handleIncomingBarcode = useCallback(async (rawCode: string) => {
-    if (!rawCode || !rawCode.trim() || isProcessingScan) return;
+    if (!rawCode || !rawCode.trim() || isProcessingScanRef.current) return;
 
     let cleanCode = rawCode.trim();
     // Strip common barcode prefixes / invoice URL fragments
@@ -348,13 +368,14 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     }
 
     const now = Date.now();
-    // Debounce duplicate scans within 1.2 seconds
-    if (lastScannedTimeRef.current.code.toLowerCase() === cleanCode.toLowerCase() && now - lastScannedTimeRef.current.time < 1200) {
+    // Debounce duplicate scans within 1.0 second
+    if (lastScannedTimeRef.current.code.toLowerCase() === cleanCode.toLowerCase() && now - lastScannedTimeRef.current.time < 1000) {
       return;
     }
     lastScannedTimeRef.current = { code: cleanCode, time: now };
 
     setIsProcessingScan(true);
+    isProcessingScanRef.current = true;
     setManualCodeInput('');
 
     // Unlock Web Audio Context
@@ -371,7 +392,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       const data = await res.json();
 
       if (data.success && data.order) {
-        if (soundEnabled) {
+        if (soundEnabledRef.current) {
           playMatchSuccessSound();
         }
 
@@ -395,37 +416,36 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         }
 
         setRecentlyMatchedId(data.order.id);
-        setTimeout(() => setRecentlyMatchedId(null), 4000);
+        setTimeout(() => setRecentlyMatchedId(null), 3000);
 
-        setLastScanResult({
+        triggerAutoDismissScanResult({
           status: 'success',
           code: cleanCode,
           order: data.order,
-          message: data.message || `Done! Order #${data.order.invoiceNumber || data.order.id.slice(-6)} dispatched.`,
+          message: data.message || `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${data.order.invoiceNumber || data.order.id.slice(-6)})`,
           deductedDetails: data.deductedDetails || [],
           timestamp: Date.now()
         });
 
-        showToast(`Matched: Order #${data.order.invoiceNumber || data.order.id.slice(-6)} - Dispatched`, 'success');
         return;
       } else if (data.alreadyDispatched && data.order) {
-        if (soundEnabled) {
+        if (soundEnabledRef.current) {
           playMatchSuccessSound();
         }
-        setLastScanResult({
+        triggerAutoDismissScanResult({
           status: 'warning',
           code: cleanCode,
           order: data.order,
-          message: data.message || 'Already Dispatched / Scanned',
+          message: data.message || `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${data.order.invoiceNumber || data.order.id.slice(-6)})`,
           timestamp: Date.now()
         });
-        showToast(data.message || 'Already Dispatched', 'info');
         return;
       }
 
-      // 2. Client-side Local Fallback Matching (if server returned 404 or order was just created locally)
+      // 2. Client-side Local Fallback Matching
+      const currentOrders = ordersRef.current;
       const lookupCode = cleanCode.toLowerCase();
-      const matchedOrder = orders.find(o => {
+      const matchedOrder = currentOrders.find(o => {
         const inv = (o.invoiceNumber || '').toLowerCase();
         const trk = (o.trackingCode || '').toLowerCase();
         const cid = (o.consignmentId || '').toLowerCase();
@@ -443,7 +463,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       });
 
       if (matchedOrder) {
-        if (soundEnabled) {
+        if (soundEnabledRef.current) {
           playMatchSuccessSound();
         }
 
@@ -458,7 +478,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           courierStatus: matchedOrder.courierStatus === 'delivered' ? 'delivered' : 'sent_to_courier'
         };
 
-        const nextOrders = orders.map(o => o.id === matchedOrder.id ? updatedOrder : o);
+        const nextOrders = currentOrders.map(o => o.id === matchedOrder.id ? updatedOrder : o);
         setOrders(nextOrders);
         try {
           localStorage.setItem('spidey_master_orders', JSON.stringify(nextOrders));
@@ -476,83 +496,84 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         }).catch(() => {});
 
         setRecentlyMatchedId(updatedOrder.id);
-        setTimeout(() => setRecentlyMatchedId(null), 4000);
+        setTimeout(() => setRecentlyMatchedId(null), 3000);
 
-        setLastScanResult({
+        triggerAutoDismissScanResult({
           status: 'success',
           code: cleanCode,
           order: updatedOrder,
-          message: `Done! Order #${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)} dispatched.`,
+          message: `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)})`,
           timestamp: Date.now()
         });
 
-        showToast(`Matched: Order #${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)} - Done`, 'success');
         return;
       }
 
       // 3. No match found - Play Error Buzz and show Fail State
-      if (soundEnabled) {
+      if (soundEnabledRef.current) {
         playMatchFailSound();
       }
 
-      setLastScanResult({
+      triggerAutoDismissScanResult({
         status: 'fail',
         code: cleanCode,
         message: data.message || `No order found for code "${cleanCode}"`,
         timestamp: Date.now()
       });
-      showToast(data.message || `No match for code: ${cleanCode}`, 'error');
 
     } catch (err: any) {
       // Local fallback on network error
+      const currentOrders = ordersRef.current;
       const lookupCode = cleanCode.toLowerCase();
-      const localMatch = orders.find(o => 
+      const localMatch = currentOrders.find(o => 
         (o.invoiceNumber && o.invoiceNumber.toLowerCase() === lookupCode) ||
         (o.trackingCode && o.trackingCode.toLowerCase() === lookupCode) ||
         (o.id && o.id.toLowerCase().includes(lookupCode))
       );
 
       if (localMatch) {
-        if (soundEnabled) playMatchSuccessSound();
+        if (soundEnabledRef.current) playMatchSuccessSound();
         const updatedOrder: Order = {
           ...localMatch,
           status: 'shipped',
           barcodeScanned: true,
           outboundStockDeducted: true
         };
-        const nextOrders = orders.map(o => o.id === localMatch.id ? updatedOrder : o);
+        const nextOrders = currentOrders.map(o => o.id === localMatch.id ? updatedOrder : o);
         setOrders(nextOrders);
         try {
           localStorage.setItem('spidey_master_orders', JSON.stringify(nextOrders));
         } catch {}
-        setLastScanResult({
+        triggerAutoDismissScanResult({
           status: 'success',
           code: cleanCode,
           order: updatedOrder,
-          message: `Done! Order #${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)} dispatched (offline).`,
+          message: `অর্ডার ইতিমধ্যে ডিসপ্যাচ করা হয়েছিল (Invoice: ${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)})`,
           timestamp: Date.now()
         });
-        showToast(`Matched: Order #${updatedOrder.invoiceNumber || updatedOrder.id.slice(-6)}`, 'success');
       } else {
-        if (soundEnabled) playMatchFailSound();
-        setLastScanResult({
+        if (soundEnabledRef.current) playMatchFailSound();
+        triggerAutoDismissScanResult({
           status: 'fail',
           code: cleanCode,
           message: 'Error verifying barcode. Please retry.',
           timestamp: Date.now()
         });
-        showToast('Scan dispatch error: ' + err.message, 'error');
       }
     } finally {
       setIsProcessingScan(false);
+      isProcessingScanRef.current = false;
       if (manualInputRef.current) {
         manualInputRef.current.focus();
       }
     }
-  }, [orders, isProcessingScan, soundEnabled]);
+  }, []);
+
+  const handleIncomingBarcodeRef = useRef(handleIncomingBarcode);
+  handleIncomingBarcodeRef.current = handleIncomingBarcode;
 
   // Start Camera Stream & ZXing Reader
-  const initCameraStream = useCallback(async (facing: 'environment' | 'user') => {
+  const initCameraStream = useCallback(async (facing: 'environment' | 'user' = 'environment') => {
     unlockAudioContext();
     stopCameraStream();
     setCameraPermissionError(null);
@@ -594,11 +615,11 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                 try {
                   const barcodes = await barcodeDetector.detect(videoRef.current);
                   if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                    handleIncomingBarcode(barcodes[0].rawValue);
+                    handleIncomingBarcodeRef.current(barcodes[0].rawValue);
                   }
                 } catch {}
               }
-            }, 100);
+            }, 90);
           } catch (detErr) {
             console.warn('Native BarcodeDetector fallback to ZXing:', detErr);
           }
@@ -607,9 +628,9 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         // 2. High-Performance ZXing MultiFormat Reader Fallback
         const reader = new BrowserMultiFormatReader();
         try {
-          const controls = await reader.decodeFromStream(stream, videoRef.current, (result, error) => {
+          const controls = await reader.decodeFromStream(stream, videoRef.current, (result) => {
             if (result) {
-              handleIncomingBarcode(result.getText());
+              handleIncomingBarcodeRef.current(result.getText());
             }
           });
           zxingControlsRef.current = controls;
@@ -622,15 +643,14 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       setCameraPermissionError(err.message || 'Camera permission denied or camera device busy.');
       showToast('Camera access denied or unavailable. Check browser permissions.', 'error');
     }
-  }, [handleIncomingBarcode]);
+  }, []);
 
-  // Effect to manage camera life-cycle
+  // Effect to manage camera life-cycle - NEVER re-runs on scan / order updates
   useEffect(() => {
     if (isCameraActive) {
-      // Small timeout to allow video DOM element to render
       const timer = setTimeout(() => {
-        initCameraStream(cameraFacing);
-      }, 100);
+        initCameraStream('environment');
+      }, 80);
       return () => {
         clearTimeout(timer);
         stopCameraStream();
@@ -638,34 +658,71 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     } else {
       stopCameraStream();
     }
-  }, [isCameraActive, cameraFacing, initCameraStream]);
+  }, [isCameraActive, initCameraStream]);
 
   const toggleCamera = () => {
     unlockAudioContext();
     setIsCameraActive(prev => !prev);
   };
 
-  const switchCameraFacing = () => {
-    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
-    setCameraFacing(nextFacing);
-  };
-
+  // Fixed & Robust Torch / Flashlight Toggle
   const toggleTorch = async () => {
-    if (mediaStreamRef.current) {
-      const track = mediaStreamRef.current.getVideoTracks()[0];
-      if (track) {
-        const capabilities: any = track.getCapabilities?.() || {};
-        if (capabilities.torch) {
-          try {
-            await (track as any).applyConstraints({
-              advanced: [{ torch: !isTorchOn }]
-            });
-            setIsTorchOn(!isTorchOn);
-          } catch {}
-        } else {
-          showToast('Torch is not supported on this camera sensor.', 'info');
-        }
+    try {
+      if (!mediaStreamRef.current) {
+        showToast('Camera stream is not active.', 'info');
+        return;
       }
+      const tracks = mediaStreamRef.current.getVideoTracks();
+      if (!tracks || tracks.length === 0) {
+        showToast('No camera track available.', 'info');
+        return;
+      }
+      const track = tracks[0];
+
+      const nextTorchState = !isTorchOn;
+
+      // Method 1: standard applyConstraints advanced torch
+      try {
+        await (track as any).applyConstraints({
+          advanced: [{ torch: nextTorchState }]
+        });
+        setIsTorchOn(nextTorchState);
+        return;
+      } catch (err1) {
+        console.warn('applyConstraints advanced torch failed, trying fallback:', err1);
+      }
+
+      // Method 2: direct torch constraint
+      try {
+        await (track as any).applyConstraints({
+          torch: nextTorchState
+        } as any);
+        setIsTorchOn(nextTorchState);
+        return;
+      } catch (err2) {
+        console.warn('Direct torch constraint failed:', err2);
+      }
+
+      // Method 3: ImageCapture fillLightMode if supported
+      try {
+        if ('ImageCapture' in window) {
+          const imageCapture = new (window as any).ImageCapture(track);
+          const capabilities = await imageCapture.getPhotoCapabilities();
+          if (capabilities?.fillLightMode?.length > 0) {
+            await (track as any).applyConstraints({
+              advanced: [{ torch: nextTorchState }]
+            });
+            setIsTorchOn(nextTorchState);
+            return;
+          }
+        }
+      } catch (err3) {
+        console.warn('ImageCapture torch failed:', err3);
+      }
+
+      showToast('Flashlight is not supported on this device/camera.', 'info');
+    } catch (err: any) {
+      showToast('Flashlight error: ' + (err.message || 'Unsupported'), 'info');
     }
   };
 
@@ -1482,35 +1539,40 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
       {/* 5. FULL SCREEN LIVE CAMERA SCANNER MODAL */}
       {isCameraActive && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden">
           {/* Top Bar Controls */}
-          <div className="relative z-20 flex items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-black/90 to-transparent">
-            <div className="flex items-center gap-2 text-white">
-              <ScanLine className="w-5 h-5 text-rose-500 animate-pulse" />
-              <span className="font-mono font-bold text-sm tracking-wide uppercase">
-                Continuous Live Scanner
-              </span>
+          <div className="relative z-20 flex flex-wrap items-center justify-between p-3.5 sm:p-5 bg-gradient-to-b from-black/95 via-black/80 to-transparent gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-white">
+              <div className="flex items-center gap-1.5">
+                <ScanLine className="w-4 h-4 text-rose-500" />
+                <span className="font-mono font-bold text-xs sm:text-sm tracking-wide uppercase">
+                  Continuous Live Scanner
+                </span>
+              </div>
+
+              {/* Real-time Done & Pending Counters */}
+              <div className="flex items-center gap-1.5 ml-1">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>Done: {metrics.dispatched}</span>
+                </div>
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-mono font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span>Pending: {metrics.pending}</span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* Torch Toggle */}
+            <div className="flex items-center gap-2">
+              {/* Torch / Flashlight Toggle */}
               <button
                 onClick={toggleTorch}
-                className={`p-3 rounded-full text-white backdrop-blur-md transition-all cursor-pointer ${
-                  isTorchOn ? 'bg-amber-500 text-neutral-950' : 'bg-white/10 hover:bg-white/20'
+                className={`p-2.5 sm:p-3 rounded-full text-white backdrop-blur-md transition-all cursor-pointer ${
+                  isTorchOn ? 'bg-amber-500 text-neutral-950 shadow-md ring-2 ring-amber-300' : 'bg-white/10 hover:bg-white/20'
                 }`}
-                title="Toggle Torch / Flashlight"
+                title={isTorchOn ? 'Turn Flashlight OFF' : 'Turn Flashlight ON'}
               >
-                <Flashlight className="w-5 h-5" />
-              </button>
-
-              {/* Camera Switch */}
-              <button
-                onClick={switchCameraFacing}
-                className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer"
-                title="Switch Camera (Front/Back)"
-              >
-                <SwitchCamera className="w-5 h-5" />
+                <Flashlight className={`w-4 h-4 sm:w-5 sm:h-5 ${isTorchOn ? 'fill-neutral-950 text-neutral-950' : 'text-white'}`} />
               </button>
 
               {/* Sound Toggle */}
@@ -1519,21 +1581,21 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
                   unlockAudioContext();
                   setSoundEnabled(!soundEnabled);
                 }}
-                className={`p-3 rounded-full backdrop-blur-md transition-all cursor-pointer ${
+                className={`p-2.5 sm:p-3 rounded-full backdrop-blur-md transition-all cursor-pointer ${
                   soundEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-white/10 text-white/60'
                 }`}
                 title="Toggle Audio Feedback"
               >
-                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                {soundEnabled ? <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" /> : <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
 
               {/* Close Full Screen Scanner */}
               <button
                 onClick={() => setIsCameraActive(false)}
-                className="p-3 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg transition-all cursor-pointer"
+                className="p-2.5 sm:p-3 rounded-full bg-rose-600 hover:bg-rose-700 text-white shadow-lg transition-all cursor-pointer"
                 title="Close Scanner"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
           </div>
@@ -1548,11 +1610,11 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
               autoPlay 
             />
 
-            {/* Viewfinder Target Frame & Animated Laser Scan Line */}
+            {/* Viewfinder Target Frame & Laser Scan Line */}
             <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-              <div className="w-72 sm:w-96 h-48 sm:h-64 border-2 border-dashed border-rose-500/80 rounded-3xl relative shadow-[0_0_50px_rgba(244,63,94,0.3)] backdrop-blur-[1px]">
+              <div className="w-72 sm:w-96 h-48 sm:h-64 border-2 border-dashed border-rose-500/80 rounded-3xl relative shadow-[0_0_40px_rgba(244,63,94,0.25)]">
                 {/* Laser scan line animation */}
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-rose-500 shadow-[0_0_16px_#f43f5e] animate-pulse" />
+                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-rose-500 shadow-[0_0_12px_#f43f5e]" />
                 
                 {/* Corner Accents */}
                 <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-rose-500 rounded-tl-xl" />
@@ -1566,10 +1628,10 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
               </div>
 
               {cameraPermissionError && (
-                <div className="mt-4 p-3 rounded-2xl bg-rose-950/90 border border-rose-500/60 text-rose-200 text-xs text-center max-w-sm">
+                <div className="mt-4 p-3 rounded-2xl bg-rose-950/90 border border-rose-500/60 text-rose-200 text-xs text-center max-w-sm pointer-events-auto">
                   {cameraPermissionError}
                   <button 
-                    onClick={() => initCameraStream(cameraFacing)}
+                    onClick={() => initCameraStream('environment')}
                     className="mt-2 block mx-auto px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
                   >
                     Retry Camera
@@ -1579,52 +1641,59 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
             </div>
           </div>
 
-          {/* Bottom HUD - Live Scan Result */}
-          <div className="relative z-20 p-4 sm:p-6 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
+          {/* Bottom HUD - 1-Second Auto-Dismissing Live Scan Result */}
+          <div className="relative z-20 p-3 sm:p-5 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
             {lastScanResult ? (
-              <div className={`p-4 rounded-2xl border backdrop-blur-md animate-slideUp flex items-center justify-between gap-3 ${
-                lastScanResult.status === 'success'
-                  ? 'bg-emerald-950/85 border-emerald-500/60 text-emerald-200'
-                  : lastScanResult.status === 'warning'
-                  ? 'bg-amber-950/85 border-amber-500/60 text-amber-200'
-                  : 'bg-rose-950/85 border-rose-500/60 text-rose-200'
-              }`}>
+              <div 
+                onClick={() => setLastScanResult(null)}
+                className={`p-3.5 sm:p-4 rounded-2xl border backdrop-blur-md transition-all duration-300 flex items-center justify-between gap-3 cursor-pointer shadow-2xl ${
+                  lastScanResult.status === 'success'
+                    ? 'bg-[#06261c]/95 border-emerald-500/50 text-emerald-100'
+                    : lastScanResult.status === 'warning'
+                    ? 'bg-[#291b06]/95 border-amber-500/50 text-amber-100'
+                    : 'bg-[#2b080f]/95 border-rose-500/50 text-rose-100'
+                }`}
+              >
                 <div className="flex items-center gap-3">
-                  {lastScanResult.status === 'success' ? (
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500 text-neutral-950 flex items-center justify-center font-bold">
-                      <Check className="w-6 h-6 stroke-[3]" />
-                    </div>
-                  ) : lastScanResult.status === 'warning' ? (
-                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-neutral-950 flex items-center justify-center font-bold">
-                      <AlertTriangle className="w-6 h-6 stroke-[3]" />
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold">
-                      <X className="w-6 h-6 stroke-[3]" />
-                    </div>
-                  )}
+                  <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+                    lastScanResult.status === 'success'
+                      ? 'bg-emerald-500 text-neutral-950'
+                      : lastScanResult.status === 'warning'
+                      ? 'bg-amber-500 text-neutral-950'
+                      : 'bg-rose-500 text-white'
+                  }`}>
+                    {lastScanResult.status === 'success' ? (
+                      <Check className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
+                    ) : lastScanResult.status === 'warning' ? (
+                      <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
+                    ) : (
+                      <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
+                    )}
+                  </div>
                   <div>
-                    <div className="font-bold text-sm text-white">{lastScanResult.message}</div>
+                    <div className="font-bold text-xs sm:text-sm text-white leading-tight">
+                      {lastScanResult.message}
+                    </div>
                     {lastScanResult.order && (
-                      <div className="text-xs opacity-80 mt-0.5">
+                      <div className="text-[11px] sm:text-xs opacity-80 mt-0.5">
                         Customer: {lastScanResult.order.customerName} ({lastScanResult.order.phoneNumber})
                       </div>
                     )}
                   </div>
                 </div>
 
-                <span className={`font-mono text-xs px-2.5 py-1 rounded-lg border font-bold ${
+                <span className={`font-mono text-xs px-2.5 py-1 rounded-lg border font-bold shrink-0 ${
                   lastScanResult.status === 'success'
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                     : lastScanResult.status === 'warning'
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                    : 'bg-rose-500/20 text-rose-400 border-rose-500/40'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                 }`}>
-                  {lastScanResult.status === 'success' ? 'DONE' : lastScanResult.status === 'warning' ? 'DISPATCHED' : 'FAIL'}
+                  {lastScanResult.status === 'success' ? 'DONE' : lastScanResult.status === 'warning' ? 'DONE' : 'FAIL'}
                 </span>
               </div>
             ) : (
-              <div className="text-center text-xs text-neutral-400 font-mono">
+              <div className="text-center text-xs text-neutral-400 font-mono py-1">
                 Scanner active • Ready for continuous barcode capture
               </div>
             )}
