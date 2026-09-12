@@ -211,12 +211,26 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       setIsLoading(false);
     }
 
+    // Read tombstone deleted orders
+    let deletedIds = new Set<string>();
+    try {
+      const rawDeleted = localStorage.getItem('spidey_deleted_order_ids');
+      if (rawDeleted) {
+        const parsed = JSON.parse(rawDeleted);
+        if (Array.isArray(parsed)) deletedIds = new Set(parsed);
+      }
+    } catch {}
+
+    serverOrders = serverOrders.filter(o => !deletedIds.has(o.id));
+
     let localOrders: Order[] = [];
     try {
       const cached = localStorage.getItem('spidey_master_orders');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) localOrders = parsed;
+        if (Array.isArray(parsed)) {
+          localOrders = parsed.filter(o => !deletedIds.has(o.id));
+        }
       }
     } catch {}
 
@@ -224,22 +238,13 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     if (serverOrders.length > 0 && localOrders.length > 0) {
       const serverMap = new Map(serverOrders.map(o => [o.id, o]));
       const merged: Order[] = [];
-      const toSync: Order[] = [];
 
       for (const s of serverOrders) {
         const l = localOrders.find(o => o.id === s.id);
         if (l && (l.barcodeScanned || l.status === 'shipped') && !s.barcodeScanned) {
-          merged.push(l);
-          toSync.push(l);
+          merged.push({ ...s, barcodeScanned: l.barcodeScanned, status: l.status });
         } else {
           merged.push(s);
-        }
-      }
-
-      for (const l of localOrders) {
-        if (!serverMap.has(l.id)) {
-          merged.push(l);
-          toSync.push(l);
         }
       }
 
@@ -247,14 +252,6 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
       try {
         localStorage.setItem('spidey_master_orders', JSON.stringify(merged));
       } catch {}
-
-      if (toSync.length > 0) {
-        fetch('/api/orders/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orders: toSync })
-        }).catch(() => {});
-      }
       return;
     }
 

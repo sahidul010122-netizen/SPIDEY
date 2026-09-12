@@ -54,12 +54,15 @@ export default function App() {
       if (
         path === '/place-order' || 
         path.startsWith('/place-order') || 
+        path === '/placeorder' || 
+        path.startsWith('/placeorder') || 
         path === '/order' || 
         path.startsWith('/order') || 
         search.includes('view=order') || 
         search.includes('page=order') || 
         hash === '#/order' || 
-        hash === '#/place-order'
+        hash === '#/place-order' ||
+        hash === '#/placeorder'
       ) {
         return 'order';
       }

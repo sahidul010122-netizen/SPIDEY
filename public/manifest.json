@@ -32,6 +32,13 @@
       "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
     },
     {
+      "name": "Place Order",
+      "short_name": "Place Order",
+      "description": "Quick place order entry",
+      "url": "/placeorder?pwa=1",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    },
+    {
       "name": "Public Storefront",
       "short_name": "Store",
       "description": "Browse live jersey drops",

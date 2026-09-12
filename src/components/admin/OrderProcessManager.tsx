@@ -32,7 +32,8 @@ import {
   XCircle,
   HelpCircle,
   ScanLine,
-  Zap
+  Zap,
+  Boxes
 } from 'lucide-react';
 import { JerseyProduct, Order, CartItem } from '../../types';
 import { SiteSettings } from '../../types/settings';
@@ -51,6 +52,7 @@ import {
   SteadfastSettings 
 } from '../../utils/steadfastCourier';
 import { CompactInvoicePrintView, getSteadfastParcelId } from './CompactInvoicePrintView';
+import { PackingListPrintView } from './PackingListPrintView';
 import { cleanAndFormatPhoneNumber, convertBengaliToEnglishDigits } from '../../utils/phoneUtils';
 
 interface OrderProcessManagerProps {
@@ -154,6 +156,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   // Print Mode State (Thermal / A4 Batch)
   const [ordersToPrint, setOrdersToPrint] = useState<Order[] | null>(null);
 
+  // Packing List Print State (A4 Warehouse Jersey & Size Breakdown)
+  const [ordersForPackingList, setOrdersForPackingList] = useState<Order[] | null>(null);
+
   // Status Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -167,12 +172,25 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   const fetchOrders = async () => {
     setIsLoadingOrders(true);
     let serverOrders: Order[] = [];
+    let serverFetchedSuccessfully = false;
+
+    // Read tombstone deleted orders to prevent resurrecting deleted orders
+    let deletedIds = new Set<string>();
+    try {
+      const rawDeleted = localStorage.getItem('spidey_deleted_order_ids');
+      if (rawDeleted) {
+        const parsed = JSON.parse(rawDeleted);
+        if (Array.isArray(parsed)) deletedIds = new Set(parsed);
+      }
+    } catch {}
+
     try {
       const res = await fetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.orders)) {
           serverOrders = data.orders;
+          serverFetchedSuccessfully = true;
         }
       }
     } catch (e) {
@@ -181,12 +199,17 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       setIsLoadingOrders(false);
     }
 
+    // Filter out tombstone deleted orders
+    serverOrders = serverOrders.filter(o => !deletedIds.has(o.id));
+
     let localOrders: Order[] = [];
     try {
       const cached = localStorage.getItem('spidey_master_orders');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) localOrders = parsed;
+        if (Array.isArray(parsed)) {
+          localOrders = parsed.filter(o => !deletedIds.has(o.id));
+        }
       }
     } catch {}
 
@@ -194,23 +217,13 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     if (serverOrders.length > 0 && localOrders.length > 0) {
       const serverMap = new Map(serverOrders.map(o => [o.id, o]));
       const merged: Order[] = [];
-      const needsServerRehydrate: Order[] = [];
 
       for (const s of serverOrders) {
         const l = localOrders.find(o => o.id === s.id);
         if (l && (l.trackingCode || l.consignmentId || l.courierStatus === 'sent_to_courier') && !s.trackingCode) {
-          const combined = { ...s, ...l };
-          merged.push(combined);
-          needsServerRehydrate.push(combined);
+          merged.push({ ...s, ...l });
         } else {
           merged.push(s);
-        }
-      }
-
-      for (const l of localOrders) {
-        if (!serverMap.has(l.id)) {
-          merged.push(l);
-          needsServerRehydrate.push(l);
         }
       }
 
@@ -218,14 +231,6 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       try {
         localStorage.setItem('spidey_master_orders', JSON.stringify(merged));
       } catch {}
-
-      if (needsServerRehydrate.length > 0) {
-        fetch('/api/orders/bulk-sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orders: needsServerRehydrate })
-        }).catch(() => {});
-      }
       return;
     }
 
@@ -237,13 +242,17 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
       return;
     }
 
-    if (localOrders.length > 0) {
+    if (!serverFetchedSuccessfully && localOrders.length > 0) {
       setSavedOrders(localOrders);
-      fetch('/api/orders/bulk-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orders: localOrders })
-      }).catch(() => {});
+      return;
+    }
+
+    if (serverFetchedSuccessfully && serverOrders.length === 0) {
+      // Server returned empty list -> database has no orders
+      setSavedOrders([]);
+      try {
+        localStorage.removeItem('spidey_master_orders');
+      } catch {}
     }
   };
 
@@ -667,6 +676,19 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     setOrdersToPrint(tempOrders);
   };
 
+  // Open A4 Warehouse Packing List
+  const handleOpenPackingList = (specificOrders?: Order[]) => {
+    let targetOrders = specificOrders || savedOrders;
+    if (!specificOrders && selectedOrderIds.size > 0) {
+      targetOrders = savedOrders.filter(o => selectedOrderIds.has(o.id));
+    }
+    if (targetOrders.length === 0) {
+      showToast('No orders found to generate packing list.');
+      return;
+    }
+    setOrdersForPackingList(targetOrders);
+  };
+
   // Delete single saved order from master list & database & bucket storage
   const handleDeleteSavedOrder = async (id: string) => {
     setDeletingOrderId(id);
@@ -680,6 +702,12 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
     try {
       localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
+      const rawDeleted = localStorage.getItem('spidey_deleted_order_ids');
+      const delArr = rawDeleted ? JSON.parse(rawDeleted) : [];
+      if (!delArr.includes(id)) {
+        delArr.push(id);
+        localStorage.setItem('spidey_deleted_order_ids', JSON.stringify(delArr));
+      }
     } catch {}
 
     try {
@@ -718,6 +746,12 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
     try {
       localStorage.setItem('spidey_master_orders', JSON.stringify(updated));
+      const rawDeleted = localStorage.getItem('spidey_deleted_order_ids');
+      const delArr = rawDeleted ? JSON.parse(rawDeleted) : [];
+      idsToDelete.forEach(id => {
+        if (!delArr.includes(id)) delArr.push(id);
+      });
+      localStorage.setItem('spidey_deleted_order_ids', JSON.stringify(delArr));
     } catch {}
 
     try {
@@ -753,11 +787,18 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     }
 
     setIsDeletingAll(true);
+    const allIds = savedOrders.map(o => o.id);
     setSavedOrders([]);
     setSelectedOrderIds(new Set());
 
     try {
       localStorage.removeItem('spidey_master_orders');
+      const rawDeleted = localStorage.getItem('spidey_deleted_order_ids');
+      const delArr = rawDeleted ? JSON.parse(rawDeleted) : [];
+      allIds.forEach(id => {
+        if (!delArr.includes(id)) delArr.push(id);
+      });
+      localStorage.setItem('spidey_deleted_order_ids', JSON.stringify(delArr));
     } catch {}
 
     try {
@@ -782,8 +823,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
   // Filtered orders list for display
   const filteredSavedOrders = savedOrders.filter(order => {
-    if (statusFilter === 'courier_sent' && order.courierStatus !== 'sent_to_courier') return false;
-    if (statusFilter === 'pending' && order.courierStatus === 'sent_to_courier') return false;
+    const isSentToCourier = !!order.trackingCode || order.courierStatus === 'sent_to_courier';
+    if (statusFilter === 'courier_sent' && !isSentToCourier) return false;
+    if (statusFilter === 'pending' && isSentToCourier) return false;
     if (statusFilter === 'exchange' && !order.isExchange) return false;
 
     if (!searchQuery.trim()) return true;
@@ -800,7 +842,8 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
   // Calculate totals
   const totalCodAmount = savedOrders.reduce((sum, o) => sum + (o.codAmount !== undefined ? o.codAmount : o.totalAmount), 0);
-  const totalSteadfastDispatched = savedOrders.filter(o => !!o.trackingCode).length;
+  const totalSteadfastDispatched = savedOrders.filter(o => !!o.trackingCode || o.courierStatus === 'sent_to_courier').length;
+  const totalPendingSteadfast = savedOrders.filter(o => !o.trackingCode && o.courierStatus !== 'sent_to_courier').length;
   const totalExchangeCount = savedOrders.filter(o => o.isExchange).length;
 
   return (
@@ -1202,6 +1245,20 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
               </span>
             </button>
 
+            {/* Print Warehouse Packing List (A4 Grid of Jerseys & Sizes) */}
+            <button
+              type="button"
+              disabled={savedOrders.length === 0}
+              onClick={() => handleOpenPackingList()}
+              className="px-4 py-2 rounded-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+              title="Print A4 Warehouse Packing List with jersey photos and size breakdown"
+            >
+              <Boxes className="w-4 h-4" />
+              <span>
+                Packing List ({selectedOrderIds.size > 0 ? selectedOrderIds.size : savedOrders.length})
+              </span>
+            </button>
+
             {/* Delete Selected Orders Permanently Button */}
             {selectedOrderIds.size > 0 && (
               <button
@@ -1322,24 +1379,32 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
           <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto w-full sm:w-auto">
             <button
               onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 statusFilter === 'all' ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
               }`}
             >
               All ({savedOrders.length})
             </button>
             <button
+              onClick={() => setStatusFilter('pending')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'pending' ? 'bg-amber-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
+            >
+              Steadfast এন্ট্রি ছাড়া ({totalPendingSteadfast})
+            </button>
+            <button
               onClick={() => setStatusFilter('courier_sent')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                statusFilter === 'courier_sent' ? 'bg-rose-600 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'courier_sent' ? 'bg-rose-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
               }`}
             >
               Steadfast Sent ({totalSteadfastDispatched})
             </button>
             <button
               onClick={() => setStatusFilter('exchange')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                statusFilter === 'exchange' ? 'bg-amber-600 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === 'exchange' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
               }`}
             >
               Exchange ({totalExchangeCount})
@@ -1884,6 +1949,16 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
         <CompactInvoicePrintView
           orders={ordersToPrint}
           onClose={() => setOrdersToPrint(null)}
+        />
+      )}
+
+      {/* =========================================================================
+          WAREHOUSE PACKING LIST PRINT MODAL (A4)
+          ========================================================================= */}
+      {ordersForPackingList && (
+        <PackingListPrintView
+          orders={ordersForPackingList}
+          onClose={() => setOrdersForPackingList(null)}
         />
       )}
 

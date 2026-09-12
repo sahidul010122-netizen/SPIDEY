@@ -96,18 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Storefront</span>
             </button>
-          ) : (
-            /* PUBLIC PLACE ORDER BUTTON */
-            <button
-              id="nav-place-order-btn"
-              onClick={onOpenPlaceOrder}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full bg-neutral-900 hover:bg-black text-white text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
-              title="Place an Order"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-              <span className="tracking-tight">Place Order</span>
-            </button>
-          )}
+          ) : null}
 
           {/* Currency Selector */}
           <button

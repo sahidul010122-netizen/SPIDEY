@@ -7,7 +7,7 @@ import {
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
-  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -15,6 +15,7 @@ import { CurrencyCode, formatPrice, CURRENCY_RATES } from '../utils/currency';
 import { OrderProcessManager } from './admin/OrderProcessManager';
 import { SteadfastApiSection } from './admin/SteadfastApiSection';
 import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
+import { PlaceOrderInstallSection } from './admin/PlaceOrderInstallSection';
 
 interface AdminPanelProps {
   products: JerseyProduct[];
@@ -61,7 +62,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   // Active Sidebar Menu Tab
   const [activeMenu, setActiveMenu] = useState<
-    'order_process' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
+    'order_process' | 'barcode_scanner' | 'steadfast_api' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
   >('order_process');
 
   // Mobile Collapsible Sidebar State (Default to closed on mobile for maximum workspace)
@@ -109,7 +110,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSelectMenu = (menu: 'order_process' | 'warehouse' | 'barcode_scanner' | 'steadfast_api' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
+  const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
     setActiveMenu(menu);
     // Auto-collapse sidebar on mobile after selecting a menu
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -154,6 +155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [formDescription, setFormDescription] = useState('');
   const [formStockCount, setFormStockCount] = useState('25');
   const [formInStock, setFormInStock] = useState(true);
+  const [formSizes, setFormSizes] = useState<string[]>(['S', 'M', 'L', 'XL', 'XXL', '3XL']);
   const [formImages, setFormImages] = useState<string[]>([]);
   const [formFeatures, setFormFeatures] = useState<string[]>([
     'CNC milled grade-5 titanium frame',
@@ -204,6 +206,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormDescription('Authentic club matchwear jersey with moisture-wicking Dri-FIT fabric and heat-pressed club crest.');
     setFormStockCount('20');
     setFormInStock(true);
+    setFormSizes(['S', 'M', 'L', 'XL', 'XXL', '3XL']);
     setFormImages(['/images/prod_pixel_case_1787668274006.jpg']);
     setFormFeatures([
       'Moisture-wicking breathable ventilation matrix',
@@ -228,6 +231,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormDescription(prod.description);
     setFormStockCount(String(prod.stockCount));
     setFormInStock(prod.inStock);
+    setFormSizes(Array.isArray(prod.sizes) && prod.sizes.length > 0 ? [...prod.sizes] : ['S', 'M', 'L', 'XL', 'XXL', '3XL']);
     setFormImages(prod.images.length > 0 ? [...prod.images] : []);
     setFormFeatures(prod.features.length > 0 ? [...prod.features] : []);
     setIsProductModalOpen(true);
@@ -378,7 +382,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       inStock: formInStock,
       images: formImages.length > 0 ? formImages : ['/images/prod_pixel_case_1787668274006.jpg'],
       features: formFeatures.length > 0 ? formFeatures : ['Moisture-wicking breathable ventilation matrix'],
-      sizes: ['S', 'M', 'L', 'XL', 'XXL']
+      sizes: formSizes.length > 0 ? formSizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL']
     };
 
     let success = false;
@@ -641,6 +645,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </button>
 
+            {/* 5. Place Order Install & Shortcut Link (Dedicated Admin Menu) */}
+            <button
+              onClick={() => handleSelectMenu('place_order_install')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'place_order_install'
+                  ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 font-extrabold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Smartphone className="w-4 h-4 text-rose-400" />
+                <span className="font-extrabold tracking-tight">Place Order Install</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'place_order_install' ? 'bg-white text-rose-900 font-black' : 'bg-rose-500/20 text-rose-300 font-bold'
+              }`}>
+                PWA Link
+              </span>
+            </button>
+
             {/* Overview / Reports */}
             <button
               onClick={() => handleSelectMenu('overview')}
@@ -822,6 +846,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {activeMenu === 'order_process' && 'Order Process & Management System'}
                   {activeMenu === 'barcode_scanner' && 'Barcode Scanner & Auto-Matching System'}
                   {activeMenu === 'steadfast_api' && 'Steadfast Courier API Settings & Credentials'}
+                  {activeMenu === 'place_order_install' && 'Place Order Shortcut & PWA Install'}
                   {activeMenu === 'overview' && 'Storefront Reports & Analytics'}
                   {activeMenu === 'categories' && 'Category Carousel & Logos Manager'}
                   {activeMenu === 'products' && 'Product Catalog & Inventory'}
@@ -833,7 +858,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {activeMenu === 'order_process' && 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'}
                   {activeMenu === 'barcode_scanner' && 'Continuous live camera scanning, automatic parcel barcode matching, instant status updates, and permanent database storage.'}
                   {activeMenu === 'steadfast_api' && 'Configure and permanently save your Steadfast Courier Merchant API credentials for automated one-click order dispatching.'}
-                  {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
+                  {activeMenu === 'place_order_install' && 'ডেডিকেটেড লিঙ্ক ও PWA শর্টকাট ইনস্টল করুন যাতে স্টাফ বা এজেন্টরা দ্রুত সরাসরি প্লেস অর্ডার করতে পারে।'}
+                  {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && activeMenu !== 'place_order_install' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
                 </p>
               </div>
             </div>
@@ -900,8 +926,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             />
           )}
 
+          {/* TAB: PLACE ORDER PWA SHORTCUT & DEDICATED LINK */}
+          {activeMenu === 'place_order_install' && (
+            <PlaceOrderInstallSection 
+              deferredPrompt={deferredPrompt}
+              onPromptInstall={onPromptInstall}
+            />
+          )}
+
           {/* 3. FOUR METRIC SUMMARY CARDS (Shown on other tabs) */}
-          {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && (
+          {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && activeMenu !== 'place_order_install' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* Card 1: Dark Solid Card with Sparkline */}
@@ -2263,6 +2297,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) => setFormStockCount(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Product Size Availability Checkboxes / Toggle Buttons */}
+              <div className="bg-neutral-50 p-3 rounded-2xl border border-neutral-200/80">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
+                      <span>Available Sizes / সাইজসমূহ (চেকবাক্স / টগল বাটন):</span>
+                      <span className="text-[11px] font-mono text-neutral-500">
+                        ({formSizes.length} Selected)
+                      </span>
+                    </label>
+                    <p className="text-[10px] text-neutral-500">
+                      কাস্টমাররা স্টোরে শুধু আপনার সিলেক্ট করা সাইজগুলোই দেখতে পাবে
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFormSizes(['S', 'M', 'L', 'XL', 'XXL', '3XL'])}
+                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 px-2 py-0.5 rounded-md hover:bg-rose-50 cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-neutral-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormSizes([])}
+                      className="text-[10px] font-bold text-neutral-500 hover:text-neutral-700 px-2 py-0.5 rounded-md hover:bg-neutral-200 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-6 gap-2">
+                  {['S', 'M', 'L', 'XL', 'XXL', '3XL'].map((size) => {
+                    const isSelected = formSizes.includes(size);
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setFormSizes(formSizes.filter((s) => s !== size));
+                          } else {
+                            setFormSizes([...formSizes, size]);
+                          }
+                        }}
+                        className={`h-10 rounded-xl font-mono text-xs font-black transition-all flex flex-col items-center justify-center cursor-pointer border ${
+                          isSelected
+                            ? 'bg-neutral-900 text-white border-neutral-900 shadow-sm ring-2 ring-neutral-900 scale-102'
+                            : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-400 hover:bg-neutral-100'
+                        }`}
+                      >
+                        <span className="leading-tight">{size}</span>
+                        <span className={`text-[9px] font-sans font-bold leading-none ${isSelected ? 'text-emerald-400' : 'text-neutral-400'}`}>
+                          {isSelected ? '✓ In Stock' : '✕ Off'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
