@@ -11,14 +11,33 @@
     <meta name="twitter:card" content="summary_large_image" />
 
     <!-- PWA & Mobile Web App Meta -->
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" id="app-manifest" href="/manifest.json" />
     <meta name="theme-color" content="#e50914" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Spidey Place Order" />
+    <meta name="apple-mobile-web-app-title" id="apple-app-title" content="Spidey Admin" />
     <link rel="apple-touch-icon" href="/pwa-icon.svg" />
     <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
+    <script>
+      (function() {
+        try {
+          var p = window.location.pathname.toLowerCase();
+          var s = window.location.search.toLowerCase();
+          var isPlaceOrder = p === '/placeorder' || p.startsWith('/placeorder') || s.includes('placeorder');
+          var manifestEl = document.getElementById('app-manifest');
+          var appleTitle = document.getElementById('apple-app-title');
+          if (isPlaceOrder) {
+            if (manifestEl) manifestEl.href = '/manifest-placeorder.json';
+            if (appleTitle) appleTitle.content = 'Spidey Place Order';
+            document.title = 'Spidey Place Order';
+          } else {
+            if (manifestEl) manifestEl.href = '/manifest-admin.json';
+            if (appleTitle) appleTitle.content = 'Spidey Admin';
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -193,6 +193,25 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
+  // --- Dedicated PWA Web Manifest Endpoints ---
+  app.get('/manifest-placeorder.json', (req: Request, res: Response) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'manifest-placeorder.json'));
+  });
+
+  app.get('/manifest-admin.json', (req: Request, res: Response) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'manifest-admin.json'));
+  });
+
+  app.get('/manifest.json', (req: Request, res: Response) => {
+    const referer = (req.headers.referer || '').toLowerCase();
+    const appType = req.query.app;
+    if (appType === 'placeorder' || referer.includes('/placeorder') || referer.includes('view=order')) {
+      res.sendFile(path.join(process.cwd(), 'public', 'manifest-placeorder.json'));
+    } else {
+      res.sendFile(path.join(process.cwd(), 'public', 'manifest-admin.json'));
+    }
+  });
+
   // Cloudflare R2 Status & Deployment Guide
   app.get('/api/r2-status', (req: Request, res: Response) => {
     res.json({

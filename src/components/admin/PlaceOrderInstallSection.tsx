@@ -19,10 +19,7 @@ interface PlaceOrderInstallSectionProps {
   onPromptInstall?: () => void;
 }
 
-export const PlaceOrderInstallSection: React.FC<PlaceOrderInstallSectionProps> = ({
-  deferredPrompt,
-  onPromptInstall
-}) => {
+export const PlaceOrderInstallSection: React.FC<PlaceOrderInstallSectionProps> = () => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // Dedicated Official Link (Dynamic based on current domain, e.g. spideyjersey.site or spyderc.site)
@@ -209,17 +206,6 @@ export const PlaceOrderInstallSection: React.FC<PlaceOrderInstallSectionProps> =
               লিঙ্কে প্রবেশের পর নিচের ধাপগুলো অনুসরণ করে ১ ক্লিকেই মোবাইলে বা পিসিতে অ্যাপ আইকন তৈরি করে নেওয়া যাবে
             </p>
           </div>
-
-          {onPromptInstall && (
-            <button
-              type="button"
-              onClick={onPromptInstall}
-              className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-md shadow-rose-600/20 transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              <span>Install PWA Now</span>
-            </button>
-          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

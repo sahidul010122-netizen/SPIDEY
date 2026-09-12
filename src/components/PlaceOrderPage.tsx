@@ -8,7 +8,8 @@ import {
   ArrowLeft, 
   CheckCircle2, 
   AlertCircle, 
-  ShoppingBag
+  ShoppingBag,
+  Download
 } from 'lucide-react';
 import { JerseyProduct, Order, CartItem } from '../types';
 import { SiteSettings } from '../types/settings';
@@ -35,6 +36,9 @@ interface PlaceOrderPageProps {
   onOrderPlaced?: (order: Order) => void;
   initialProductId?: string;
   initialSize?: string;
+  onPromptInstall?: () => void;
+  deferredPrompt?: any;
+  isStandalone?: boolean;
 }
 
 const AVAILABLE_SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
@@ -46,7 +50,10 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   onBackToStore,
   onOrderPlaced,
   initialProductId,
-  initialSize
+  initialSize,
+  onPromptInstall,
+  deferredPrompt,
+  isStandalone
 }) => {
   // Initialize items: Use initialSize if provided, otherwise default empty
   const [items, setItems] = useState<OrderItemForm[]>(() => {
@@ -523,8 +530,20 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
             </h1>
           </div>
 
-          <div className="w-12 text-right">
-            <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase">
+          <div className="flex items-center gap-2">
+            {!isStandalone && onPromptInstall && (
+              <button
+                type="button"
+                onClick={onPromptInstall}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                title="Install Place Order Shortcut on Mobile or PC"
+              >
+                <Download className="w-3 h-3 text-rose-600" />
+                <span className="hidden sm:inline">Install App</span>
+                <span className="sm:hidden">Install</span>
+              </button>
+            )}
+            <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase px-2 py-0.5 rounded-full bg-neutral-100">
               COD
             </span>
           </div>

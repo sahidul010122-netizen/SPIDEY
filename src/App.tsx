@@ -68,8 +68,8 @@ export default function App() {
         return 'admin';
       }
       
-      // 3. If launched from standalone PWA icon on root with view=admin
-      if (isPwaStandalone() && search.includes('view=admin')) {
+      // 3. If launched from standalone PWA icon on root or admin shortcut
+      if (isPwaStandalone() && !search.includes('view=showcase') && !search.includes('view=order')) {
         return 'admin';
       }
     }
@@ -160,6 +160,27 @@ export default function App() {
       return DEFAULT_SITE_SETTINGS;
     }
   });
+
+  // Dynamically synchronize PWA manifest and title to current active view
+  useEffect(() => {
+    try {
+      const manifestEl = document.getElementById('app-manifest') || document.querySelector('link[rel="manifest"]');
+      const appleTitle = document.getElementById('apple-app-title') || document.querySelector('meta[name="apple-mobile-web-app-title"]');
+      if (currentView === 'order') {
+        if (manifestEl) manifestEl.setAttribute('href', '/manifest-placeorder.json');
+        if (appleTitle) appleTitle.setAttribute('content', 'Spidey Place Order');
+        document.title = 'Spidey Place Order';
+      } else if (currentView === 'admin') {
+        if (manifestEl) manifestEl.setAttribute('href', '/manifest-admin.json');
+        if (appleTitle) appleTitle.setAttribute('content', 'Spidey Admin');
+        document.title = 'Spidey Admin Dashboard';
+      } else {
+        if (manifestEl) manifestEl.setAttribute('href', '/manifest-admin.json');
+        if (appleTitle) appleTitle.setAttribute('content', 'Spidey Admin');
+        document.title = siteSettings.storeName || 'Spidey Jersey';
+      }
+    } catch (e) {}
+  }, [currentView, siteSettings.storeName]);
 
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
     try {
@@ -691,6 +712,9 @@ export default function App() {
             initialSize={selectedOrderSize}
             currency={currency}
             siteSettings={siteSettings}
+            onPromptInstall={handlePromptInstall}
+            deferredPrompt={deferredPrompt}
+            isStandalone={isStandalone}
             onBackToStore={() => {
               setSelectedOrderProductId(undefined);
               setSelectedOrderSize(undefined);
