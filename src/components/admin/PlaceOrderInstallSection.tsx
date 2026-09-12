@@ -25,13 +25,16 @@ export const PlaceOrderInstallSection: React.FC<PlaceOrderInstallSectionProps> =
 }) => {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
-  // Dedicated Official Link as requested by user
-  const officialUrl = 'https://spyderc.site/placeorder';
-  
-  // Current host fallback for live preview / local testing
+  // Dedicated Official Link (Dynamic based on current domain, e.g. spideyjersey.site or spyderc.site)
   const currentHostUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/placeorder` 
-    : officialUrl;
+    : 'https://spideyjersey.site/placeorder';
+
+  const officialUrl = (typeof window !== 'undefined' && window.location.hostname.includes('spideyjersey.site'))
+    ? 'https://spideyjersey.site/placeorder'
+    : (typeof window !== 'undefined' && window.location.hostname.includes('spyderc.site'))
+      ? 'https://spyderc.site/placeorder'
+      : currentHostUrl;
 
   const handleCopy = (url: string, label: string) => {
     navigator.clipboard.writeText(url);
@@ -81,7 +84,7 @@ export const PlaceOrderInstallSection: React.FC<PlaceOrderInstallSectionProps> =
                 অফিসিয়াল ডেডিকেটেড লিঙ্ক (Production Domain)
               </span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 font-bold">
-                spyderc.site
+                {typeof window !== 'undefined' ? window.location.hostname : 'spideyjersey.site'}
               </span>
             </div>
             

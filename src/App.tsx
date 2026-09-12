@@ -34,12 +34,28 @@ export default function App() {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
       const hash = window.location.hash.toLowerCase();
-      
-      // If launched from standalone PWA icon, open Admin directly as requested
-      if (isPwaStandalone() && !search.includes('view=showcase') && !search.includes('view=order')) {
-        return 'admin';
+
+      // 1. Check for Place Order first (via path, query param, or hash)
+      if (
+        path === '/place-order' || 
+        path.startsWith('/place-order') || 
+        path === '/placeorder' || 
+        path.startsWith('/placeorder') || 
+        path === '/order' || 
+        path.startsWith('/order') || 
+        search.includes('view=order') || 
+        search.includes('page=order') || 
+        search.includes('placeorder') || 
+        search.includes('place-order') ||
+        hash === '#/order' || 
+        hash === '#/place-order' ||
+        hash === '#/placeorder' ||
+        hash.includes('placeorder')
+      ) {
+        return 'order';
       }
 
+      // 2. Check for Admin view
       if (
         path === '/admin' || 
         path.startsWith('/admin') || 
@@ -51,20 +67,10 @@ export default function App() {
       ) {
         return 'admin';
       }
-      if (
-        path === '/place-order' || 
-        path.startsWith('/place-order') || 
-        path === '/placeorder' || 
-        path.startsWith('/placeorder') || 
-        path === '/order' || 
-        path.startsWith('/order') || 
-        search.includes('view=order') || 
-        search.includes('page=order') || 
-        hash === '#/order' || 
-        hash === '#/place-order' ||
-        hash === '#/placeorder'
-      ) {
-        return 'order';
+      
+      // 3. If launched from standalone PWA icon on root with view=admin
+      if (isPwaStandalone() && search.includes('view=admin')) {
+        return 'admin';
       }
     }
     return 'showcase';
