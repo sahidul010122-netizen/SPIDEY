@@ -2250,27 +2250,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 mb-1">
-                    Price ({CURRENCY_RATES[currency]?.symbol || '৳'} {currency}) *
+                    Price (৳ BDT) *
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     required
                     value={formPrice}
                     onChange={(e) => setFormPrice(e.target.value)}
+                    placeholder="e.g. 500"
                     className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 mb-1">
-                    Original Price ({CURRENCY_RATES[currency]?.symbol || '৳'} Strikethrough)
+                    Original Price (৳ Strikethrough)
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     value={formOriginalPrice}
                     onChange={(e) => setFormOriginalPrice(e.target.value)}
+                    placeholder="e.g. 700"
                     className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono"
                   />
                 </div>

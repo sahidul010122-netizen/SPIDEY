@@ -82,14 +82,14 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedOrderProductId, setSelectedOrderProductId] = useState<string | undefined>(undefined);
   const [selectedOrderSize, setSelectedOrderSize] = useState<string | undefined>(undefined);
-  const [currency, setCurrency] = useState<CurrencyCode>(() => {
+  const [currency, setCurrency] = useState<CurrencyCode>('BDT');
+
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('orifake_currency') as CurrencyCode;
-      return saved || 'BDT';
-    } catch {
-      return 'BDT';
-    }
-  });
+      localStorage.setItem('orifake_currency', 'BDT');
+      localStorage.setItem('spidey_currency', 'BDT');
+    } catch {}
+  }, []);
 
   // PWA & Web App Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);

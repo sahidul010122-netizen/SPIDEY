@@ -98,24 +98,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           ) : null}
 
-          {/* Currency Selector */}
-          <button
-            id="nav-currency-btn"
-            onClick={() => {
-              const currencies: CurrencyCode[] = ['BDT', 'USD', 'EUR', 'GBP'];
-              const nextIdx = (currencies.indexOf(currency) + 1) % currencies.length;
-              setCurrency(currencies[nextIdx]);
-            }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-bold text-neutral-800 transition-all cursor-pointer shadow-2xs active:scale-95"
-            title={`Currency: ${currency} (${CURRENCY_RATES[currency]?.symbol || '৳'})`}
+          {/* Fixed BDT Currency Badge */}
+          <div
+            id="nav-currency-badge"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-800 shadow-2xs select-none"
+            title="All prices in Bangladeshi Taka (BDT ৳)"
           >
-            <span className="font-extrabold text-neutral-950 font-mono text-xs sm:text-sm">
-              {CURRENCY_RATES[currency]?.symbol || '৳'}
-            </span>
-            <span className="text-[10px] text-neutral-600 font-bold uppercase hidden sm:inline">
-              {currency}
-            </span>
-          </button>
+            <span className="font-extrabold text-neutral-950 font-mono text-xs sm:text-sm">৳</span>
+            <span className="text-[10px] text-neutral-600 font-bold uppercase">BDT</span>
+          </div>
 
           {/* Search Toggle */}
           <button
@@ -166,17 +157,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <X className="w-4 h-4" />
             </button>
           )}
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-            aria-label="Currency"
-            className="text-xs bg-white border border-neutral-200 rounded px-2 py-1 text-neutral-700 focus:outline-none cursor-pointer"
-          >
-            <option value="BDT">BDT (৳)</option>
-            <option value="USD">USD ($)</option>
-            <option value="EUR">EUR (€)</option>
-            <option value="GBP">GBP (£)</option>
-          </select>
         </div>
       )}
     </header>
