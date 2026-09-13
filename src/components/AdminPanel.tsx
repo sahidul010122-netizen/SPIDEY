@@ -178,6 +178,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [syncStatusNote, setSyncStatusNote] = useState<string | null>(null);
 
+  // Permanent Product Deletion Dialog State
+  const [productPendingDelete, setProductPendingDelete] = useState<JerseyProduct | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+
   // Search in Admin
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1241,8 +1245,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
 
                         <button
-                          onClick={() => onDeleteProduct(prod.id)}
-                          className="p-2 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 text-neutral-400 hover:text-rose-600 transition-colors"
+                          onClick={() => setProductPendingDelete(prod)}
+                          className="p-2 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 text-neutral-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Permanently Delete Product"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -2418,24 +2423,131 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
-                <button
-                  type="button"
-                  onClick={() => setIsProductModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 font-bold text-xs hover:bg-neutral-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={formSubmitting}
-                  className="px-5 py-2 rounded-xl bg-[#0d0f12] text-white font-bold text-xs hover:bg-neutral-800 shadow-md"
-                >
-                  {formSubmitting ? 'Saving...' : 'Save Product Drop'}
-                </button>
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-neutral-100">
+                {editingProduct ? (
+                  <button
+                    type="button"
+                    onClick={() => setProductPendingDelete(editingProduct)}
+                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Product</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsProductModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 font-bold text-xs hover:bg-neutral-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={formSubmitting}
+                    className="px-5 py-2 rounded-xl bg-[#0d0f12] text-white font-bold text-xs hover:bg-neutral-800 shadow-md cursor-pointer"
+                  >
+                    {formSubmitting ? 'Saving...' : 'Save Product Drop'}
+                  </button>
+                </div>
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Product Deletion Confirmation Dialog */}
+      {productPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-rose-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-neutral-900 leading-snug">
+                  প্রোডাক্টটি স্থায়ীভাবে ডিলিট করবেন?
+                </h3>
+                <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
+                  এই প্রোডাক্টটি ফ্রন্টএন্ড এবং ব্যাকএন্ড ডাটাবেস থেকে সম্পূর্ণ স্থায়ীভাবে মুছে ফেলা হবে। ব্রাউজারে এর কোনো ডেটা অবশিষ্ট থাকবে না।
+                </p>
+              </div>
+            </div>
+
+            {/* Target Product Summary Card */}
+            <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 flex items-center gap-3">
+              <div className="w-14 h-14 rounded-xl bg-white border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center">
+                {productPendingDelete.images?.[0] ? (
+                  <img
+                    src={productPendingDelete.images[0]}
+                    alt={productPendingDelete.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Package className="w-6 h-6 text-neutral-400" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-mono text-neutral-500 font-semibold truncate">
+                  Code: {productPendingDelete.code}
+                </div>
+                <div className="text-sm font-bold text-neutral-900 truncate">
+                  {productPendingDelete.title}
+                </div>
+                <div className="text-xs font-bold text-neutral-700">
+                  {formatPrice(productPendingDelete.price, currency)}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>একবার ডিলিট করলে এই প্রোডাক্টটি ব্যাকএন্ড ও ফ্রন্টএন্ড কোথাও থাকবে না।</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={() => setProductPendingDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                বাতিল করুন (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={async () => {
+                  setIsDeletingProduct(true);
+                  try {
+                    await onDeleteProduct(productPendingDelete.id);
+                    if (editingProduct?.id === productPendingDelete.id) {
+                      setIsProductModalOpen(false);
+                    }
+                    setProductPendingDelete(null);
+                  } finally {
+                    setIsDeletingProduct(false);
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md hover:shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingProduct ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>ডিলিট হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>হ্যাঁ, স্থায়ীভাবে ডিলিট করুন</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

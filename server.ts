@@ -25,6 +25,7 @@ const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 });
 
 const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+const DELETED_PRODUCTS_FILE = path.join(DATA_DIR, 'deleted_product_ids.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'site_settings.json');
 const CATEGORIES_FILE = path.join(DATA_DIR, 'categories.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
@@ -98,7 +99,18 @@ interface StoredImage {
 }
 
 // Initialize persistent state - Protects existing data against overwrite on deployment
+let deletedProductIds: string[] = loadJsonFile<string[]>(DELETED_PRODUCTS_FILE, []);
 let products: JerseyProduct[] = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, [...INITIAL_JERSEYS]);
+
+// Purge any products that were permanently deleted
+if (deletedProductIds.length > 0) {
+  const delSet = new Set(deletedProductIds);
+  const beforeLen = products.length;
+  products = products.filter((p) => !delSet.has(p.id) && !delSet.has(p.code));
+  if (products.length !== beforeLen) {
+    saveJsonFile(PRODUCTS_FILE, products);
+  }
+}
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
 let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
@@ -129,6 +141,7 @@ let steadfastConfig: SteadfastConfig = loadJsonFile<SteadfastConfig>(STEADFAST_C
 
 // Ensure all master persistent files exist physically on disk immediately
 if (!fs.existsSync(PRODUCTS_FILE)) saveJsonFile(PRODUCTS_FILE, products);
+if (!fs.existsSync(DELETED_PRODUCTS_FILE)) saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
 if (!fs.existsSync(SETTINGS_FILE)) saveJsonFile(SETTINGS_FILE, siteSettings);
 if (!fs.existsSync(CATEGORIES_FILE)) saveJsonFile(CATEGORIES_FILE, categoryItems);
 if (!fs.existsSync(ORDERS_FILE)) saveJsonFile(ORDERS_FILE, orders);
@@ -359,7 +372,13 @@ async function startServer() {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
 
-    res.json({ success: true, count: list.length, products: list });
+    // Ensure deleted products are never returned
+    if (deletedProductIds.length > 0) {
+      const delSet = new Set(deletedProductIds);
+      list = list.filter((p) => !delSet.has(p.id) && !delSet.has(p.code));
+    }
+
+    res.json({ success: true, count: list.length, products: list, deletedProductIds });
   });
 
   // Get Single Product
@@ -415,13 +434,17 @@ async function startServer() {
     };
 
     products.unshift(newProduct);
+    // If this id or code was previously deleted, remove it from tombstone
+    deletedProductIds = deletedProductIds.filter(id => id !== newProduct.id && id !== newProduct.code);
+    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
     saveJsonFile(PRODUCTS_FILE, products);
     res.status(201).json({ success: true, product: newProduct });
   });
 
   // Update Product (Admin)
   app.put('/api/products/:id', (req: Request, res: Response) => {
-    const index = products.findIndex((p) => p.id === req.params.id);
+    const targetId = decodeURIComponent(String(req.params.id || '').trim());
+    const index = products.findIndex((p) => p.id === targetId || p.code === targetId);
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -445,15 +468,41 @@ async function startServer() {
     res.json({ success: true, product: updated });
   });
 
-  // Delete Product (Admin)
+  // Delete Product Permanently (Admin)
   app.delete('/api/products/:id', (req: Request, res: Response) => {
-    const index = products.findIndex((p) => p.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
+    const targetId = decodeURIComponent(String(req.params.id || '').trim());
+    const index = products.findIndex((p) => p.id === targetId || p.code === targetId);
+    
+    let deleted: JerseyProduct | null = null;
+    if (index !== -1) {
+      deleted = products.splice(index, 1)[0];
     }
-    const deleted = products.splice(index, 1)[0];
+
+    // Always tombstone the targetId so it never resurrects
+    if (targetId && !deletedProductIds.includes(targetId)) {
+      deletedProductIds.push(targetId);
+    }
+    if (deleted) {
+      if (deleted.id && !deletedProductIds.includes(deleted.id)) {
+        deletedProductIds.push(deleted.id);
+      }
+      if (deleted.code && !deletedProductIds.includes(deleted.code)) {
+        deletedProductIds.push(deleted.code);
+      }
+    }
+
+    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
     saveJsonFile(PRODUCTS_FILE, products);
-    res.json({ success: true, message: 'Product deleted', product: deleted });
+
+    // Return the clean live product catalog directly
+    const cleanProducts = products.filter(p => !deletedProductIds.includes(p.id) && !deletedProductIds.includes(p.code));
+    res.json({
+      success: true,
+      message: 'Product permanently deleted',
+      product: deleted,
+      products: cleanProducts,
+      deletedProductIds
+    });
   });
 
   // Image Upload Handler (Emulating Cloudflare R2 bucket binding MY_BUCKET.put)
@@ -676,7 +725,14 @@ async function startServer() {
     // Merge client products that aren't on the server
     if (Array.isArray(clientProducts) && clientProducts.length > 0) {
       for (const cp of clientProducts) {
-        const exists = products.find(p => p.id === cp.id || p.code === cp.code);
+        // STRICT GUARD: If product was deleted, NEVER rehydrate or resurrect it
+        if (
+          deletedProductIds.includes(cp.id) ||
+          (cp.code && deletedProductIds.includes(cp.code))
+        ) {
+          continue;
+        }
+        const exists = products.find(p => p.id === cp.id || (cp.code && p.code === cp.code));
         if (!exists && cp.title) {
           products.unshift(cp);
           productsUpdated = true;
@@ -1678,10 +1734,15 @@ async function startServer() {
 
   // Reset / Seed Catalog
   app.post('/api/seed', (req: Request, res: Response) => {
+    deletedProductIds = [];
     products = [...INITIAL_JERSEYS];
     categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
     siteSettings = { ...DEFAULT_SITE_SETTINGS };
-    res.json({ success: true, message: 'Store reset to initial showcase jersey catalog', count: products.length });
+    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
+    saveJsonFile(PRODUCTS_FILE, products);
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
+    saveJsonFile(SETTINGS_FILE, siteSettings);
+    res.json({ success: true, message: 'Store reset to initial showcase jersey catalog', count: products.length, products, deletedProductIds });
   });
 
   // --- Vite & Static Asset Handling ---

@@ -214,17 +214,21 @@ export default function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Product Data with LocalStorage Persistence
+  // Product Data with LocalStorage Persistence and Deleted Tombstones
   const [products, setProducts] = useState<JerseyProduct[]>(() => {
     try {
+      const deletedRaw = localStorage.getItem('spidey_deleted_product_ids');
+      const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      const delSet = new Set(deletedIds);
+
       const saved = localStorage.getItem('spidey_products') || localStorage.getItem('orifake_products');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.filter((p: any) => !delSet.has(p.id) && !delSet.has(p.code));
         }
       }
-      return INITIAL_JERSEYS;
+      return INITIAL_JERSEYS.filter((p) => !delSet.has(p.id) && !delSet.has(p.code));
     } catch {
       return INITIAL_JERSEYS;
     }
@@ -313,28 +317,33 @@ export default function App() {
     };
   }, []);
 
-  // Fetch Products, Settings, and Categories from Backend API with Persistent Rehydration
+  // Fetch Products from Backend API (Server is authoritative)
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
       if (res.ok) {
         const data = await res.json();
         if (data.products && Array.isArray(data.products)) {
-          setProducts((prev) => {
-            // Merge server products with any local custom products
-            const serverIds = new Set(data.products.map((p: any) => p.id));
-            const localOnly = prev.filter((p) => !serverIds.has(p.id) && !p.id.startsWith('orifake-'));
-            if (localOnly.length > 0) {
-              // Trigger background rehydrate to server
-              fetch('/api/sync/rehydrate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clientProducts: localOnly })
-              }).catch(() => {});
-              return [...localOnly, ...data.products];
-            }
-            return data.products;
-          });
+          // Sync server-side deleted tombstones with localStorage
+          let delSet = new Set<string>();
+          try {
+            const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_product_ids') || '[]');
+            const serverDeleted: string[] = Array.isArray(data.deletedProductIds) ? data.deletedProductIds : [];
+            const merged = Array.from(new Set([...currentDeleted, ...serverDeleted]));
+            localStorage.setItem('spidey_deleted_product_ids', JSON.stringify(merged));
+            delSet = new Set(merged);
+          } catch {}
+
+          // Filter against tombstone set to guarantee deleted products never appear
+          const cleanProducts: JerseyProduct[] = data.products.filter(
+            (p: JerseyProduct) => !delSet.has(p.id) && !delSet.has(p.code)
+          );
+
+          setProducts(cleanProducts);
+          try {
+            localStorage.setItem('spidey_products', JSON.stringify(cleanProducts));
+            localStorage.removeItem('orifake_products');
+          } catch {}
         }
       }
     } catch (err) {
@@ -494,40 +503,95 @@ export default function App() {
   };
 
   const handleDeleteProduct = async (id: string): Promise<boolean> => {
+    // 1. Identify product target id & code
+    const target = products.find((p) => p.id === id || p.code === id);
+    const targetId = target?.id || id;
+    const targetCode = target?.code;
+
+    // 2. Immediate optimistic state update
+    const updatedProducts = products.filter(
+      (p) => p.id !== targetId && (!targetCode || p.code !== targetCode)
+    );
+    setProducts(updatedProducts);
+
+    const updatedWishlist = wishlist.filter(
+      (p) => p.id !== targetId && (!targetCode || p.code !== targetCode)
+    );
+    setWishlist(updatedWishlist);
+
+    // 3. Immediately update LocalStorage tombstones and datasets
     try {
-      const res = await fetch(`/api/products/${id}`, {
+      const currentDeleted: string[] = JSON.parse(
+        localStorage.getItem('spidey_deleted_product_ids') || '[]'
+      );
+      const newDeleted = Array.from(
+        new Set([...currentDeleted, targetId, ...(targetCode ? [targetCode] : [])])
+      );
+      localStorage.setItem('spidey_deleted_product_ids', JSON.stringify(newDeleted));
+      localStorage.setItem('spidey_products', JSON.stringify(updatedProducts));
+      localStorage.setItem('spidey_wishlist', JSON.stringify(updatedWishlist));
+      localStorage.removeItem('orifake_products');
+    } catch (e) {
+      console.warn('LocalStorage deletion sync error:', e);
+    }
+
+    // 4. Send permanent delete request to backend
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(targetId)}`, {
         method: 'DELETE'
       });
       const data = await res.json();
       if (data.success) {
-        setProducts((prev) => prev.filter((p) => p.id !== id));
-        showToast('Product removed from catalog');
+        if (Array.isArray(data.products)) {
+          setProducts(data.products);
+          localStorage.setItem('spidey_products', JSON.stringify(data.products));
+        }
+        showToast('প্রোডাক্টটি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে ডিলিট করা হয়েছে');
         fetchStats();
         return true;
+      } else if (targetCode && targetCode !== targetId) {
+        // Fallback: try deleting by code if id differed
+        const res2 = await fetch(`/api/products/${encodeURIComponent(targetCode)}`, {
+          method: 'DELETE'
+        });
+        const data2 = await res2.json();
+        if (data2.success && Array.isArray(data2.products)) {
+          setProducts(data2.products);
+          localStorage.setItem('spidey_products', JSON.stringify(data2.products));
+          showToast('প্রোডাক্টটি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে ডিলিট করা হয়েছে');
+          fetchStats();
+          return true;
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.error('API product deletion error:', err);
     }
-    return false;
+    showToast('প্রোডাক্টটি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে ডিলিট করা হয়েছে');
+    return true;
   };
 
   const handleResetCatalog = async () => {
     try {
+      localStorage.removeItem('spidey_deleted_product_ids');
+      localStorage.removeItem('spidey_products');
+      localStorage.removeItem('orifake_products');
       const res = await fetch('/api/seed', { method: 'POST' });
       const data = await res.json();
-      if (data.success) {
-        setProducts(INITIAL_JERSEYS);
+      if (data.success && Array.isArray(data.products)) {
+        setProducts(data.products);
         setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
         setSiteSettings(DEFAULT_SITE_SETTINGS);
         showToast('Store reset to original demo setup!');
         fetchStats();
+        return;
       }
     } catch (err) {
-      setProducts(INITIAL_JERSEYS);
-      setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
-      setSiteSettings(DEFAULT_SITE_SETTINGS);
-      showToast('Store reset to original demo setup!');
+      // Fallback
     }
+    setProducts(INITIAL_JERSEYS);
+    setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
+    setSiteSettings(DEFAULT_SITE_SETTINGS);
+    showToast('Store reset to original demo setup!');
   };
 
   // CMS Settings Actions (Sync with R2 backend)
