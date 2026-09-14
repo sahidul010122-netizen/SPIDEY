@@ -184,8 +184,22 @@ export default function App() {
 
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('orifake_categories') || localStorage.getItem('spidey_categories');
-      return saved ? JSON.parse(saved) : CATEGORY_CAROUSEL_ITEMS;
+      const deletedRaw = localStorage.getItem('spidey_deleted_category_ids');
+      const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      const delSet = new Set(deletedIds.map((s) => String(s).toLowerCase()));
+
+      const saved = localStorage.getItem('spidey_categories') || localStorage.getItem('orifake_categories');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter(
+            (c: any) => !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase())
+          );
+        }
+      }
+      return CATEGORY_CAROUSEL_ITEMS.filter(
+        (c) => !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase())
+      );
     } catch {
       return CATEGORY_CAROUSEL_ITEMS;
     }
@@ -378,19 +392,25 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.categories && Array.isArray(data.categories)) {
-          setCategoryItems((prev) => {
-            const serverCatIds = new Set(data.categories.map((c: any) => c.id));
-            const localOnlyCats = prev.filter((c) => !serverCatIds.has(c.id));
-            if (localOnlyCats.length > 0) {
-              fetch('/api/sync/rehydrate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clientCategories: localOnlyCats })
-              }).catch(() => {});
-              return [...data.categories, ...localOnlyCats];
-            }
-            return data.categories;
-          });
+          let delSet = new Set<string>();
+          try {
+            const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_category_ids') || '[]');
+            const serverDeleted: string[] = Array.isArray(data.deletedCategoryIds) ? data.deletedCategoryIds : [];
+            const merged = Array.from(new Set([...currentDeleted, ...serverDeleted]));
+            localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(merged));
+            delSet = new Set(merged.map((s) => String(s).toLowerCase()));
+          } catch {}
+
+          const cleanCategories: CategoryItem[] = data.categories.filter(
+            (c: CategoryItem) =>
+              !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase())
+          );
+
+          setCategoryItems(cleanCategories);
+          try {
+            localStorage.setItem('spidey_categories', JSON.stringify(cleanCategories));
+            localStorage.removeItem('orifake_categories');
+          } catch {}
         }
       }
     } catch (err) {
@@ -429,9 +449,13 @@ export default function App() {
     const selCat = (selectedCategory || 'all').toLowerCase();
     const query = searchQuery.trim().toLowerCase();
 
+    const selCatObj = categoryItems.find(
+      (c) => c.id.toLowerCase() === selCat || c.name.toLowerCase() === selCat
+    );
     const matchesCategory =
       selCat === 'all' ||
       pCat === selCat ||
+      (selCatObj && (pCat === selCatObj.id.toLowerCase() || pCat === selCatObj.name.toLowerCase())) ||
       (selCat === 'kits' && (pCat.includes('madrid') || pCat.includes('barcelona') || pCat.includes('manchester')));
 
     const matchesSearch =
@@ -573,13 +597,16 @@ export default function App() {
   const handleResetCatalog = async () => {
     try {
       localStorage.removeItem('spidey_deleted_product_ids');
+      localStorage.removeItem('spidey_deleted_category_ids');
       localStorage.removeItem('spidey_products');
       localStorage.removeItem('orifake_products');
+      localStorage.removeItem('spidey_categories');
+      localStorage.removeItem('orifake_categories');
       const res = await fetch('/api/seed', { method: 'POST' });
       const data = await res.json();
       if (data.success && Array.isArray(data.products)) {
         setProducts(data.products);
-        setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
+        setCategoryItems(Array.isArray(data.categories) ? data.categories : CATEGORY_CAROUSEL_ITEMS);
         setSiteSettings(DEFAULT_SITE_SETTINGS);
         showToast('Store reset to original demo setup!');
         fetchStats();
@@ -609,14 +636,39 @@ export default function App() {
         setSiteSettings(data.settings);
       }
     } catch (e) {
-      console.warn('Failed to sync settings with R2:', e);
+      console.warn('Failed to sync settings with backend:', e);
     }
     showToast('Store banner & settings updated live across all devices!');
   };
 
   const handleAddCategory = async (cat: CategoryItem) => {
-    const updated = [...categoryItems, cat];
+    // 1. Un-tombstone if it was previously deleted
+    try {
+      const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_category_ids') || '[]');
+      const filtered = currentDeleted.filter(
+        (d) =>
+          String(d).toLowerCase() !== String(cat.id).toLowerCase() &&
+          String(d).toLowerCase() !== String(cat.name).toLowerCase()
+      );
+      localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(filtered));
+    } catch {}
+
+    // 2. Optimistically update state
+    const updated = [
+      ...categoryItems.filter(
+        (c) =>
+          String(c.id).toLowerCase() !== String(cat.id).toLowerCase() &&
+          String(c.name).toLowerCase() !== String(cat.name).toLowerCase()
+      ),
+      cat
+    ];
     setCategoryItems(updated);
+    try {
+      localStorage.setItem('spidey_categories', JSON.stringify(updated));
+      localStorage.removeItem('orifake_categories');
+    } catch {}
+
+    // 3. Persist to server
     try {
       const res = await fetch('/api/categories', {
         method: 'POST',
@@ -624,50 +676,107 @@ export default function App() {
         body: JSON.stringify(cat)
       });
       const data = await res.json();
-      if (data.success && data.categories) {
+      if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
+        localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
       }
     } catch (e) {
-      console.warn('Failed to sync category with R2:', e);
+      console.warn('Failed to sync category with server:', e);
     }
-    showToast(`Category "${cat.name}" saved & synced!`);
+    showToast(`ক্যাটাগরি "${cat.name}" সফলভাবে যুক্ত হয়েছে!`);
     fetchStats();
   };
 
   const handleUpdateCategory = async (id: string, updated: Partial<CategoryItem>) => {
-    const nextCategories = categoryItems.map((c) => (c.id === id ? { ...c, ...updated } : c));
+    const rawId = String(id || '').trim();
+    // 1. Optimistic state update
+    const nextCategories = categoryItems.map((c) =>
+      c.id === rawId || c.id.toLowerCase() === rawId.toLowerCase() || c.name.toLowerCase() === rawId.toLowerCase()
+        ? { ...c, ...updated }
+        : c
+    );
     setCategoryItems(nextCategories);
     try {
-      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+      localStorage.setItem('spidey_categories', JSON.stringify(nextCategories));
+      localStorage.removeItem('orifake_categories');
+    } catch {}
+
+    // 2. Persist to server
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(rawId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated)
       });
       const data = await res.json();
-      if (data.success && data.categories) {
+      if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
+        localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
       }
+      fetchProducts();
     } catch (e) {
-      console.warn('Failed to update category in R2:', e);
+      console.warn('Failed to update category on server:', e);
     }
-    showToast('Category updated live across all devices!');
+    showToast('ক্যাটাগরি সফলভাবে আপডেট করা হয়েছে!');
   };
 
   const handleDeleteCategory = async (id: string) => {
-    const nextCategories = categoryItems.filter((c) => c.id !== id);
+    const rawId = String(id || '').trim();
+    const target = categoryItems.find(
+      (c) =>
+        c.id === rawId ||
+        c.id.toLowerCase() === rawId.toLowerCase() ||
+        c.name.toLowerCase() === rawId.toLowerCase()
+    );
+    const targetId = target?.id || rawId;
+    const targetName = target?.name;
+
+    // 1. Optimistic removal from UI state immediately
+    const nextCategories = categoryItems.filter(
+      (c) =>
+        c.id.toLowerCase() !== targetId.toLowerCase() &&
+        (!targetName || c.name.toLowerCase() !== targetName.toLowerCase())
+    );
     setCategoryItems(nextCategories);
+
+    // If currently filtered by this category, reset to 'all'
+    if (
+      selectedCategory.toLowerCase() === targetId.toLowerCase() ||
+      (targetName && selectedCategory.toLowerCase() === targetName.toLowerCase())
+    ) {
+      setSelectedCategory('all');
+    }
+
+    // 2. Mark in local storage tombstone list immediately
     try {
-      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+      const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_category_ids') || '[]');
+      const newDeleted = Array.from(
+        new Set([
+          ...currentDeleted,
+          targetId,
+          targetId.toLowerCase(),
+          ...(targetName ? [targetName, targetName.toLowerCase()] : [])
+        ])
+      );
+      localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(newDeleted));
+      localStorage.setItem('spidey_categories', JSON.stringify(nextCategories));
+      localStorage.removeItem('orifake_categories');
+    } catch {}
+
+    // 3. Persist deletion on backend server
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(targetId)}`, {
         method: 'DELETE'
       });
       const data = await res.json();
-      if (data.success && data.categories) {
+      if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
+        localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
       }
     } catch (e) {
-      console.warn('Failed to delete category in R2:', e);
+      console.warn('Failed to delete category on server:', e);
     }
-    showToast('Category removed from store.');
+    showToast('ক্যাটাগরি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে মুছে ফেলা হয়েছে');
     fetchStats();
   };
 

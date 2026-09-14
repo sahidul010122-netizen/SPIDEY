@@ -1,0 +1,51 @@
+[
+  {
+    "id": "EDC",
+    "name": "EDC",
+    "subtitle": "Wallets & Gear",
+    "image": "/images/cat_edc_wallet_1787668177890.jpg",
+    "tag": "Drop 01"
+  },
+  {
+    "id": "Deskmat",
+    "name": "Deskmat",
+    "subtitle": "Studio Accessories",
+    "image": "/images/cat_deskmat_tech_1787668204562.jpg",
+    "tag": "Drop 02"
+  },
+  {
+    "id": "Kits",
+    "name": "Pro Kits",
+    "subtitle": "Matchwear Issues",
+    "image": "/images/cat_jersey_kit_1787668237922.jpg",
+    "tag": "Vault"
+  },
+  {
+    "id": "Real Madrid",
+    "name": "Real Madrid",
+    "subtitle": "24/25 Champions",
+    "image": "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80",
+    "tag": "La Liga"
+  },
+  {
+    "id": "Barcelona",
+    "name": "Barcelona",
+    "subtitle": "Cyber Blaugrana",
+    "image": "https://images.unsplash.com/photo-1518091043644-c1d4457512c6?auto=format&fit=crop&w=800&q=80",
+    "tag": "Limited"
+  },
+  {
+    "id": "Manchester United",
+    "name": "Man United",
+    "subtitle": "Retro Remastered",
+    "image": "https://images.unsplash.com/photo-1562771242-a02d9090c90c?auto=format&fit=crop&w=800&q=80",
+    "tag": "Heritage"
+  },
+  {
+    "id": "Special Editions",
+    "name": "Special",
+    "subtitle": "Cyber & Anime",
+    "image": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80",
+    "tag": "Exclusive"
+  }
+]

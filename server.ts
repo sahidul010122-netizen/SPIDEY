@@ -28,6 +28,7 @@ const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
 const DELETED_PRODUCTS_FILE = path.join(DATA_DIR, 'deleted_product_ids.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'site_settings.json');
 const CATEGORIES_FILE = path.join(DATA_DIR, 'categories.json');
+const DELETED_CATEGORIES_FILE = path.join(DATA_DIR, 'deleted_category_ids.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const STEADFAST_CONFIG_FILE = path.join(DATA_DIR, 'steadfast_config.json');
 const IMAGES_FILE = path.join(DATA_DIR, 'images.json');
@@ -114,6 +115,15 @@ if (deletedProductIds.length > 0) {
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
 let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
+let deletedCategoryIds: string[] = loadJsonFile<string[]>(DELETED_CATEGORIES_FILE, []);
+if (deletedCategoryIds.length > 0) {
+  const delSet = new Set(deletedCategoryIds);
+  const beforeLen = categoryItems.length;
+  categoryItems = categoryItems.filter((c) => !delSet.has(c.id) && !delSet.has(c.name));
+  if (categoryItems.length !== beforeLen) {
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
+  }
+}
 let adminPasscode = 'spidey2026';
 
 // Persistent Steadfast Configuration
@@ -144,6 +154,7 @@ if (!fs.existsSync(PRODUCTS_FILE)) saveJsonFile(PRODUCTS_FILE, products);
 if (!fs.existsSync(DELETED_PRODUCTS_FILE)) saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
 if (!fs.existsSync(SETTINGS_FILE)) saveJsonFile(SETTINGS_FILE, siteSettings);
 if (!fs.existsSync(CATEGORIES_FILE)) saveJsonFile(CATEGORIES_FILE, categoryItems);
+if (!fs.existsSync(DELETED_CATEGORIES_FILE)) saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
 if (!fs.existsSync(ORDERS_FILE)) saveJsonFile(ORDERS_FILE, orders);
 if (!fs.existsSync(STEADFAST_CONFIG_FILE)) saveJsonFile(STEADFAST_CONFIG_FILE, steadfastConfig);
 
@@ -293,7 +304,11 @@ async function startServer() {
 
   // --- Categories (Carousels, Logos, Subtitles) ---
   app.get('/api/categories', (req: Request, res: Response) => {
-    res.json({ success: true, categories: categoryItems });
+    if (deletedCategoryIds.length > 0) {
+      const delSet = new Set(deletedCategoryIds);
+      categoryItems = categoryItems.filter(c => !delSet.has(c.id) && !delSet.has(c.name));
+    }
+    res.json({ success: true, categories: categoryItems, deletedCategoryIds });
   });
 
   app.post('/api/categories', (req: Request, res: Response) => {
@@ -301,36 +316,103 @@ async function startServer() {
     if (Array.isArray(body)) {
       categoryItems = body;
       saveJsonFile(CATEGORIES_FILE, categoryItems);
-      return res.json({ success: true, categories: categoryItems });
-    } else if (body && body.id && body.name) {
-      const idx = categoryItems.findIndex(c => c.id === body.id);
-      if (idx >= 0) {
-        categoryItems[idx] = { ...categoryItems[idx], ...body };
-      } else {
-        categoryItems.push(body);
+      return res.json({ success: true, categories: categoryItems, deletedCategoryIds });
+    } else if (body && body.name) {
+      const name = String(body.name).trim();
+      const rawId = body.id ? String(body.id).trim() : '';
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const finalId = rawId || slug || `cat-${Date.now().toString(36)}`;
+
+      const newCategory: CategoryItem = {
+        id: finalId,
+        name,
+        subtitle: body.subtitle !== undefined ? String(body.subtitle).trim() : '',
+        image: body.image ? String(body.image).trim() : 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+        tag: body.tag !== undefined ? String(body.tag).trim() : 'Category'
+      };
+
+      // Un-tombstone if it was previously deleted
+      if (deletedCategoryIds.length > 0) {
+        deletedCategoryIds = deletedCategoryIds.filter(d => d !== newCategory.id && d !== newCategory.name);
+        saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
       }
+
+      const idx = categoryItems.findIndex(
+        c => c.id.toLowerCase() === newCategory.id.toLowerCase() || c.name.toLowerCase() === newCategory.name.toLowerCase()
+      );
+
+      if (idx >= 0) {
+        categoryItems[idx] = { ...categoryItems[idx], ...newCategory };
+      } else {
+        categoryItems.push(newCategory);
+      }
+
       saveJsonFile(CATEGORIES_FILE, categoryItems);
-      return res.status(201).json({ success: true, categories: categoryItems, category: body });
+      return res.status(201).json({ success: true, categories: categoryItems, category: newCategory, deletedCategoryIds });
     }
-    res.status(400).json({ success: false, message: 'Invalid category payload' });
+    res.status(400).json({ success: false, message: 'Category name is required' });
   });
 
   app.put('/api/categories/:id', (req: Request, res: Response) => {
-    const id = req.params.id;
-    const idx = categoryItems.findIndex(c => c.id === id);
+    const rawId = decodeURIComponent(String(req.params.id || '').trim());
+    const idx = categoryItems.findIndex(
+      c => c.id === rawId || c.id.toLowerCase() === rawId.toLowerCase() || c.name.toLowerCase() === rawId.toLowerCase()
+    );
     if (idx === -1) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
-    categoryItems[idx] = { ...categoryItems[idx], ...req.body };
+
+    const oldCategory = categoryItems[idx];
+    const updatedCategory: CategoryItem = {
+      ...oldCategory,
+      ...req.body,
+      id: req.body.id ? String(req.body.id).trim() : oldCategory.id,
+      name: req.body.name ? String(req.body.name).trim() : oldCategory.name,
+      subtitle: req.body.subtitle !== undefined ? String(req.body.subtitle).trim() : oldCategory.subtitle,
+      image: req.body.image ? String(req.body.image).trim() : oldCategory.image,
+      tag: req.body.tag !== undefined ? String(req.body.tag).trim() : oldCategory.tag,
+    };
+
+    categoryItems[idx] = updatedCategory;
     saveJsonFile(CATEGORIES_FILE, categoryItems);
-    res.json({ success: true, category: categoryItems[idx], categories: categoryItems });
+
+    // If category name changed, update products that belong to this category
+    if (req.body.name && req.body.name !== oldCategory.name) {
+      let prodsUpdated = false;
+      products = products.map((p) => {
+        if (p.category.toLowerCase() === oldCategory.name.toLowerCase() || p.category.toLowerCase() === oldCategory.id.toLowerCase()) {
+          prodsUpdated = true;
+          return { ...p, category: updatedCategory.name };
+        }
+        return p;
+      });
+      if (prodsUpdated) {
+        saveJsonFile(PRODUCTS_FILE, products);
+      }
+    }
+
+    res.json({ success: true, category: updatedCategory, categories: categoryItems, deletedCategoryIds });
   });
 
   app.delete('/api/categories/:id', (req: Request, res: Response) => {
-    const id = req.params.id;
-    categoryItems = categoryItems.filter(c => c.id !== id);
+    const rawId = decodeURIComponent(String(req.params.id || '').trim());
+    const target = categoryItems.find(
+      c => c.id === rawId || c.id.toLowerCase() === rawId.toLowerCase() || c.name.toLowerCase() === rawId.toLowerCase()
+    );
+
+    if (target) {
+      categoryItems = categoryItems.filter(c => c.id !== target.id && c.name !== target.name);
+      if (!deletedCategoryIds.includes(target.id)) deletedCategoryIds.push(target.id);
+      if (!deletedCategoryIds.includes(target.name)) deletedCategoryIds.push(target.name);
+    } else {
+      categoryItems = categoryItems.filter(c => c.id !== rawId && c.name !== rawId);
+      if (rawId && !deletedCategoryIds.includes(rawId)) deletedCategoryIds.push(rawId);
+    }
+
+    saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
     saveJsonFile(CATEGORIES_FILE, categoryItems);
-    res.json({ success: true, message: 'Category deleted', categories: categoryItems });
+
+    res.json({ success: true, message: 'Category permanently deleted', categories: categoryItems, deletedCategoryIds });
   });
 
   // --- Products Endpoints ---
@@ -341,7 +423,12 @@ async function startServer() {
     let list = [...products];
 
     if (category && category !== 'all') {
-      list = list.filter((p) => p.category.toLowerCase() === (category as string).toLowerCase());
+      const catQuery = (category as string).toLowerCase();
+      const matchedCat = categoryItems.find(c => c.id.toLowerCase() === catQuery || c.name.toLowerCase() === catQuery);
+      list = list.filter((p) => {
+        const pCat = p.category.toLowerCase();
+        return pCat === catQuery || (matchedCat && (pCat === matchedCat.id.toLowerCase() || pCat === matchedCat.name.toLowerCase()));
+      });
     }
 
     if (search) {
@@ -746,7 +833,16 @@ async function startServer() {
     // Merge client categories that aren't on the server
     if (Array.isArray(clientCategories) && clientCategories.length > 0) {
       for (const cc of clientCategories) {
-        const exists = categoryItems.find(c => c.id === cc.id);
+        // STRICT GUARD: If category was deleted, NEVER rehydrate or resurrect it
+        if (
+          deletedCategoryIds.includes(cc.id) ||
+          deletedCategoryIds.includes(cc.name)
+        ) {
+          continue;
+        }
+        const exists = categoryItems.find(
+          c => c.id.toLowerCase() === cc.id.toLowerCase() || c.name.toLowerCase() === (cc.name || '').toLowerCase()
+        );
         if (!exists && cc.name) {
           categoryItems.push(cc);
           categoriesUpdated = true;
@@ -1735,14 +1831,24 @@ async function startServer() {
   // Reset / Seed Catalog
   app.post('/api/seed', (req: Request, res: Response) => {
     deletedProductIds = [];
+    deletedCategoryIds = [];
     products = [...INITIAL_JERSEYS];
     categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
     siteSettings = { ...DEFAULT_SITE_SETTINGS };
     saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
+    saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
     saveJsonFile(PRODUCTS_FILE, products);
     saveJsonFile(CATEGORIES_FILE, categoryItems);
     saveJsonFile(SETTINGS_FILE, siteSettings);
-    res.json({ success: true, message: 'Store reset to initial showcase jersey catalog', count: products.length, products, deletedProductIds });
+    res.json({
+      success: true,
+      message: 'Store reset to initial showcase jersey catalog',
+      count: products.length,
+      products,
+      categories: categoryItems,
+      deletedProductIds,
+      deletedCategoryIds
+    });
   });
 
   // --- Vite & Static Asset Handling ---

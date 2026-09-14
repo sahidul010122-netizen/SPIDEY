@@ -182,6 +182,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [productPendingDelete, setProductPendingDelete] = useState<JerseyProduct | null>(null);
   const [isDeletingProduct, setIsDeletingProduct] = useState(false);
 
+  // Permanent Category Deletion Dialog State
+  const [categoryPendingDelete, setCategoryPendingDelete] = useState<CategoryItem | null>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+
   // Search in Admin
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -246,7 +250,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingCatId(null);
     setCatName('');
     setCatSubtitle('');
-    setCatImage('/images/cat_edc_wallet_1787668177890.jpg');
+    setCatImage('https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80');
     setCatTag('Drop');
     setIsCatModalOpen(true);
   };
@@ -255,7 +259,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingCatId(cat.id);
     setCatName(cat.name);
     setCatSubtitle(cat.subtitle || '');
-    setCatImage(cat.image);
+    setCatImage(cat.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80');
     setCatTag(cat.tag || '');
     setIsCatModalOpen(true);
   };
@@ -268,17 +272,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       onUpdateCategory(editingCatId, {
         name: catName.trim(),
         subtitle: catSubtitle.trim(),
-        image: catImage.trim() || '/images/cat_edc_wallet_1787668177890.jpg',
+        image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
         tag: catTag.trim()
       });
     } else {
-      const newId = catName.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const slug = catName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const newId = slug || `cat-${Date.now().toString(36)}`;
       onAddCategory({
         id: newId,
         name: catName.trim(),
         subtitle: catSubtitle.trim(),
-        image: catImage.trim() || '/images/cat_edc_wallet_1787668177890.jpg',
-        tag: catTag.trim()
+        image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+        tag: catTag.trim() || 'Category'
       });
     }
     setIsCatModalOpen(false);
@@ -1080,9 +1085,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       {/* Category Logo/Thumbnail */}
                       <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden">
                         <img
-                          src={cat.image}
+                          src={cat.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
                           alt={cat.name}
                           referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
+                          }}
                           className="w-full h-full object-cover rounded-lg"
                         />
                       </div>
@@ -1128,15 +1136,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <span>Edit</span>
                       </button>
 
-                      {categories.length > 1 && (
-                        <button
-                          onClick={() => onDeleteCategory(cat.id)}
-                          className="p-2 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 text-neutral-400 hover:text-rose-600 transition-colors"
-                          title="Delete Category"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setCategoryPendingDelete(cat)}
+                        className="p-2 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 text-neutral-400 hover:text-rose-600 transition-colors cursor-pointer"
+                        title="Delete Category"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -2148,20 +2155,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
-                <button
-                  type="button"
-                  onClick={() => setIsCatModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 font-bold text-xs hover:bg-neutral-200"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#0d0f12] text-white font-bold text-xs hover:bg-neutral-800 shadow-md"
-                >
-                  Save Category
-                </button>
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-neutral-100">
+                {editingCatId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cat = categories.find((c) => c.id === editingCatId);
+                      if (cat) setCategoryPendingDelete(cat);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Category</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCatModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 font-bold text-xs hover:bg-neutral-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-[#0d0f12] text-white font-bold text-xs hover:bg-neutral-800 shadow-md cursor-pointer"
+                  >
+                    Save Category
+                  </button>
+                </div>
               </div>
             </form>
 
@@ -2536,6 +2560,98 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md hover:shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isDeletingProduct ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>ডিলিট হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>হ্যাঁ, স্থায়ীভাবে ডিলিট করুন</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Category Deletion Confirmation Dialog */}
+      {categoryPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-rose-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-neutral-900 leading-snug">
+                  ক্যাটাগরি স্থায়ীভাবে ডিলিট করবেন?
+                </h3>
+                <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
+                  এই ক্যাটাগরি ফ্রন্টএন্ড এবং ব্যাকএন্ড ডাটাবেস থেকে স্থায়ীভাবে মুছে ফেলা হবে। হোমপেজ ও ফিল্টার থেকে এটি সাথে সাথে অপসারিত হবে।
+                </p>
+              </div>
+            </div>
+
+            {/* Target Category Summary Card */}
+            <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 flex items-center gap-3">
+              <div className="w-14 h-14 rounded-xl bg-white border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center p-1">
+                <img
+                  src={categoryPendingDelete.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
+                  alt={categoryPendingDelete.name}
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
+                  }}
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-mono text-neutral-500 font-semibold truncate">
+                  ID: {categoryPendingDelete.id}
+                </div>
+                <div className="text-sm font-bold text-neutral-900 truncate">
+                  {categoryPendingDelete.name}
+                </div>
+                <div className="text-xs text-neutral-500 truncate">
+                  {categoryPendingDelete.subtitle || 'Category Slider Item'}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>একবার ডিলিট করলে এই ক্যাটাগরি স্থায়ীভাবে ডাটাবেস থেকে মুছে যাবে।</span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingCategory}
+                onClick={() => setCategoryPendingDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                বাতিল করুন (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingCategory}
+                onClick={async () => {
+                  setIsDeletingCategory(true);
+                  try {
+                    await onDeleteCategory(categoryPendingDelete.id);
+                    if (editingCatId === categoryPendingDelete.id) {
+                      setIsCatModalOpen(false);
+                    }
+                    setCategoryPendingDelete(null);
+                  } finally {
+                    setIsDeletingCategory(false);
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md hover:shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingCategory ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     <span>ডিলিট হচ্ছে...</span>

@@ -56,13 +56,15 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
         className="flex items-center gap-3 sm:gap-4 overflow-x-auto no-scrollbar pb-3 px-1 snap-x snap-mandatory"
       >
         {items.map((cat, idx) => {
-          const isSelected = selectedCategory.toLowerCase() === cat.id.toLowerCase();
+          const isSelected =
+            selectedCategory.toLowerCase() === cat.id.toLowerCase() ||
+            selectedCategory.toLowerCase() === cat.name.toLowerCase();
 
           return (
             <div
               key={cat.id}
               onClick={() => {
-                if (selectedCategory === cat.id) {
+                if (isSelected) {
                   onSelectCategory('all');
                 } else {
                   onSelectCategory(cat.id);
@@ -91,9 +93,12 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
               {/* Product Preview Image on Right */}
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-white/80 shrink-0 flex items-center justify-center shadow-inner">
                 <img
-                  src={cat.image}
+                  src={cat.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
                   alt={cat.name}
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
+                  }}
                   className="w-full h-full object-cover"
                 />
               </div>
