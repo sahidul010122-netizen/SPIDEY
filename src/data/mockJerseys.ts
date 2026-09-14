@@ -59,6 +59,13 @@ export const CATEGORY_CAROUSEL_ITEMS: CategoryCardData[] = [
     tag: 'Heritage'
   },
   {
+    id: 'Arsenal',
+    name: 'Arsenal',
+    subtitle: 'Gunners Collection',
+    image: 'https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=800&q=80',
+    tag: 'Premier'
+  },
+  {
     id: 'Special Editions',
     name: 'Special',
     subtitle: 'Cyber & Anime',

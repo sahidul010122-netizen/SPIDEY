@@ -302,11 +302,48 @@ async function startServer() {
     res.json({ success: true, settings: siteSettings });
   });
 
+  // Helper to sanitize and persist category images safely
+  function sanitizeCategoryImage(rawImage: any, name: string): string {
+    let img = typeof rawImage === 'string' ? rawImage.trim() : '';
+    if (!img || img.startsWith('blob:')) {
+      return 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80';
+    }
+    // If base64, save to static uploads disk automatically so categories.json stays small & fast
+    if (img.startsWith('data:image/')) {
+      try {
+        const parts = img.split(',');
+        const match = parts[0].match(/:(.*?);/);
+        const mime = match ? match[1] : 'image/jpeg';
+        const cleanData = parts[1] || '';
+        const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+        const cleanName = (name || 'cat').toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const filename = `cat_${Date.now()}_${cleanName}.${ext}`;
+        const buffer = Buffer.from(cleanData, 'base64');
+        fs.writeFileSync(path.join(PUBLIC_UPLOADS_DIR, filename), buffer);
+        try { fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer); } catch {}
+        return `/uploads/${filename}`;
+      } catch (e) {
+        console.warn('Failed to convert base64 category image:', e);
+        return 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80';
+      }
+    }
+    return img;
+  }
+
   // --- Categories (Carousels, Logos, Subtitles) ---
   app.get('/api/categories', (_req: Request, res: Response) => {
     // Always ensure in-memory state matches disk state
     if (fs.existsSync(CATEGORIES_FILE)) {
-      categoryItems = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, categoryItems);
+      const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        categoryItems = loaded;
+      } else {
+        categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+        saveJsonFile(CATEGORIES_FILE, categoryItems);
+      }
+    } else {
+      categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
     }
     res.json({ success: true, categories: categoryItems });
   });
@@ -315,31 +352,83 @@ async function startServer() {
   app.put('/api/categories', (req: Request, res: Response) => {
     const body = req.body;
     const items = Array.isArray(body) ? body : Array.isArray(body?.categories) ? body.categories : null;
-    if (!items) {
+    if (!items || !Array.isArray(items)) {
       return res.status(400).json({ success: false, message: 'Categories array is required' });
     }
-    categoryItems = items.map((c: any) => ({
-      id: String(c.id || c.name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `cat-${Date.now().toString(36)}`,
-      name: String(c.name || '').trim(),
-      subtitle: String(c.subtitle || '').trim(),
-      image: String(c.image || '').trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
-      tag: String(c.tag || 'Drop').trim()
-    })).filter((c: any) => Boolean(c.name));
+
+    const seenIds = new Set<string>();
+    categoryItems = items
+      .map((c: any) => {
+        const rawName = String(c?.name || '').trim();
+        if (!rawName) return null;
+
+        const rawId = String(c?.id || '').trim();
+        let finalId = rawId || rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        if (!finalId) finalId = `cat-${Date.now().toString(36)}`;
+
+        // Deduplicate IDs
+        let uniqueId = finalId;
+        let counter = 1;
+        while (seenIds.has(uniqueId.toLowerCase())) {
+          uniqueId = `${finalId}-${counter++}`;
+        }
+        seenIds.add(uniqueId.toLowerCase());
+
+        return {
+          id: uniqueId,
+          name: rawName,
+          subtitle: String(c?.subtitle || '').trim(),
+          image: sanitizeCategoryImage(c?.image, rawName),
+          tag: String(c?.tag || 'Drop').trim()
+        };
+      })
+      .filter((c): c is any => Boolean(c)) as CategoryItem[];
 
     saveJsonFile(CATEGORIES_FILE, categoryItems);
     res.json({ success: true, message: 'All categories successfully synchronized to disk', categories: categoryItems });
   });
 
+  // Reset categories to default setup
+  app.post('/api/categories/reset', (_req: Request, res: Response) => {
+    categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
+    try {
+      if (fs.existsSync(DELETED_CATEGORIES_FILE)) {
+        fs.unlinkSync(DELETED_CATEGORIES_FILE);
+      }
+    } catch {}
+    res.json({ success: true, message: 'Categories successfully restored to default setup', categories: categoryItems });
+  });
+
   app.post('/api/categories', (req: Request, res: Response) => {
     const body = req.body;
     if (Array.isArray(body)) {
-      categoryItems = body.map((c: any) => ({
-        id: String(c.id || c.name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `cat-${Date.now().toString(36)}`,
-        name: String(c.name || '').trim(),
-        subtitle: String(c.subtitle || '').trim(),
-        image: String(c.image || '').trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
-        tag: String(c.tag || 'Drop').trim()
-      })).filter((c: any) => Boolean(c.name));
+      const seenIds = new Set<string>();
+      categoryItems = body
+        .map((c: any) => {
+          const rawName = String(c?.name || '').trim();
+          if (!rawName) return null;
+
+          const rawId = String(c?.id || '').trim();
+          let finalId = rawId || rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+          if (!finalId) finalId = `cat-${Date.now().toString(36)}`;
+
+          let uniqueId = finalId;
+          let counter = 1;
+          while (seenIds.has(uniqueId.toLowerCase())) {
+            uniqueId = `${finalId}-${counter++}`;
+          }
+          seenIds.add(uniqueId.toLowerCase());
+
+          return {
+            id: uniqueId,
+            name: rawName,
+            subtitle: String(c?.subtitle || '').trim(),
+            image: sanitizeCategoryImage(c?.image, rawName),
+            tag: String(c?.tag || 'Drop').trim()
+          };
+        })
+        .filter((c): c is any => Boolean(c)) as CategoryItem[];
 
       saveJsonFile(CATEGORIES_FILE, categoryItems);
       return res.json({ success: true, categories: categoryItems });
@@ -353,7 +442,7 @@ async function startServer() {
         id: finalId,
         name,
         subtitle: body.subtitle !== undefined ? String(body.subtitle).trim() : '',
-        image: body.image ? String(body.image).trim() : 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+        image: sanitizeCategoryImage(body.image, name),
         tag: body.tag !== undefined ? String(body.tag).trim() : 'Drop'
       };
 
@@ -387,13 +476,14 @@ async function startServer() {
     }
 
     const oldCategory = categoryItems[idx];
+    const updatedName = req.body.name ? String(req.body.name).trim() : oldCategory.name;
     const updatedCategory: CategoryItem = {
       ...oldCategory,
       ...req.body,
       id: req.body.id ? String(req.body.id).trim() : oldCategory.id,
-      name: req.body.name ? String(req.body.name).trim() : oldCategory.name,
+      name: updatedName,
       subtitle: req.body.subtitle !== undefined ? String(req.body.subtitle).trim() : oldCategory.subtitle,
-      image: req.body.image ? String(req.body.image).trim() : oldCategory.image,
+      image: req.body.image ? sanitizeCategoryImage(req.body.image, updatedName) : oldCategory.image,
       tag: req.body.tag !== undefined ? String(req.body.tag).trim() : oldCategory.tag,
     };
 
@@ -428,8 +518,8 @@ async function startServer() {
     const targetId = target ? target.id : rawId;
 
     categoryItems = categoryItems.filter(c => {
-      const cIdLower = c.id.toLowerCase();
-      const cNameLower = c.name.toLowerCase();
+      const cIdLower = (c.id || '').toLowerCase();
+      const cNameLower = (c.name || '').toLowerCase();
       if (cIdLower === rawIdLower || cNameLower === rawIdLower) return false;
       if (target && (cIdLower === target.id.toLowerCase() || cNameLower === target.name.toLowerCase())) return false;
       return true;

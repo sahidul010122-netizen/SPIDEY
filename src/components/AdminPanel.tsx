@@ -7,7 +7,7 @@ import {
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
-  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save, RotateCcw
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -32,6 +32,7 @@ interface AdminPanelProps {
   onDeleteCategory: (id: string) => void;
   onSaveAllCategories?: (categories?: CategoryItem[]) => Promise<boolean>;
   onRefreshCategories?: () => Promise<void>;
+  onResetCategories?: () => Promise<void>;
   onLogoutAdmin: () => void;
   onViewStorefront?: () => void;
   onOpenPwaModal?: () => void;
@@ -56,6 +57,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onDeleteCategory,
   onSaveAllCategories,
   onRefreshCategories,
+  onResetCategories,
   onLogoutAdmin,
   onViewStorefront,
   onOpenPwaModal,
@@ -389,6 +391,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       await onRefreshCategories();
     } finally {
       setIsRefreshingCats(false);
+    }
+  };
+
+  const [isResettingCats, setIsResettingCats] = useState(false);
+  const handleResetCategoriesDirectly = async () => {
+    if (!onResetCategories) return;
+    if (!window.confirm('সকল ক্যাটাগরি ডিফল্ট প্রিসেটে রিস্টোর করবেন? সব টেস্ট বা অপ্রয়োজনীয় ক্যাটাগরি মুছে অফিসিয়াল ফুটবল ও স্টোর ক্যাটাগরি সেট হবে।')) return;
+    setIsResettingCats(true);
+    try {
+      await onResetCategories();
+    } finally {
+      setIsResettingCats(false);
     }
   };
 
@@ -1245,6 +1259,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingCats ? 'animate-spin' : ''}`} />
                       <span className="hidden sm:inline">রিফ্রেশ</span>
+                    </button>
+                  )}
+
+                  {onResetCategories && (
+                    <button
+                      type="button"
+                      disabled={isResettingCats}
+                      onClick={handleResetCategoriesDirectly}
+                      title="টেস্ট ও অপ্রয়োজনীয় ক্যাটাগরি মুছে দিয়ে ডিফল্ট ফুটবল ক্যাটাগরি রিস্টোর করুন"
+                      className="px-3 py-2 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isResettingCats ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">ডিফল্ট রিস্টোর</span>
                     </button>
                   )}
 
@@ -2901,7 +2928,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 onClick={async () => {
                   setIsDeletingCategory(true);
                   try {
-                    await onDeleteCategory(categoryPendingDelete.id);
+                    await onDeleteCategory(categoryPendingDelete.id || categoryPendingDelete.name);
                     if (editingCatId === categoryPendingDelete.id) {
                       setIsCatModalOpen(false);
                     }

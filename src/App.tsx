@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Heart, ShieldCheck, Check, ArrowUp, Key, Download, Lock, KeyRound, Smartphone, Eye, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
+import { Search, Heart, ShieldCheck, Check, ArrowUp, Key, Download, Lock, KeyRound, Smartphone, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle, X } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -258,12 +258,14 @@ export default function App() {
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage(msg);
+    setToastType(type);
     setTimeout(() => {
       setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 3000);
+    }, 3500);
   };
 
   // Persist products, siteSettings, categoryItems, and wishlist
@@ -730,7 +732,7 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to delete category on server:', e);
     }
-    showToast('ক্যাটাগরি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে মুছে ফেলা হয়েছে');
+    showToast('ক্যাটাগরি স্থায়ীভাবে মুছে ফেলা হয়েছে', 'success');
     fetchStats();
   };
 
@@ -743,6 +745,15 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ categories: listToSave })
       });
+      if (!res.ok) {
+        let errMsg = 'ক্যাটাগরি সেভ করতে সমস্যা হয়েছে';
+        try {
+          const errData = await res.json();
+          if (errData.message) errMsg = errData.message;
+        } catch {}
+        showToast(errMsg, 'error');
+        return false;
+      }
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
@@ -751,14 +762,42 @@ export default function App() {
           localStorage.removeItem('orifake_categories');
           localStorage.removeItem('spidey_deleted_category_ids');
         } catch {}
-        showToast('সকল ক্যাটাগরি স্থায়ীভাবে সার্ভারে সেভ হয়েছে!');
+        showToast('সকল ক্যাটাগরি স্থায়ীভাবে সার্ভারে সেভ হয়েছে!', 'success');
         return true;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to bulk save categories:', e);
-      showToast('ক্যাটাগরি সেভ করতে সমস্যা হয়েছে');
+      showToast('ক্যাটাগরি সেভ করতে সমস্যা হয়েছে (সার্ভার সংযোগ ত্রুটি)', 'error');
     }
     return false;
+  };
+
+  // Reset categories to clean default state
+  const handleResetCategories = async () => {
+    try {
+      const res = await fetch('/api/categories/reset', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.categories)) {
+          setCategoryItems(data.categories);
+          try {
+            localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+            localStorage.removeItem('orifake_categories');
+            localStorage.removeItem('spidey_deleted_category_ids');
+          } catch {}
+          showToast('সকল ক্যাটাগরি সফলভাবে ডিফল্ট অবস্থায় রিস্টোর করা হয়েছে!', 'success');
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to reset categories on server:', e);
+    }
+    setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
+    try {
+      localStorage.setItem('spidey_categories', JSON.stringify(CATEGORY_CAROUSEL_ITEMS));
+      localStorage.removeItem('orifake_categories');
+    } catch {}
+    showToast('সকল ক্যাটাগরি রিস্টোর হয়েছে!', 'success');
   };
 
   // Auth Actions with Remember Device / Auto-Login logic
@@ -967,6 +1006,7 @@ export default function App() {
               onDeleteCategory={handleDeleteCategory}
               onSaveAllCategories={handleSaveAllCategories}
               onRefreshCategories={fetchCategories}
+              onResetCategories={handleResetCategories}
               onLogoutAdmin={handleLogoutAdmin}
               onViewStorefront={() => {
                 setCurrentView('showcase');
@@ -1176,9 +1216,31 @@ export default function App() {
 
       {/* Global Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 p-3.5 sm:p-4 rounded-2xl bg-neutral-900 text-white text-xs font-semibold shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-bottom-5">
-          <div className="w-4 h-4 rounded-full bg-emerald-400 text-neutral-950 flex items-center justify-center">
-            <Check className="w-2.5 h-2.5 stroke-[3]" />
+        <div
+          className={`fixed bottom-6 right-6 z-50 p-3.5 sm:p-4 rounded-2xl text-white text-xs font-semibold shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-bottom-5 border ${
+            toastType === 'error'
+              ? 'bg-rose-950/95 border-rose-600/60 shadow-rose-950/50'
+              : toastType === 'info'
+              ? 'bg-neutral-900 border-amber-500/50 shadow-black/40'
+              : 'bg-neutral-900 border-neutral-700/80 shadow-black/40'
+          }`}
+        >
+          <div
+            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+              toastType === 'error'
+                ? 'bg-rose-500 text-white'
+                : toastType === 'info'
+                ? 'bg-amber-400 text-neutral-950'
+                : 'bg-emerald-400 text-neutral-950'
+            }`}
+          >
+            {toastType === 'error' ? (
+              <X className="w-2.5 h-2.5 stroke-[3]" />
+            ) : toastType === 'info' ? (
+              <AlertCircle className="w-2.5 h-2.5 stroke-[3]" />
+            ) : (
+              <Check className="w-2.5 h-2.5 stroke-[3]" />
+            )}
           </div>
           <span>{toastMessage}</span>
         </div>
