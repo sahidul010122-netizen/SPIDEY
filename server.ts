@@ -303,20 +303,46 @@ async function startServer() {
   });
 
   // --- Categories (Carousels, Logos, Subtitles) ---
-  app.get('/api/categories', (req: Request, res: Response) => {
-    if (deletedCategoryIds.length > 0) {
-      const delSet = new Set(deletedCategoryIds.map(d => String(d).toLowerCase()));
-      categoryItems = categoryItems.filter(c => !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase()));
+  app.get('/api/categories', (_req: Request, res: Response) => {
+    // Always ensure in-memory state matches disk state
+    if (fs.existsSync(CATEGORIES_FILE)) {
+      categoryItems = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, categoryItems);
     }
-    res.json({ success: true, categories: categoryItems, deletedCategoryIds });
+    res.json({ success: true, categories: categoryItems });
+  });
+
+  // Bulk save or reorder categories
+  app.put('/api/categories', (req: Request, res: Response) => {
+    const body = req.body;
+    const items = Array.isArray(body) ? body : Array.isArray(body?.categories) ? body.categories : null;
+    if (!items) {
+      return res.status(400).json({ success: false, message: 'Categories array is required' });
+    }
+    categoryItems = items.map((c: any) => ({
+      id: String(c.id || c.name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `cat-${Date.now().toString(36)}`,
+      name: String(c.name || '').trim(),
+      subtitle: String(c.subtitle || '').trim(),
+      image: String(c.image || '').trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+      tag: String(c.tag || 'Drop').trim()
+    })).filter((c: any) => Boolean(c.name));
+
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
+    res.json({ success: true, message: 'All categories successfully synchronized to disk', categories: categoryItems });
   });
 
   app.post('/api/categories', (req: Request, res: Response) => {
     const body = req.body;
     if (Array.isArray(body)) {
-      categoryItems = body;
+      categoryItems = body.map((c: any) => ({
+        id: String(c.id || c.name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `cat-${Date.now().toString(36)}`,
+        name: String(c.name || '').trim(),
+        subtitle: String(c.subtitle || '').trim(),
+        image: String(c.image || '').trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+        tag: String(c.tag || 'Drop').trim()
+      })).filter((c: any) => Boolean(c.name));
+
       saveJsonFile(CATEGORIES_FILE, categoryItems);
-      return res.json({ success: true, categories: categoryItems, deletedCategoryIds });
+      return res.json({ success: true, categories: categoryItems });
     } else if (body && body.name) {
       const name = String(body.name).trim();
       const rawId = body.id ? String(body.id).trim() : '';
@@ -328,18 +354,11 @@ async function startServer() {
         name,
         subtitle: body.subtitle !== undefined ? String(body.subtitle).trim() : '',
         image: body.image ? String(body.image).trim() : 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
-        tag: body.tag !== undefined ? String(body.tag).trim() : 'Category'
+        tag: body.tag !== undefined ? String(body.tag).trim() : 'Drop'
       };
 
-      // Un-tombstone case-insensitively if it was previously deleted
       const idLower = newCategory.id.toLowerCase();
       const nameLower = newCategory.name.toLowerCase();
-      if (deletedCategoryIds.length > 0) {
-        deletedCategoryIds = deletedCategoryIds.filter(
-          d => String(d).toLowerCase() !== idLower && String(d).toLowerCase() !== nameLower
-        );
-        saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
-      }
 
       const idx = categoryItems.findIndex(
         c => c.id.toLowerCase() === idLower || c.name.toLowerCase() === nameLower
@@ -352,7 +371,7 @@ async function startServer() {
       }
 
       saveJsonFile(CATEGORIES_FILE, categoryItems);
-      return res.status(201).json({ success: true, categories: categoryItems, category: newCategory, deletedCategoryIds });
+      return res.status(201).json({ success: true, categories: categoryItems, category: newCategory });
     }
     res.status(400).json({ success: false, message: 'Category name is required' });
   });
@@ -378,16 +397,6 @@ async function startServer() {
       tag: req.body.tag !== undefined ? String(req.body.tag).trim() : oldCategory.tag,
     };
 
-    // Un-tombstone case-insensitively if needed
-    const idLower = updatedCategory.id.toLowerCase();
-    const nameLower = updatedCategory.name.toLowerCase();
-    if (deletedCategoryIds.length > 0) {
-      deletedCategoryIds = deletedCategoryIds.filter(
-        d => String(d).toLowerCase() !== idLower && String(d).toLowerCase() !== nameLower
-      );
-      saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
-    }
-
     categoryItems[idx] = updatedCategory;
     saveJsonFile(CATEGORIES_FILE, categoryItems);
 
@@ -406,7 +415,7 @@ async function startServer() {
       }
     }
 
-    res.json({ success: true, category: updatedCategory, categories: categoryItems, deletedCategoryIds });
+    res.json({ success: true, category: updatedCategory, categories: categoryItems });
   });
 
   app.delete('/api/categories/:id', (req: Request, res: Response) => {
@@ -417,7 +426,6 @@ async function startServer() {
     );
 
     const targetId = target ? target.id : rawId;
-    const targetName = target ? target.name : '';
 
     categoryItems = categoryItems.filter(c => {
       const cIdLower = c.id.toLowerCase();
@@ -427,17 +435,9 @@ async function startServer() {
       return true;
     });
 
-    const toTombstone = [targetId, targetId.toLowerCase(), ...(targetName ? [targetName, targetName.toLowerCase()] : [])];
-    for (const t of toTombstone) {
-      if (t && !deletedCategoryIds.some(d => d.toLowerCase() === t.toLowerCase())) {
-        deletedCategoryIds.push(t);
-      }
-    }
-
-    saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
     saveJsonFile(CATEGORIES_FILE, categoryItems);
 
-    res.json({ success: true, message: 'Category permanently deleted', categories: categoryItems, deletedCategoryIds });
+    res.json({ success: true, message: `Category '${targetId}' permanently deleted from store disk`, categories: categoryItems });
   });
 
   // --- Products Endpoints ---

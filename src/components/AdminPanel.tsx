@@ -7,7 +7,7 @@ import {
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
-  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -30,6 +30,8 @@ interface AdminPanelProps {
   onAddCategory: (cat: CategoryItem) => void;
   onUpdateCategory: (id: string, cat: Partial<CategoryItem>) => void;
   onDeleteCategory: (id: string) => void;
+  onSaveAllCategories?: (categories?: CategoryItem[]) => Promise<boolean>;
+  onRefreshCategories?: () => Promise<void>;
   onLogoutAdmin: () => void;
   onViewStorefront?: () => void;
   onOpenPwaModal?: () => void;
@@ -52,6 +54,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onSaveAllCategories,
+  onRefreshCategories,
   onLogoutAdmin,
   onViewStorefront,
   onOpenPwaModal,
@@ -133,6 +137,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [catSubtitle, setCatSubtitle] = useState('');
   const [catImage, setCatImage] = useState('');
   const [catTag, setCatTag] = useState('');
+  const [isSavingAllCats, setIsSavingAllCats] = useState(false);
+  const [isRefreshingCats, setIsRefreshingCats] = useState(false);
+  const [catsSavedToast, setCatsSavedToast] = useState(false);
 
   // Editable Site Settings State (Local copy for live typing)
   const [localSettings, setLocalSettings] = useState<SiteSettings>(siteSettings);
@@ -246,12 +253,76 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsProductModalOpen(true);
   };
 
+  // Club & Brand Presets for 1-Click Category Creation
+  const CLUB_PRESETS = [
+    {
+      name: 'Real Madrid',
+      subtitle: '24/25 Champions',
+      tag: 'La Liga',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png'
+    },
+    {
+      name: 'FC Barcelona',
+      subtitle: 'Blaugrana Pride',
+      tag: 'La Liga',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/47/FC_Barcelona_%28crest%29.svg/300px-FC_Barcelona_%28crest%29.svg.png'
+    },
+    {
+      name: 'Manchester United',
+      subtitle: 'Red Devils',
+      tag: 'Premier League',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/7/7a/Manchester_United_FC_crest.svg/300px-Manchester_United_FC_crest.svg.png'
+    },
+    {
+      name: 'Arsenal',
+      subtitle: 'Gunners Edition',
+      tag: 'Premier League',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/300px-Arsenal_FC.svg.png'
+    },
+    {
+      name: 'Manchester City',
+      subtitle: 'Sky Blue Dynasty',
+      tag: 'Premier League',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Manchester_City_FC_badge.svg/300px-Manchester_City_FC_badge.svg.png'
+    },
+    {
+      name: 'Liverpool',
+      subtitle: 'Anfield Legends',
+      tag: 'Premier League',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/0/0c/Liverpool_FC.svg/300px-Liverpool_FC.svg.png'
+    },
+    {
+      name: 'Chelsea',
+      subtitle: 'The Blues',
+      tag: 'Premier League',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/c/cc/Chelsea_FC.svg/300px-Chelsea_FC.svg.png'
+    },
+    {
+      name: 'Bayern Munich',
+      subtitle: 'Mia San Mia',
+      tag: 'Bundesliga',
+      image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/FC_Bayern_M%C3%BCnchen_logo_%282017%29.svg/300px-FC_Bayern_M%C3%BCnchen_logo_%282017%29.svg.png'
+    },
+    {
+      name: 'Argentina',
+      subtitle: '3-Star World Champions',
+      tag: 'National',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/a/a2/Argentine_Football_Association_logo.svg/300px-Argentine_Football_Association_logo.svg.png'
+    },
+    {
+      name: 'Brazil',
+      subtitle: 'Pentacampeão',
+      tag: 'National',
+      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/9/99/Brazilian_Football_Confederation_logo.svg/300px-Brazilian_Football_Confederation_logo.svg.png'
+    }
+  ];
+
   // Open Category Modal
   const openAddCategoryModal = () => {
     setEditingCatId(null);
     setCatName('');
     setCatSubtitle('');
-    setCatImage('https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80');
+    setCatImage('https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png');
     setCatTag('Drop');
     setIsCatModalOpen(true);
   };
@@ -260,7 +331,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingCatId(cat.id);
     setCatName(cat.name);
     setCatSubtitle(cat.subtitle || '');
-    setCatImage(cat.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80');
+    setCatImage(cat.image || 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png');
     setCatTag(cat.tag || '');
     setIsCatModalOpen(true);
   };
@@ -275,7 +346,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         await onUpdateCategory(editingCatId, {
           name: catName.trim(),
           subtitle: catSubtitle.trim(),
-          image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+          image: catImage.trim() || 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png',
           tag: catTag.trim()
         });
       } else {
@@ -285,7 +356,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           id: newId,
           name: catName.trim(),
           subtitle: catSubtitle.trim(),
-          image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+          image: catImage.trim() || 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png',
           tag: catTag.trim() || 'Category'
         });
       }
@@ -294,6 +365,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       console.error('Failed to save category:', err);
     } finally {
       setIsSavingCat(false);
+    }
+  };
+
+  const handleSaveAllCategoriesDirectly = async () => {
+    if (!onSaveAllCategories) return;
+    setIsSavingAllCats(true);
+    try {
+      const ok = await onSaveAllCategories(categories);
+      if (ok) {
+        setCatsSavedToast(true);
+        setTimeout(() => setCatsSavedToast(false), 3000);
+      }
+    } finally {
+      setIsSavingAllCats(false);
+    }
+  };
+
+  const handleRefreshCategoriesDirectly = async () => {
+    if (!onRefreshCategories) return;
+    setIsRefreshingCats(true);
+    try {
+      await onRefreshCategories();
+    } finally {
+      setIsRefreshingCats(false);
     }
   };
 
@@ -399,10 +494,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleCategoryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    try {
+      const tempUrl = URL.createObjectURL(file);
+      setCatImage(tempUrl);
+    } catch {}
     setIsUploading(true);
-    const url = await uploadFileToR2(file);
-    if (url) setCatImage(url);
-    setIsUploading(false);
+    try {
+      const url = await uploadFileToR2(file);
+      if (url) setCatImage(url);
+    } catch (err) {
+      console.warn('Category image upload failed:', err);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Banner Image Upload
@@ -1105,15 +1209,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {(activeMenu === 'overview' || activeMenu === 'categories') && (
             <div className="space-y-5">
               
-              {/* Category Filter Pills & Add Button */}
+              {/* Category Filter Pills, Sync Buttons & Add Button */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <span className="text-base font-extrabold text-neutral-900">
                     Category Carousel Items ({categories.length})
                   </span>
+                  {catsSavedToast && (
+                    <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1 animate-pulse">
+                      <Check className="w-3 h-3" />
+                      সার্ভারে সেভ হয়েছে
+                    </span>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -1121,9 +1231,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search categories..."
-                      className="pl-8 pr-3 py-2 text-xs bg-neutral-100 rounded-full border border-neutral-200/80 text-neutral-900 focus:outline-none focus:bg-white w-48 sm:w-60"
+                      className="pl-8 pr-3 py-2 text-xs bg-neutral-100 rounded-full border border-neutral-200/80 text-neutral-900 focus:outline-none focus:bg-white w-40 sm:w-52"
                     />
                   </div>
+
+                  {onRefreshCategories && (
+                    <button
+                      type="button"
+                      disabled={isRefreshingCats}
+                      onClick={handleRefreshCategoriesDirectly}
+                      title="সার্ভার থেকে ফ্রেশ ডাটা রিলোড করুন"
+                      className="px-3 py-2 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingCats ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">রিফ্রেশ</span>
+                    </button>
+                  )}
+
+                  {onSaveAllCategories && (
+                    <button
+                      type="button"
+                      disabled={isSavingAllCats}
+                      onClick={handleSaveAllCategoriesDirectly}
+                      title="সকল ক্যাটাগরি সার্ভার ডিস্কে স্থায়ীভাবে সেভ করুন"
+                      className="px-3.5 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isSavingAllCats ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      <span>সেভ করুন</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={openAddCategoryModal}
@@ -2136,6 +2276,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             <form onSubmit={handleSaveCategory} className="space-y-4">
+              {/* Quick Club / Brand Presets */}
+              {!editingCatId && (
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-neutral-500 uppercase tracking-wider">
+                    জনপ্রিয় ক্লাব প্রিসেট (Quick 1-Click Fill)
+                  </label>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
+                    {CLUB_PRESETS.map((preset) => (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        onClick={() => {
+                          setCatName(preset.name);
+                          setCatSubtitle(preset.subtitle);
+                          setCatTag(preset.tag);
+                          setCatImage(preset.image);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 text-neutral-800 text-[11px] font-bold flex items-center gap-1.5 shrink-0 transition-all hover:scale-102"
+                      >
+                        <img
+                          src={preset.image}
+                          alt={preset.name}
+                          className="w-3.5 h-3.5 object-contain"
+                        />
+                        <span>{preset.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-neutral-700 mb-1">
                   Category Name *
@@ -2145,7 +2316,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   required
                   value={catName}
                   onChange={(e) => setCatName(e.target.value)}
-                  placeholder="e.g. EDC Cases, MagSafe Wallets"
+                  placeholder="e.g. Real Madrid, FC Barcelona, Premier League"
                   className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none focus:bg-white"
                 />
               </div>
