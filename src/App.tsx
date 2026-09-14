@@ -184,22 +184,14 @@ export default function App() {
 
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
     try {
-      const deletedRaw = localStorage.getItem('spidey_deleted_category_ids');
-      const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
-      const delSet = new Set(deletedIds.map((s) => String(s).toLowerCase()));
-
       const saved = localStorage.getItem('spidey_categories') || localStorage.getItem('orifake_categories');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter(
-            (c: any) => !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase())
-          );
+          return parsed;
         }
       }
-      return CATEGORY_CAROUSEL_ITEMS.filter(
-        (c) => !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase())
-      );
+      return CATEGORY_CAROUSEL_ITEMS;
     } catch {
       return CATEGORY_CAROUSEL_ITEMS;
     }
@@ -392,23 +384,12 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data.categories && Array.isArray(data.categories)) {
-          let delSet = new Set<string>();
+          setCategoryItems(data.categories);
           try {
-            const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_category_ids') || '[]');
-            const serverDeleted: string[] = Array.isArray(data.deletedCategoryIds) ? data.deletedCategoryIds : [];
-            const merged = Array.from(new Set([...currentDeleted, ...serverDeleted]));
-            localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(merged));
-            delSet = new Set(merged.map((s) => String(s).toLowerCase()));
-          } catch {}
-
-          const cleanCategories: CategoryItem[] = data.categories.filter(
-            (c: CategoryItem) =>
-              !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase())
-          );
-
-          setCategoryItems(cleanCategories);
-          try {
-            localStorage.setItem('spidey_categories', JSON.stringify(cleanCategories));
+            localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+            if (Array.isArray(data.deletedCategoryIds)) {
+              localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(data.deletedCategoryIds));
+            }
             localStorage.removeItem('orifake_categories');
           } catch {}
         }
@@ -679,6 +660,9 @@ export default function App() {
       if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
         localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+        if (Array.isArray(data.deletedCategoryIds)) {
+          localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(data.deletedCategoryIds));
+        }
       }
     } catch (e) {
       console.warn('Failed to sync category with server:', e);
@@ -712,6 +696,9 @@ export default function App() {
       if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
         localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+        if (Array.isArray(data.deletedCategoryIds)) {
+          localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(data.deletedCategoryIds));
+        }
       }
       fetchProducts();
     } catch (e) {
@@ -772,6 +759,9 @@ export default function App() {
       if (data.success && Array.isArray(data.categories)) {
         setCategoryItems(data.categories);
         localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+        if (Array.isArray(data.deletedCategoryIds)) {
+          localStorage.setItem('spidey_deleted_category_ids', JSON.stringify(data.deletedCategoryIds));
+        }
       }
     } catch (e) {
       console.warn('Failed to delete category on server:', e);

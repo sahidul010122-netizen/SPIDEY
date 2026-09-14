@@ -47,5 +47,12 @@
     "subtitle": "Cyber & Anime",
     "image": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=800&q=80",
     "tag": "Exclusive"
+  },
+  {
+    "id": "test-category",
+    "name": "Test Category",
+    "subtitle": "Recreated",
+    "image": "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80",
+    "tag": "Test"
   }
 ]

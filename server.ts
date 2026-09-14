@@ -305,8 +305,8 @@ async function startServer() {
   // --- Categories (Carousels, Logos, Subtitles) ---
   app.get('/api/categories', (req: Request, res: Response) => {
     if (deletedCategoryIds.length > 0) {
-      const delSet = new Set(deletedCategoryIds);
-      categoryItems = categoryItems.filter(c => !delSet.has(c.id) && !delSet.has(c.name));
+      const delSet = new Set(deletedCategoryIds.map(d => String(d).toLowerCase()));
+      categoryItems = categoryItems.filter(c => !delSet.has(String(c.id).toLowerCase()) && !delSet.has(String(c.name).toLowerCase()));
     }
     res.json({ success: true, categories: categoryItems, deletedCategoryIds });
   });
@@ -331,14 +331,18 @@ async function startServer() {
         tag: body.tag !== undefined ? String(body.tag).trim() : 'Category'
       };
 
-      // Un-tombstone if it was previously deleted
+      // Un-tombstone case-insensitively if it was previously deleted
+      const idLower = newCategory.id.toLowerCase();
+      const nameLower = newCategory.name.toLowerCase();
       if (deletedCategoryIds.length > 0) {
-        deletedCategoryIds = deletedCategoryIds.filter(d => d !== newCategory.id && d !== newCategory.name);
+        deletedCategoryIds = deletedCategoryIds.filter(
+          d => String(d).toLowerCase() !== idLower && String(d).toLowerCase() !== nameLower
+        );
         saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
       }
 
       const idx = categoryItems.findIndex(
-        c => c.id.toLowerCase() === newCategory.id.toLowerCase() || c.name.toLowerCase() === newCategory.name.toLowerCase()
+        c => c.id.toLowerCase() === idLower || c.name.toLowerCase() === nameLower
       );
 
       if (idx >= 0) {
@@ -355,8 +359,9 @@ async function startServer() {
 
   app.put('/api/categories/:id', (req: Request, res: Response) => {
     const rawId = decodeURIComponent(String(req.params.id || '').trim());
+    const rawIdLower = rawId.toLowerCase();
     const idx = categoryItems.findIndex(
-      c => c.id === rawId || c.id.toLowerCase() === rawId.toLowerCase() || c.name.toLowerCase() === rawId.toLowerCase()
+      c => c.id === rawId || c.id.toLowerCase() === rawIdLower || c.name.toLowerCase() === rawIdLower
     );
     if (idx === -1) {
       return res.status(404).json({ success: false, message: 'Category not found' });
@@ -372,6 +377,16 @@ async function startServer() {
       image: req.body.image ? String(req.body.image).trim() : oldCategory.image,
       tag: req.body.tag !== undefined ? String(req.body.tag).trim() : oldCategory.tag,
     };
+
+    // Un-tombstone case-insensitively if needed
+    const idLower = updatedCategory.id.toLowerCase();
+    const nameLower = updatedCategory.name.toLowerCase();
+    if (deletedCategoryIds.length > 0) {
+      deletedCategoryIds = deletedCategoryIds.filter(
+        d => String(d).toLowerCase() !== idLower && String(d).toLowerCase() !== nameLower
+      );
+      saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
+    }
 
     categoryItems[idx] = updatedCategory;
     saveJsonFile(CATEGORIES_FILE, categoryItems);
@@ -396,17 +411,27 @@ async function startServer() {
 
   app.delete('/api/categories/:id', (req: Request, res: Response) => {
     const rawId = decodeURIComponent(String(req.params.id || '').trim());
+    const rawIdLower = rawId.toLowerCase();
     const target = categoryItems.find(
-      c => c.id === rawId || c.id.toLowerCase() === rawId.toLowerCase() || c.name.toLowerCase() === rawId.toLowerCase()
+      c => c.id === rawId || c.id.toLowerCase() === rawIdLower || c.name.toLowerCase() === rawIdLower
     );
 
-    if (target) {
-      categoryItems = categoryItems.filter(c => c.id !== target.id && c.name !== target.name);
-      if (!deletedCategoryIds.includes(target.id)) deletedCategoryIds.push(target.id);
-      if (!deletedCategoryIds.includes(target.name)) deletedCategoryIds.push(target.name);
-    } else {
-      categoryItems = categoryItems.filter(c => c.id !== rawId && c.name !== rawId);
-      if (rawId && !deletedCategoryIds.includes(rawId)) deletedCategoryIds.push(rawId);
+    const targetId = target ? target.id : rawId;
+    const targetName = target ? target.name : '';
+
+    categoryItems = categoryItems.filter(c => {
+      const cIdLower = c.id.toLowerCase();
+      const cNameLower = c.name.toLowerCase();
+      if (cIdLower === rawIdLower || cNameLower === rawIdLower) return false;
+      if (target && (cIdLower === target.id.toLowerCase() || cNameLower === target.name.toLowerCase())) return false;
+      return true;
+    });
+
+    const toTombstone = [targetId, targetId.toLowerCase(), ...(targetName ? [targetName, targetName.toLowerCase()] : [])];
+    for (const t of toTombstone) {
+      if (t && !deletedCategoryIds.some(d => d.toLowerCase() === t.toLowerCase())) {
+        deletedCategoryIds.push(t);
+      }
     }
 
     saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);

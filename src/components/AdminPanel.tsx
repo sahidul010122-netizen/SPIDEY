@@ -185,6 +185,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Permanent Category Deletion Dialog State
   const [categoryPendingDelete, setCategoryPendingDelete] = useState<CategoryItem | null>(null);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [isSavingCat, setIsSavingCat] = useState(false);
 
   // Search in Admin
   const [searchQuery, setSearchQuery] = useState('');
@@ -264,59 +265,122 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsCatModalOpen(true);
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!catName.trim()) return;
+    if (!catName.trim() || isSavingCat || isUploading) return;
 
-    if (editingCatId) {
-      onUpdateCategory(editingCatId, {
-        name: catName.trim(),
-        subtitle: catSubtitle.trim(),
-        image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
-        tag: catTag.trim()
-      });
-    } else {
-      const slug = catName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-      const newId = slug || `cat-${Date.now().toString(36)}`;
-      onAddCategory({
-        id: newId,
-        name: catName.trim(),
-        subtitle: catSubtitle.trim(),
-        image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
-        tag: catTag.trim() || 'Category'
-      });
+    setIsSavingCat(true);
+    try {
+      if (editingCatId) {
+        await onUpdateCategory(editingCatId, {
+          name: catName.trim(),
+          subtitle: catSubtitle.trim(),
+          image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+          tag: catTag.trim()
+        });
+      } else {
+        const slug = catName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        const newId = slug || `cat-${Date.now().toString(36)}`;
+        await onAddCategory({
+          id: newId,
+          name: catName.trim(),
+          subtitle: catSubtitle.trim(),
+          image: catImage.trim() || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80',
+          tag: catTag.trim() || 'Category'
+        });
+      }
+      setIsCatModalOpen(false);
+    } catch (err) {
+      console.error('Failed to save category:', err);
+    } finally {
+      setIsSavingCat(false);
     }
-    setIsCatModalOpen(false);
   };
 
-  // File Upload Helper to R2
-  const uploadFileToR2 = async (file: File): Promise<string | null> => {
+  // Client-side image compression helper to avoid quota issues and network bottlenecks
+  const compressImageFile = async (
+    file: File,
+    maxDim = 1200,
+    quality = 0.85
+  ): Promise<{ base64Data: string; mime: string }> => {
     return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Data = reader.result as string;
-        try {
-          const res = await fetch('/api/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              filename: file.name,
-              contentType: file.type,
-              base64Data
-            })
-          });
-          const result = await res.json();
-          if (result.success && result.url) {
-            resolve(result.url);
+      // If SVG or very small, return as is
+      if (file.type === 'image/svg+xml' || file.size < 80 * 1024) {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ base64Data: reader.result as string, mime: file.type || 'image/jpeg' });
+        reader.onerror = () => resolve({ base64Data: '', mime: 'image/jpeg' });
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
           } else {
-            resolve(base64Data);
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
           }
-        } catch {
-          resolve(base64Data);
         }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ base64Data: reader.result as string, mime: file.type || 'image/jpeg' });
+          reader.readAsDataURL(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const outputMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const compressedData = canvas.toDataURL(outputMime, quality);
+        resolve({ base64Data: compressedData, mime: outputMime });
       };
-      reader.readAsDataURL(file);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        const reader = new FileReader();
+        reader.onload = () => resolve({ base64Data: reader.result as string, mime: file.type || 'image/jpeg' });
+        reader.readAsDataURL(file);
+      };
+      img.src = objectUrl;
     });
+  };
+
+  // File Upload Helper to R2 / Disk
+  const uploadFileToR2 = async (file: File): Promise<string | null> => {
+    try {
+      const { base64Data, mime } = await compressImageFile(file, 1200, 0.85);
+      if (!base64Data) return null;
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: mime,
+          base64Data
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        return result.staticUrl || result.url || base64Data;
+      }
+      return base64Data;
+    } catch (err) {
+      console.warn('Upload fallback to compressed base64:', err);
+      try {
+        const { base64Data } = await compressImageFile(file, 800, 0.75);
+        return base64Data || null;
+      } catch {
+        return null;
+      }
+    }
   };
 
   // Product Image Upload
@@ -2121,9 +2185,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex items-center gap-3">
                   <div className="w-14 h-14 rounded-xl bg-neutral-100 p-1 border border-neutral-200 overflow-hidden shrink-0">
                     <img
-                      src={catImage || '/images/cat_edc_wallet_1787668177890.jpg'}
+                      src={catImage || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80'}
                       alt="Category Preview"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80';
+                      }}
                       className="w-full h-full object-cover rounded-lg"
                     />
                   </div>
@@ -2134,22 +2202,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       ref={catFileInputRef}
                       onChange={handleCategoryImageUpload}
                       accept="image/*"
+                      disabled={isUploading || isSavingCat}
                       className="hidden"
                     />
                     <button
                       type="button"
+                      disabled={isUploading || isSavingCat}
                       onClick={() => catFileInputRef.current?.click()}
-                      className="w-full py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs flex items-center justify-center gap-1.5"
+                      className="w-full py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer"
                     >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploading ? 'Uploading...' : 'Upload New Logo / Image'}</span>
+                      {isUploading ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Uploading & compressing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload New Logo / Image</span>
+                        </>
+                      )}
                     </button>
                     <input
                       type="text"
                       value={catImage}
+                      disabled={isSavingCat}
                       onChange={(e) => setCatImage(e.target.value)}
                       placeholder="Or paste image URL"
-                      className="w-full px-3 py-1.5 text-[11px] bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono"
+                      className="w-full px-3 py-1.5 text-[11px] bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -2159,11 +2239,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {editingCatId ? (
                   <button
                     type="button"
+                    disabled={isSavingCat || isUploading}
                     onClick={() => {
                       const cat = categories.find((c) => c.id === editingCatId);
                       if (cat) setCategoryPendingDelete(cat);
                     }}
-                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Delete Category</span>
@@ -2174,16 +2255,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    disabled={isSavingCat}
                     onClick={() => setIsCatModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 font-bold text-xs hover:bg-neutral-200 cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 font-bold text-xs hover:bg-neutral-200 cursor-pointer disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-[#0d0f12] text-white font-bold text-xs hover:bg-neutral-800 shadow-md cursor-pointer"
+                    disabled={isSavingCat || isUploading || !catName.trim()}
+                    className="px-5 py-2 rounded-xl bg-[#0d0f12] text-white font-bold text-xs hover:bg-neutral-800 shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                   >
-                    Save Category
+                    {isSavingCat ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save Category</span>
+                    )}
                   </button>
                 </div>
               </div>
