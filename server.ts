@@ -114,7 +114,7 @@ if (deletedProductIds.length > 0) {
 }
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
-let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
+let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
 let deletedCategoryIds: string[] = loadJsonFile<string[]>(DELETED_CATEGORIES_FILE, []);
 if (deletedCategoryIds.length > 0) {
   const delSet = new Set(deletedCategoryIds);
@@ -306,7 +306,7 @@ async function startServer() {
   function sanitizeCategoryImage(rawImage: any, name: string): string {
     let img = typeof rawImage === 'string' ? rawImage.trim() : '';
     if (!img || img.startsWith('blob:')) {
-      return 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80';
+      return '';
     }
     // If base64, save to static uploads disk automatically so categories.json stays small & fast
     if (img.startsWith('data:image/')) {
@@ -324,7 +324,7 @@ async function startServer() {
         return `/uploads/${filename}`;
       } catch (e) {
         console.warn('Failed to convert base64 category image:', e);
-        return 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80';
+        return '';
       }
     }
     return img;
@@ -335,15 +335,9 @@ async function startServer() {
     // Always ensure in-memory state matches disk state
     if (fs.existsSync(CATEGORIES_FILE)) {
       const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
-      if (Array.isArray(loaded) && loaded.length > 0) {
+      if (Array.isArray(loaded)) {
         categoryItems = loaded;
-      } else {
-        categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
-        saveJsonFile(CATEGORIES_FILE, categoryItems);
       }
-    } else {
-      categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
-      saveJsonFile(CATEGORIES_FILE, categoryItems);
     }
     res.json({ success: true, categories: categoryItems });
   });

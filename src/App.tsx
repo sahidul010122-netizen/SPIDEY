@@ -184,16 +184,16 @@ export default function App() {
 
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('spidey_categories') || localStorage.getItem('orifake_categories');
+      const saved = localStorage.getItem('spidey_categories');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
-      return CATEGORY_CAROUSEL_ITEMS;
+      return [];
     } catch {
-      return CATEGORY_CAROUSEL_ITEMS;
+      return [];
     }
   });
 
@@ -296,8 +296,9 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('orifake_categories', JSON.stringify(categoryItems));
-      localStorage.setItem('spidey_categories', JSON.stringify(categoryItems));
+      if (categoryItems && categoryItems.length > 0) {
+        localStorage.setItem('spidey_categories', JSON.stringify(categoryItems));
+      }
     } catch (e) {
       console.warn('Storage error', e);
     }
