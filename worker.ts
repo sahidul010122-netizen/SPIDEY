@@ -480,6 +480,11 @@ export default {
       if (pathname === '/api/categories') {
         if (request.method === 'GET') {
           const categories = await getStoredCategories(env);
+          categories.sort((a, b) => {
+            const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+            const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+            return orderA - orderB;
+          });
           return new Response(JSON.stringify({ success: true, categories }), {
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
@@ -517,6 +522,82 @@ export default {
             });
           }
         }
+      }
+
+      // Dedicated Category Reorder endpoint
+      if (pathname === '/api/categories/reorder' && request.method === 'PUT') {
+        const body: any = await request.json();
+        const items = Array.isArray(body)
+          ? body
+          : Array.isArray(body?.categories)
+          ? body.categories
+          : Array.isArray(body?.categoryIds)
+          ? body.categoryIds
+          : null;
+
+        if (!items || !Array.isArray(items)) {
+          return new Response(JSON.stringify({ success: false, message: 'Categories array or categoryIds array is required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const current = await getStoredCategories(env);
+        let reordered: CategoryItem[] = [];
+
+        if (items.length > 0 && typeof items[0] === 'string') {
+          const catMap = new Map<string, CategoryItem>();
+          current.forEach(c => {
+            catMap.set(c.id, c);
+            catMap.set(c.id.toLowerCase(), c);
+            catMap.set(c.name.toLowerCase(), c);
+          });
+          const addedIds = new Set<string>();
+          for (const idStr of items) {
+            const item = catMap.get(idStr) || catMap.get(String(idStr).toLowerCase());
+            if (item && !addedIds.has(item.id)) {
+              reordered.push(item);
+              addedIds.add(item.id);
+            }
+          }
+          for (const c of current) {
+            if (!addedIds.has(c.id)) {
+              reordered.push(c);
+              addedIds.add(c.id);
+            }
+          }
+        } else {
+          const idMap = new Map<string, CategoryItem>();
+          current.forEach(c => idMap.set(c.id, c));
+          const addedIds = new Set<string>();
+
+          for (const c of items) {
+            if (c && c.id) {
+              const existing = idMap.get(c.id);
+              reordered.push(existing ? { ...existing, ...c } : c);
+              addedIds.add(c.id);
+            }
+          }
+          for (const c of current) {
+            if (!addedIds.has(c.id)) {
+              reordered.push(c);
+              addedIds.add(c.id);
+            }
+          }
+        }
+
+        // Stamp sequential sortOrder, position and priority
+        reordered.forEach((c, idx) => {
+          c.sortOrder = idx;
+          c.position = idx;
+          c.priority = idx;
+        });
+
+        await saveStoredCategories(env, reordered);
+
+        return new Response(JSON.stringify({ success: true, message: 'Categories sequence saved', categories: reordered }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
 
       if (pathname.startsWith('/api/categories/') && request.method === 'PUT') {
@@ -634,11 +715,79 @@ export default {
         else if (sortBy === 'price-high') list.sort((a, b) => b.price - a.price);
         else if (sortBy === 'rating') list.sort((a, b) => b.rating - a.rating);
         else if (sortBy === 'popular') list.sort((a, b) => b.reviewCount - a.reviewCount);
+        else if (sortBy === 'newest') list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         else {
-          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          list.sort((a, b) => (Number(a.sortOrder ?? a.position ?? 0) - Number(b.sortOrder ?? b.position ?? 0)));
         }
 
         return new Response(JSON.stringify({ success: true, count: list.length, products: list }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // Reorder Products endpoint (Admin drag-and-drop sync)
+      if (pathname === '/api/products/reorder' && request.method === 'PUT') {
+        const body: any = await request.json();
+        const ids: string[] = Array.isArray(body)
+          ? body.map((item: any) => (typeof item === 'string' ? item : item?.id || item?.code))
+          : Array.isArray(body?.productIds)
+          ? body.productIds
+          : Array.isArray(body?.products)
+          ? body.products.map((p: any) => p?.id || p?.code)
+          : [];
+
+        if (!ids || ids.length === 0) {
+          return new Response(JSON.stringify({ success: false, message: 'Valid product IDs array required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const allProducts = await getStoredProducts(env);
+        const productMap = new Map<string, JerseyProduct>();
+        allProducts.forEach((p) => {
+          productMap.set(p.id, p);
+          if (p.code) productMap.set(p.code, p);
+        });
+
+        const objectMap = new Map<string, any>();
+        if (Array.isArray(body?.products)) {
+          body.products.forEach((p: any) => {
+            if (p?.id) objectMap.set(p.id, p);
+            if (p?.code) objectMap.set(p.code, p);
+          });
+        }
+
+        const reordered: JerseyProduct[] = [];
+        const addedIds = new Set<string>();
+
+        for (const id of ids) {
+          const prod = productMap.get(id);
+          if (prod && !addedIds.has(prod.id)) {
+            const extra = objectMap.get(prod.id) || {};
+            reordered.push({ ...prod, ...extra });
+            addedIds.add(prod.id);
+          }
+        }
+
+        // Keep any remaining products
+        for (const p of allProducts) {
+          if (!addedIds.has(p.id)) {
+            reordered.push(p);
+            addedIds.add(p.id);
+          }
+        }
+
+        // Stamp sequential sortOrder, position, priority
+        reordered.forEach((p, idx) => {
+          p.sortOrder = idx;
+          p.position = idx;
+          p.priority = idx;
+        });
+
+        await saveStoredProducts(env, reordered);
+
+        return new Response(JSON.stringify({ success: true, message: 'Products sequence saved', products: reordered }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }

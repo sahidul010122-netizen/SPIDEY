@@ -86,19 +86,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isSavingProductOrder, setIsSavingProductOrder] = useState(false);
   const [productOrderSavedToast, setProductOrderSavedToast] = useState(false);
 
+  // Optimistic local products state to prevent visual snap-back and ensure strict sortOrder
+  const [localProducts, setLocalProducts] = useState<JerseyProduct[]>(() => {
+    return [...(Array.isArray(products) ? products : [])].sort((a, b) => {
+      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+      return orderA - orderB;
+    });
+  });
+
+  // Keep localProducts synced when parent products prop updates (unless actively dragging or saving)
+  useEffect(() => {
+    if (!isSavingProductOrder && !draggedProductId) {
+      setLocalProducts([...(Array.isArray(products) ? products : [])].sort((a, b) => {
+        const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+        const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+        return orderA - orderB;
+      }));
+    }
+  }, [products, isSavingProductOrder, draggedProductId]);
+
   const handleProductReorder = async (newOrder: JerseyProduct[]) => {
-    if (!onReorderProducts) return;
-    setIsSavingProductOrder(true);
     const stamped = newOrder.map((p, idx) => ({
       ...p,
       sortOrder: idx,
       position: idx,
       priority: idx
     }));
+
+    // 1. Instantly update local state to eliminate visual snap-back
+    setLocalProducts(stamped);
+
+    if (!onReorderProducts) return;
+    setIsSavingProductOrder(true);
     try {
       await onReorderProducts(stamped);
       setProductOrderSavedToast(true);
       setTimeout(() => setProductOrderSavedToast(false), 2200);
+    } catch (err) {
+      console.error('Failed to save product order:', err);
     } finally {
       setIsSavingProductOrder(false);
     }
@@ -133,14 +159,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    const fromIdx = products.findIndex((p) => p.id === sourceId || p.code === sourceId);
-    const toIdx = products.findIndex((p) => p.id === targetId || p.code === targetId);
+    const fromIdx = localProducts.findIndex((p) => p.id === sourceId || p.code === sourceId);
+    const toIdx = localProducts.findIndex((p) => p.id === targetId || p.code === targetId);
     if (fromIdx === -1 || toIdx === -1) {
       setDraggedProductId(null);
       return;
     }
 
-    const updated: JerseyProduct[] = [...products];
+    const updated: JerseyProduct[] = [...localProducts];
     const [moved] = updated.splice(fromIdx, 1);
     updated.splice(toIdx, 0, moved);
 
@@ -149,13 +175,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleProductShift = async (id: string, direction: 'up' | 'down') => {
-    const idx = products.findIndex((p) => p.id === id || p.code === id);
+    const idx = localProducts.findIndex((p) => p.id === id || p.code === id);
     if (idx === -1) return;
 
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= products.length) return;
+    if (targetIdx < 0 || targetIdx >= localProducts.length) return;
 
-    const updated: JerseyProduct[] = [...products];
+    const updated: JerseyProduct[] = [...localProducts];
     const [moved] = updated.splice(idx, 1);
     updated.splice(targetIdx, 0, moved);
 
@@ -789,10 +815,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   // Filter Products
-  const safeProducts = Array.isArray(products) ? products : [];
+  const safeProducts = localProducts;
   const filteredProducts = safeProducts.filter((p) => {
     if (!searchQuery.trim()) return true;
     return (p.title && p.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.code && p.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.edition && p.edition.toLowerCase().includes(searchQuery.toLowerCase()));
   });
@@ -1380,9 +1407,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* Product Rows */}
               <div className="space-y-2.5">
                 {filteredProducts.map((prod, displayIdx) => {
-                  const actualIdx = products.findIndex((p) => p.id === prod.id || p.code === prod.id);
+                  const actualIdx = localProducts.findIndex((p) => p.id === prod.id || p.code === prod.id);
                   const isFirst = actualIdx === 0;
-                  const isLast = actualIdx === products.length - 1;
+                  const isLast = actualIdx === localProducts.length - 1;
                   const isDragging = draggedProductId === prod.id;
                   const isDragOver = dragOverProductId === prod.id;
 

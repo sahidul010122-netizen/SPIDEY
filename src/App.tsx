@@ -694,7 +694,6 @@ export default function App() {
     } catch (err) {
       console.error('Failed to sync product reorder:', err);
     }
-    window.dispatchEvent(new CustomEvent('spidey_catalog_updated'));
     showToast('প্রোডাক্ট ক্রম সফলভাবে ডাটাবেস ও স্টোরে সেভ হয়েছে!', 'success');
     return true;
   };
@@ -739,7 +738,6 @@ export default function App() {
     } catch (err) {
       console.error('Failed to sync category reorder:', err);
     }
-    window.dispatchEvent(new CustomEvent('spidey_catalog_updated'));
     showToast('ক্যাটাগরি ক্রম সফলভাবে ডাটাবেস ও স্টোরে সেভ হয়েছে!', 'success');
     return true;
   };

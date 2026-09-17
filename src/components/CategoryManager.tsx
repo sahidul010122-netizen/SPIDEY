@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   FolderPlus, 
   Search, 
@@ -107,6 +107,26 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [orderSavedToast, setOrderSavedToast] = useState(false);
 
+  // Optimistic local state for categories to ensure smooth, immediate reordering without snapping back
+  const [localCategories, setLocalCategories] = useState<CategoryItem[]>(() => {
+    return [...(Array.isArray(categories) ? categories : [])].sort((a, b) => {
+      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+      return orderA - orderB;
+    });
+  });
+
+  // Keep localCategories synced when parent categories prop changes (unless actively dragging or saving)
+  useEffect(() => {
+    if (!isSavingOrder && !draggedCatId) {
+      setLocalCategories([...(Array.isArray(categories) ? categories : [])].sort((a, b) => {
+        const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+        const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+        return orderA - orderB;
+      }));
+    }
+  }, [categories, isSavingOrder, draggedCatId]);
+
   // Form states
   const [formName, setFormName] = useState('');
   const [formSubtitle, setFormSubtitle] = useState('');
@@ -123,18 +143,24 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
 
   // Handle reordering sequence and persist
   const handleReorder = async (newCategories: CategoryItem[]) => {
-    if (!onReorderCategories) return;
-    setIsSavingOrder(true);
     const stamped = newCategories.map((c, idx) => ({
       ...c,
       sortOrder: idx,
       position: idx,
       priority: idx
     }));
+
+    // 1. Instantly update local state to eliminate visual snap-back
+    setLocalCategories(stamped);
+
+    if (!onReorderCategories) return;
+    setIsSavingOrder(true);
     try {
       await onReorderCategories(stamped);
       setOrderSavedToast(true);
       setTimeout(() => setOrderSavedToast(false), 2200);
+    } catch (err) {
+      console.error('Failed to save category order:', err);
     } finally {
       setIsSavingOrder(false);
     }
@@ -169,14 +195,14 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       return;
     }
 
-    const fromIdx = categories.findIndex((c) => c.id === sourceId);
-    const toIdx = categories.findIndex((c) => c.id === targetId);
+    const fromIdx = localCategories.findIndex((c) => c.id === sourceId);
+    const toIdx = localCategories.findIndex((c) => c.id === targetId);
     if (fromIdx === -1 || toIdx === -1) {
       setDraggedCatId(null);
       return;
     }
 
-    const updated: CategoryItem[] = [...categories];
+    const updated: CategoryItem[] = [...localCategories];
     const [moved] = updated.splice(fromIdx, 1);
     updated.splice(toIdx, 0, moved);
 
@@ -185,27 +211,20 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   };
 
   const handleShift = async (id: string, direction: 'prev' | 'next') => {
-    const idx = categories.findIndex((c) => c.id === id);
+    const idx = localCategories.findIndex((c) => c.id === id);
     if (idx === -1) return;
     const targetIdx = direction === 'prev' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= categories.length) return;
+    if (targetIdx < 0 || targetIdx >= localCategories.length) return;
 
-    const updated: CategoryItem[] = [...categories];
+    const updated: CategoryItem[] = [...localCategories];
     const [moved] = updated.splice(idx, 1);
     updated.splice(targetIdx, 0, moved);
 
     await handleReorder(updated);
   };
 
-  // Sort categories by sortOrder / position before filtering
-  const sortedCategories = [...categories].sort((a, b) => {
-    const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
-    const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
-    return orderA - orderB;
-  });
-
   // Filter categories by search
-  const filteredCategories = sortedCategories.filter((cat) => {
+  const filteredCategories = localCategories.filter((cat) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -449,9 +468,9 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {filteredCategories.map((cat, displayIdx) => {
-            const actualIdx = categories.findIndex((c) => c.id === cat.id);
+            const actualIdx = localCategories.findIndex((c) => c.id === cat.id);
             const isFirst = actualIdx === 0;
-            const isLast = actualIdx === categories.length - 1;
+            const isLast = actualIdx === localCategories.length - 1;
             const isDragging = draggedCatId === cat.id;
             const isDragOver = dragOverCatId === cat.id;
 
