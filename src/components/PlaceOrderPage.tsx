@@ -200,13 +200,15 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   // Filter products for search
   const getFilteredProducts = (query: string) => {
     const safeProducts = Array.isArray(products) ? products : [];
-    if (!query.trim()) return safeProducts.slice(0, 8);
+    if (!query.trim()) return safeProducts.slice(0, 15);
     const q = query.toLowerCase().trim();
     return safeProducts.filter(p => 
       (p.code && p.code.toLowerCase().includes(q)) ||
       (p.title && p.title.toLowerCase().includes(q)) ||
       (p.category && p.category.toLowerCase().includes(q)) ||
-      (p.season && p.season.toLowerCase().includes(q))
+      (p.season && p.season.toLowerCase().includes(q)) ||
+      (p.edition && p.edition.toLowerCase().includes(q)) ||
+      (p.badge && p.badge.toLowerCase().includes(q))
     );
   };
 
@@ -636,7 +638,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                       {/* Autocomplete Search Input */}
                       <div className="flex-1 relative min-w-0">
                         <div className="relative">
-                          <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                           <input
                             type="text"
                             value={item.searchQuery}
@@ -646,7 +648,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                               setActiveDropdownIndex(index);
                             }}
                             placeholder="Search jersey by name or code..."
-                            className="w-full pl-8 pr-7 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-neutral-400 transition-all font-sans"
+                            className="w-full pl-9 pr-8 py-2.5 text-xs sm:text-sm bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-neutral-400 transition-all font-sans"
                           />
                           {item.searchQuery && (
                             <button
@@ -655,7 +657,8 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                                 handleUpdateItem(index, { searchQuery: '', product: null });
                                 setActiveDropdownIndex(index);
                               }}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 text-xs"
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1 text-xs"
+                              title="Clear search"
                             >
                               ✕
                             </button>
@@ -666,43 +669,86 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                         {isDropdownOpen && (
                           <>
                             <div 
-                              className="fixed inset-0 z-20" 
+                              className="fixed inset-0 z-30" 
                               onClick={() => setActiveDropdownIndex(null)} 
                             />
-                            <div className="absolute left-0 right-0 top-full mt-1.5 z-30 max-h-56 overflow-y-auto rounded-2xl bg-white border border-neutral-200 shadow-lg divide-y divide-neutral-100">
+                            <div 
+                              className="absolute left-0 right-0 top-full mt-1.5 z-40 max-h-80 sm:max-h-96 overflow-y-auto overscroll-contain rounded-2xl bg-white border border-neutral-200/90 shadow-2xl divide-y divide-neutral-100"
+                              style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
+                            >
                               {filteredProducts.length > 0 ? (
-                                filteredProducts.map((prod) => (
-                                  <button
-                                    type="button"
-                                    key={prod.id}
-                                    onClick={() => handleSelectProduct(index, prod)}
-                                    className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-neutral-50 text-left transition-colors"
-                                  >
-                                    <div className="w-8 h-8 rounded-lg bg-neutral-100 p-0.5 border border-neutral-200 shrink-0 overflow-hidden">
-                                      <img 
-                                        src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'} 
-                                        alt={prod.title}
-                                        referrerPolicy="no-referrer"
-                                        className="w-full h-full object-contain"
-                                      />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5">
-                                        {prod.code && (
-                                          <span className="text-neutral-900 font-mono font-bold text-[10px]">
-                                            [{prod.code}]
-                                          </span>
-                                        )}
-                                        <span className="text-xs font-semibold text-neutral-800 truncate">
-                                          {prod.title}
-                                        </span>
+                                <>
+                                  <div className="px-3.5 py-1.5 bg-neutral-50/90 border-b border-neutral-100 flex items-center justify-between text-[10px] font-semibold text-neutral-500 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-xs">
+                                    <span>{filteredProducts.length} Jerseys Found</span>
+                                    <span className="text-neutral-400 font-normal">Tap to select</span>
+                                  </div>
+                                  {filteredProducts.map((prod) => (
+                                    <button
+                                      type="button"
+                                      key={prod.id}
+                                      onClick={() => handleSelectProduct(index, prod)}
+                                      className="w-full p-3 sm:p-3.5 flex items-center gap-3 sm:gap-3.5 hover:bg-neutral-50 active:bg-neutral-100/80 text-left transition-all duration-150 group cursor-pointer focus:outline-none focus:bg-neutral-50"
+                                    >
+                                      {/* Enlarge Product Thumbnail Image (56px - 60px) */}
+                                      <div className="w-14 h-14 sm:w-15 sm:h-15 rounded-xl bg-neutral-50 p-1 border border-neutral-200/90 shadow-xs shrink-0 overflow-hidden flex items-center justify-center group-hover:border-neutral-300 transition-colors">
+                                        <img 
+                                          src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80'} 
+                                          alt={prod.title}
+                                          referrerPolicy="no-referrer"
+                                          className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-105"
+                                          loading="lazy"
+                                        />
                                       </div>
-                                    </div>
-                                  </button>
-                                ))
+
+                                      {/* Typography & Spacing: Details Area */}
+                                      <div className="flex-1 min-w-0 flex flex-col justify-center space-y-1">
+                                        {/* Line 1: Code & Title */}
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {prod.code && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-900 font-mono font-bold text-[11px] border border-neutral-200/80 shrink-0">
+                                              [{prod.code}]
+                                            </span>
+                                          )}
+                                          <span className="text-xs sm:text-[13px] font-bold text-neutral-900 leading-snug break-words group-hover:text-black">
+                                            {prod.title}
+                                          </span>
+                                        </div>
+
+                                        {/* Line 2: Edition / Sleeve variation, Season, Badge, and Price */}
+                                        <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 flex-wrap">
+                                          {prod.edition && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200/60">
+                                              {prod.edition}
+                                            </span>
+                                          )}
+                                          {prod.season && (
+                                            <span className="text-neutral-400 text-[10px] font-medium">
+                                              {prod.season}
+                                            </span>
+                                          )}
+                                          {prod.badge && (
+                                            <span className="text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                              {prod.badge}
+                                            </span>
+                                          )}
+                                          {prod.price > 0 && (
+                                            <span className="text-neutral-900 font-bold ml-auto text-xs shrink-0">
+                                              ৳{prod.price.toLocaleString()}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </>
                               ) : (
-                                <div className="p-3 text-center text-xs text-neutral-400">
-                                  No jerseys found
+                                <div className="p-6 text-center space-y-1.5">
+                                  <div className="text-neutral-700 font-bold text-xs">
+                                    No jerseys found
+                                  </div>
+                                  <p className="text-[11px] text-neutral-400">
+                                    Try searching by club name, color, kit, or product code.
+                                  </p>
                                 </div>
                               )}
                             </div>
