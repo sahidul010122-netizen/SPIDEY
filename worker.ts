@@ -186,36 +186,64 @@ async function callSteadfastWorkerApi(
   };
 }
 
-// Helper: Load Products from R2 or fallback to initial
+// Helper: Load Products from R2 or fallback to initial (multi-key fail-safe)
 async function getStoredProducts(env: Env): Promise<JerseyProduct[]> {
-  if (cachedProducts) return cachedProducts;
+  if (cachedProducts && cachedProducts.length > 0) return cachedProducts;
 
   if (env.MY_BUCKET) {
-    try {
-      const obj = await env.MY_BUCKET.get(R2_PRODUCTS_KEY);
-      if (obj) {
-        const text = await new Response(obj.body).text();
-        const data = JSON.parse(text);
-        if (Array.isArray(data) && data.length > 0) {
-          cachedProducts = data;
-          return cachedProducts!;
+    const candidateKeys = [
+      R2_PRODUCTS_KEY,
+      'products.json',
+      'store_data/products.json',
+      'data/products.json',
+      `${R2_PRODUCTS_KEY}.bak`,
+      '_db/backup.json',
+      'backup.json'
+    ];
+    for (const key of candidateKeys) {
+      try {
+        const obj = await env.MY_BUCKET.get(key);
+        if (obj) {
+          const text = await new Response(obj.body).text();
+          const parsed = JSON.parse(text);
+          const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.products) ? parsed.products : null);
+          if (Array.isArray(list) && list.length > 0) {
+            cachedProducts = list;
+            // Re-seed canonical R2 key if it was found in an alternate or backup key
+            if (key !== R2_PRODUCTS_KEY) {
+              await saveStoredProducts(env, list);
+            }
+            return cachedProducts;
+          }
         }
+      } catch (e) {
+        console.warn(`Error loading products from key ${key}:`, e);
       }
-    } catch (e) {
-      console.error('Error loading products from R2:', e);
     }
   }
 
   cachedProducts = [...INITIAL_JERSEYS];
+  // Persist initial products to R2 so future reads succeed immediately
+  if (env.MY_BUCKET) {
+    saveStoredProducts(env, cachedProducts).catch(() => {});
+  }
   return cachedProducts;
 }
 
-// Helper: Save Products to R2
+// Helper: Save Products to R2 (Guards against empty overwrites & saves backup)
 async function saveStoredProducts(env: Env, products: JerseyProduct[]): Promise<void> {
+  if (!Array.isArray(products) || products.length === 0) {
+    console.warn('Blocked attempt to overwrite products with empty array in R2');
+    return;
+  }
   cachedProducts = products;
   if (env.MY_BUCKET) {
     try {
-      await env.MY_BUCKET.put(R2_PRODUCTS_KEY, JSON.stringify(products), {
+      const dataStr = JSON.stringify(products, null, 2);
+      await env.MY_BUCKET.put(R2_PRODUCTS_KEY, dataStr, {
+        httpMetadata: { contentType: 'application/json' }
+      });
+      await env.MY_BUCKET.put(`${R2_PRODUCTS_KEY}.bak`, dataStr, {
         httpMetadata: { contentType: 'application/json' }
       });
     } catch (e) {
@@ -224,23 +252,38 @@ async function saveStoredProducts(env: Env, products: JerseyProduct[]): Promise<
   }
 }
 
-// Helper: Load Site Settings from R2 (Hero Banner, Headlines, Slogans, Logos)
+// Helper: Load Site Settings from R2 (Multi-key fail-safe)
 async function getStoredSettings(env: Env): Promise<SiteSettings> {
   if (cachedSettings) return cachedSettings;
 
   if (env.MY_BUCKET) {
-    try {
-      const obj = await env.MY_BUCKET.get(R2_SETTINGS_KEY);
-      if (obj) {
-        const text = await new Response(obj.body).text();
-        const data = JSON.parse(text);
-        if (data && typeof data === 'object') {
-          cachedSettings = { ...DEFAULT_SITE_SETTINGS, ...data };
-          return cachedSettings!;
+    const candidateKeys = [
+      R2_SETTINGS_KEY,
+      '_db/site_settings.json',
+      'site_settings.json',
+      'settings.json',
+      'store_data/site_settings.json',
+      `${R2_SETTINGS_KEY}.bak`,
+      '_db/backup.json',
+      'backup.json'
+    ];
+    for (const key of candidateKeys) {
+      try {
+        const obj = await env.MY_BUCKET.get(key);
+        if (obj) {
+          const text = await new Response(obj.body).text();
+          const parsed = JSON.parse(text);
+          const settingsObj = (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+            ? (parsed.siteSettings || parsed)
+            : null;
+          if (settingsObj && typeof settingsObj === 'object') {
+            cachedSettings = { ...DEFAULT_SITE_SETTINGS, ...settingsObj };
+            return cachedSettings;
+          }
         }
+      } catch (e) {
+        console.warn(`Error loading settings from key ${key}:`, e);
       }
-    } catch (e) {
-      console.error('Error loading settings from R2:', e);
     }
   }
 
@@ -248,12 +291,20 @@ async function getStoredSettings(env: Env): Promise<SiteSettings> {
   return cachedSettings;
 }
 
-// Helper: Save Site Settings to R2
+// Helper: Save Site Settings to R2 (Merges defaults & saves backup)
 async function saveStoredSettings(env: Env, settings: SiteSettings): Promise<void> {
-  cachedSettings = settings;
+  const merged: SiteSettings = {
+    ...DEFAULT_SITE_SETTINGS,
+    ...settings
+  };
+  cachedSettings = merged;
   if (env.MY_BUCKET) {
     try {
-      await env.MY_BUCKET.put(R2_SETTINGS_KEY, JSON.stringify(settings), {
+      const dataStr = JSON.stringify(merged, null, 2);
+      await env.MY_BUCKET.put(R2_SETTINGS_KEY, dataStr, {
+        httpMetadata: { contentType: 'application/json' }
+      });
+      await env.MY_BUCKET.put(`${R2_SETTINGS_KEY}.bak`, dataStr, {
         httpMetadata: { contentType: 'application/json' }
       });
     } catch (e) {
@@ -262,36 +313,63 @@ async function saveStoredSettings(env: Env, settings: SiteSettings): Promise<voi
   }
 }
 
-// Helper: Load Categories from R2 (Carousel Logos, Tags, Subtitles)
+// Helper: Load Categories from R2 (Carousel Logos, Tags, Subtitles with multi-key fail-safe)
 async function getStoredCategories(env: Env): Promise<CategoryItem[]> {
-  if (cachedCategories) return cachedCategories;
+  if (cachedCategories && cachedCategories.length > 0) return cachedCategories;
 
   if (env.MY_BUCKET) {
-    try {
-      const obj = await env.MY_BUCKET.get(R2_CATEGORIES_KEY);
-      if (obj) {
-        const text = await new Response(obj.body).text();
-        const data = JSON.parse(text);
-        if (Array.isArray(data) && data.length > 0) {
-          cachedCategories = data;
-          return cachedCategories!;
+    const candidateKeys = [
+      R2_CATEGORIES_KEY,
+      'categories.json',
+      'store_data/categories.json',
+      'data/categories.json',
+      `${R2_CATEGORIES_KEY}.bak`,
+      '_db/backup.json',
+      'backup.json'
+    ];
+    for (const key of candidateKeys) {
+      try {
+        const obj = await env.MY_BUCKET.get(key);
+        if (obj) {
+          const text = await new Response(obj.body).text();
+          const parsed = JSON.parse(text);
+          const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.categories) ? parsed.categories : null);
+          if (Array.isArray(list) && list.length > 0) {
+            cachedCategories = list;
+            if (key !== R2_CATEGORIES_KEY) {
+              await saveStoredCategories(env, list);
+            }
+            return cachedCategories;
+          }
         }
+      } catch (e) {
+        console.warn(`Error loading categories from key ${key}:`, e);
       }
-    } catch (e) {
-      console.error('Error loading categories from R2:', e);
     }
   }
 
   cachedCategories = [...CATEGORY_CAROUSEL_ITEMS];
+  // Persist initial categories to R2 so future reads succeed immediately
+  if (env.MY_BUCKET) {
+    saveStoredCategories(env, cachedCategories).catch(() => {});
+  }
   return cachedCategories;
 }
 
-// Helper: Save Categories to R2
+// Helper: Save Categories to R2 (Guards against empty overwrites & saves backup)
 async function saveStoredCategories(env: Env, categories: CategoryItem[]): Promise<void> {
+  if (!Array.isArray(categories) || categories.length === 0) {
+    console.warn('Blocked attempt to overwrite categories with empty array in R2');
+    return;
+  }
   cachedCategories = categories;
   if (env.MY_BUCKET) {
     try {
-      await env.MY_BUCKET.put(R2_CATEGORIES_KEY, JSON.stringify(categories), {
+      const dataStr = JSON.stringify(categories, null, 2);
+      await env.MY_BUCKET.put(R2_CATEGORIES_KEY, dataStr, {
+        httpMetadata: { contentType: 'application/json' }
+      });
+      await env.MY_BUCKET.put(`${R2_CATEGORIES_KEY}.bak`, dataStr, {
         httpMetadata: { contentType: 'application/json' }
       });
     } catch (e) {
@@ -300,23 +378,31 @@ async function saveStoredCategories(env: Env, categories: CategoryItem[]): Promi
   }
 }
 
-// Helper: Load Orders from R2
+// Helper: Load Orders from R2 (multi-key fail-safe)
 async function getStoredOrders(env: Env): Promise<Order[]> {
   if (cachedOrders) return cachedOrders;
 
   if (env.MY_BUCKET) {
-    try {
-      const obj = await env.MY_BUCKET.get(R2_ORDERS_KEY);
-      if (obj) {
-        const text = await new Response(obj.body).text();
-        const data = JSON.parse(text);
-        if (Array.isArray(data)) {
-          cachedOrders = data;
-          return cachedOrders!;
+    const candidateKeys = [
+      R2_ORDERS_KEY,
+      'orders.json',
+      'store_data/orders.json',
+      `${R2_ORDERS_KEY}.bak`
+    ];
+    for (const key of candidateKeys) {
+      try {
+        const obj = await env.MY_BUCKET.get(key);
+        if (obj) {
+          const text = await new Response(obj.body).text();
+          const data = JSON.parse(text);
+          if (Array.isArray(data)) {
+            cachedOrders = data;
+            return cachedOrders;
+          }
         }
+      } catch (e) {
+        console.warn(`Error loading orders from key ${key}:`, e);
       }
-    } catch (e) {
-      console.error('Error loading orders from R2:', e);
     }
   }
 
@@ -329,7 +415,11 @@ async function saveStoredOrders(env: Env, orders: Order[]): Promise<void> {
   cachedOrders = orders;
   if (env.MY_BUCKET) {
     try {
-      await env.MY_BUCKET.put(R2_ORDERS_KEY, JSON.stringify(orders), {
+      const dataStr = JSON.stringify(orders, null, 2);
+      await env.MY_BUCKET.put(R2_ORDERS_KEY, dataStr, {
+        httpMetadata: { contentType: 'application/json' }
+      });
+      await env.MY_BUCKET.put(`${R2_ORDERS_KEY}.bak`, dataStr, {
         httpMetadata: { contentType: 'application/json' }
       });
     } catch (e) {
@@ -376,19 +466,58 @@ export default {
         );
       }
 
-      // 3. R2 Image Stream: /api/images/:key
-      if (pathname.startsWith('/api/images/') && request.method === 'GET') {
-        const key = decodeURIComponent(pathname.replace('/api/images/', ''));
+      // 3. R2 Image Stream: /api/images/:key, /uploads/:filename, /images/:filename
+      if ((pathname.startsWith('/api/images/') || pathname.startsWith('/uploads/') || pathname.startsWith('/images/')) && request.method === 'GET') {
+        let rawKey = '';
+        if (pathname.startsWith('/api/images/')) {
+          rawKey = pathname.replace('/api/images/', '');
+        } else if (pathname.startsWith('/uploads/')) {
+          rawKey = pathname.replace('/uploads/', '');
+        } else if (pathname.startsWith('/images/')) {
+          rawKey = pathname.replace('/images/', '');
+        }
+
+        let key = rawKey;
+        try {
+          key = decodeURIComponent(rawKey);
+        } catch {}
 
         if (env.MY_BUCKET) {
-          const object = await env.MY_BUCKET.get(key);
-          if (object) {
-            const headers = new Headers(corsHeaders);
-            object.writeHttpMetadata(headers);
-            headers.set('etag', object.httpEtag);
-            headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-            return new Response(object.body, { headers });
+          const candidateKeys = [
+            key,
+            `uploads/${key}`,
+            key.replace(/^uploads\//, ''),
+            `images/${key}`,
+            key.replace(/^images\//, '')
+          ];
+
+          for (const cand of candidateKeys) {
+            try {
+              const object = await env.MY_BUCKET.get(cand);
+              if (object) {
+                const headers = new Headers(corsHeaders);
+                object.writeHttpMetadata(headers);
+                headers.set('etag', object.httpEtag);
+                headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+                if (!headers.get('Content-Type')) {
+                  const ext = cand.split('.').pop()?.toLowerCase();
+                  if (ext === 'png') headers.set('Content-Type', 'image/png');
+                  else if (ext === 'webp') headers.set('Content-Type', 'image/webp');
+                  else if (ext === 'svg') headers.set('Content-Type', 'image/svg+xml');
+                  else headers.set('Content-Type', 'image/jpeg');
+                }
+                return new Response(object.body, { headers });
+              }
+            } catch (err) {
+              console.warn(`R2 lookup failed for ${cand}:`, err);
+            }
           }
+        }
+
+        // If not in bucket and running on Cloudflare with static ASSETS, try ASSETS
+        if (env.ASSETS) {
+          const assetRes = await env.ASSETS.fetch(request);
+          if (assetRes.status !== 404) return assetRes;
         }
 
         return new Response('Image not found in R2 bucket', { status: 404, headers: corsHeaders });
@@ -442,6 +571,8 @@ export default {
             success: true,
             key,
             url: imageUrl,
+            staticUrl: `/${key}`,
+            directUrl: imageUrl,
             size: bytes.byteLength,
             contentType: mime,
             bucket: 'spidey-jersey-images',
@@ -449,6 +580,159 @@ export default {
           }),
           { headers: { 'Content-Type': 'application/json', ...corsHeaders } }
         );
+      }
+
+      // 4b. Cloud Storage Backup & Resync Fail-Safe Endpoints
+      // Full Catalog Snapshot Backup Export: GET /api/sync/backup
+      if (pathname === '/api/sync/backup' && request.method === 'GET') {
+        const prods = await getStoredProducts(env);
+        const cats = await getStoredCategories(env);
+        const settings = await getStoredSettings(env);
+        const ordersList = await getStoredOrders(env);
+        const steadfast = await getStoredSteadfastConfig(env);
+
+        const backupData = {
+          timestamp: new Date().toISOString(),
+          version: '2.5.0',
+          products: prods,
+          categories: cats,
+          siteSettings: settings,
+          orders: ordersList,
+          steadfastConfig: steadfast
+        };
+
+        return new Response(JSON.stringify({ success: true, backup: backupData }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // Full Catalog Snapshot Restore: POST /api/sync/restore
+      if (pathname === '/api/sync/restore' && request.method === 'POST') {
+        const { backup } = await request.json();
+        if (!backup || typeof backup !== 'object') {
+          return new Response(JSON.stringify({ success: false, message: 'Valid backup payload required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        if (Array.isArray(backup.products) && backup.products.length > 0) {
+          await saveStoredProducts(env, backup.products);
+        }
+
+        if (Array.isArray(backup.categories) && backup.categories.length > 0) {
+          await saveStoredCategories(env, backup.categories);
+        }
+
+        if (backup.siteSettings && typeof backup.siteSettings === 'object') {
+          await saveStoredSettings(env, backup.siteSettings);
+        }
+
+        if (Array.isArray(backup.orders)) {
+          await saveStoredOrders(env, backup.orders);
+        }
+
+        if (backup.steadfastConfig) {
+          await saveStoredSteadfastConfig(env, backup.steadfastConfig);
+        }
+
+        const prods = await getStoredProducts(env);
+        const cats = await getStoredCategories(env);
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Store catalog and database successfully restored to R2 bucket!',
+          productsCount: prods.length,
+          categoriesCount: cats.length
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // Reconnect & Force Re-Index R2: POST /api/sync/reconnect or /api/sync/resync
+      if ((pathname === '/api/sync/reconnect' || pathname === '/api/sync/resync') && request.method === 'POST') {
+        // Clear in-memory caches to force reading fresh from R2
+        cachedProducts = null;
+        cachedCategories = null;
+        cachedSettings = null;
+        cachedOrders = null;
+        cachedSteadfast = null;
+
+        const currentProducts = await getStoredProducts(env);
+        const currentCategories = await getStoredCategories(env);
+        const currentSettings = await getStoredSettings(env);
+
+        // Auto-heal: Ensure canonical R2 keys are saved so live site never drops them
+        if (env.MY_BUCKET) {
+          await saveStoredProducts(env, currentProducts);
+          await saveStoredCategories(env, currentCategories);
+          await saveStoredSettings(env, currentSettings);
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'R2 bucket connection re-indexed and catalog synchronized successfully!',
+          productsCount: currentProducts.length,
+          categoriesCount: currentCategories.length,
+          settings: currentSettings,
+          products: currentProducts,
+          categories: currentCategories
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
+      // Non-destructive Rehydration: POST /api/sync/rehydrate
+      if (pathname === '/api/sync/rehydrate' && request.method === 'POST') {
+        const body: any = await request.json();
+        const { clientProducts, clientCategories, clientSettings } = body;
+        const currentProducts = await getStoredProducts(env);
+        const currentCategories = await getStoredCategories(env);
+
+        let prodsChanged = false;
+        let catsChanged = false;
+
+        if (Array.isArray(clientProducts) && clientProducts.length > 0) {
+          for (const cp of clientProducts) {
+            const exists = currentProducts.find(p => p.id === cp.id || (cp.code && p.code === cp.code));
+            if (!exists && cp.title) {
+              currentProducts.unshift(cp);
+              prodsChanged = true;
+            }
+          }
+          if (prodsChanged) {
+            await saveStoredProducts(env, currentProducts);
+          }
+        }
+
+        if (Array.isArray(clientCategories) && clientCategories.length > 0) {
+          for (const cc of clientCategories) {
+            const exists = currentCategories.find(
+              c => c.id.toLowerCase() === cc.id.toLowerCase() || c.name.toLowerCase() === (cc.name || '').toLowerCase()
+            );
+            if (!exists && cc.name) {
+              currentCategories.push(cc);
+              catsChanged = true;
+            }
+          }
+          if (catsChanged) {
+            await saveStoredCategories(env, currentCategories);
+          }
+        }
+
+        if (clientSettings && typeof clientSettings === 'object' && clientSettings.heroHeadline) {
+          const currentSettings = await getStoredSettings(env);
+          const updatedSettings = { ...currentSettings, ...clientSettings };
+          await saveStoredSettings(env, updatedSettings);
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          products: currentProducts,
+          categories: currentCategories
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
 
       // 5. Site Settings (Hero Banner, Slogans, Logos) - GET & POST/PUT

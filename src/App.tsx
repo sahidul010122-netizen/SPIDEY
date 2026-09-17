@@ -196,9 +196,9 @@ export default function App() {
           });
         }
       }
-      return [];
+      return [...CATEGORY_CAROUSEL_ITEMS];
     } catch {
-      return [];
+      return [...CATEGORY_CAROUSEL_ITEMS];
     }
   });
 
@@ -230,20 +230,22 @@ export default function App() {
     try {
       const deletedRaw = localStorage.getItem('spidey_deleted_product_ids');
       const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
-      const delSet = new Set(deletedIds);
+      const delSet = new Set(deletedIds.filter(id => Boolean(id && String(id).trim())));
 
       const saved = localStorage.getItem('spidey_products') || localStorage.getItem('orifake_products');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((p: any) => !delSet.has(p.id) && !delSet.has(p.code));
-          return sortProductsWithPinned(valid);
+          const valid = parsed.filter((p: any) => !(p.id && delSet.has(p.id)) && !(p.code && delSet.has(p.code)));
+          if (valid.length > 0) {
+            return sortProductsWithPinned(valid);
+          }
         }
       }
       const initialClean = INITIAL_JERSEYS
-        .filter((p) => !delSet.has(p.id) && !delSet.has(p.code))
+        .filter((p) => !(p.id && delSet.has(p.id)) && !(p.code && delSet.has(p.code)))
         .map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
-      return sortProductsWithPinned(initialClean);
+      return sortProductsWithPinned(initialClean.length > 0 ? initialClean : INITIAL_JERSEYS);
     } catch {
       return INITIAL_JERSEYS.map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
     }
@@ -347,20 +349,21 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.products && Array.isArray(data.products)) {
+        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
           // Sync server-side deleted tombstones with localStorage
           let delSet = new Set<string>();
           try {
             const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_product_ids') || '[]');
             const serverDeleted: string[] = Array.isArray(data.deletedProductIds) ? data.deletedProductIds : [];
-            const merged = Array.from(new Set([...currentDeleted, ...serverDeleted]));
+            const merged = Array.from(new Set([...currentDeleted, ...serverDeleted])).filter(id => Boolean(id && String(id).trim()));
             localStorage.setItem('spidey_deleted_product_ids', JSON.stringify(merged));
             delSet = new Set(merged);
           } catch {}
 
           // Filter against tombstone set and sort strictly: Pinned items float to Top, then drag-and-drop sortOrder
+          const validProducts = data.products.filter((p: JerseyProduct) => !(p.id && delSet.has(p.id)) && !(p.code && delSet.has(p.code)));
           const cleanProducts: JerseyProduct[] = sortProductsWithPinned(
-            data.products.filter((p: JerseyProduct) => !delSet.has(p.id) && !delSet.has(p.code))
+            validProducts.length > 0 ? validProducts : data.products
           );
 
           setProducts(cleanProducts);
@@ -368,10 +371,14 @@ export default function App() {
             localStorage.setItem('spidey_products', JSON.stringify(cleanProducts));
             localStorage.removeItem('orifake_products');
           } catch {}
+        } else {
+          // If server products came back empty, ensure we never show blank store
+          setProducts((prev) => (prev && prev.length > 0 ? prev : sortProductsWithPinned(INITIAL_JERSEYS)));
         }
       }
     } catch (err) {
       console.warn('Using local/cached dataset:', err);
+      setProducts((prev) => (prev && prev.length > 0 ? prev : sortProductsWithPinned(INITIAL_JERSEYS)));
     }
   };
 
@@ -413,7 +420,7 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.categories && Array.isArray(data.categories)) {
+        if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
           const cleanCategories: CategoryItem[] = data.categories.sort((a: CategoryItem, b: CategoryItem) => {
             const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
             const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
@@ -425,10 +432,14 @@ export default function App() {
             localStorage.removeItem('orifake_categories');
             localStorage.removeItem('spidey_deleted_category_ids');
           } catch {}
+        } else {
+          // If server categories was empty, fall back to default carousel items
+          setCategoryItems((prev) => (prev && prev.length > 0 ? prev : CATEGORY_CAROUSEL_ITEMS));
         }
       }
     } catch (err) {
       console.warn('Categories fetch error:', err);
+      setCategoryItems((prev) => (prev && prev.length > 0 ? prev : CATEGORY_CAROUSEL_ITEMS));
     }
   };
 
@@ -471,12 +482,16 @@ export default function App() {
     const handleSync = () => {
       fetchProducts();
       fetchCategories();
+      fetchSiteSettings();
+      fetchStats();
     };
     window.addEventListener('spidey_catalog_updated', handleSync);
+    window.addEventListener('spidey_reconnect_sync', handleSync);
     window.addEventListener('storage', handleSync);
     window.addEventListener('focus', handleSync);
     return () => {
       window.removeEventListener('spidey_catalog_updated', handleSync);
+      window.removeEventListener('spidey_reconnect_sync', handleSync);
       window.removeEventListener('storage', handleSync);
       window.removeEventListener('focus', handleSync);
     };
@@ -821,7 +836,7 @@ export default function App() {
 
   // CMS Settings Actions (Sync with R2 backend)
   const handleUpdateSiteSettings = async (newSettings: Partial<SiteSettings>) => {
-    const updated = { ...siteSettings, ...newSettings };
+    const updated = { ...DEFAULT_SITE_SETTINGS, ...siteSettings, ...newSettings };
     setSiteSettings(updated);
     try {
       const res = await fetch('/api/settings', {
@@ -831,10 +846,20 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success && data.settings) {
-        setSiteSettings(data.settings);
+        setSiteSettings({ ...DEFAULT_SITE_SETTINGS, ...data.settings });
       }
     } catch (e) {
       console.warn('Failed to sync settings with backend:', e);
+    }
+    try {
+      const toCache = { ...updated };
+      if (toCache.heroBgImage && toCache.heroBgImage.startsWith('data:') && toCache.heroBgImage.length > 200000) {
+        toCache.heroBgImage = '';
+      }
+      localStorage.setItem('orifake_site_settings', JSON.stringify(toCache));
+      localStorage.setItem('spidey_site_settings', JSON.stringify(toCache));
+    } catch (storageErr) {
+      console.warn('LocalStorage quota or disabled:', storageErr);
     }
     showToast('Store banner & settings updated live across all devices!');
   };

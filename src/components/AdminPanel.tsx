@@ -340,6 +340,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [isForceSyncing, setIsForceSyncing] = useState(false);
+  const [isReconnectingR2, setIsReconnectingR2] = useState(false);
   const [syncStatusNote, setSyncStatusNote] = useState<string | null>(null);
 
   // Permanent Product Deletion Dialog State
@@ -683,12 +684,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
-    const url = await uploadFileToR2(file);
-    if (url) {
-      setLocalSettings((prev) => ({ ...prev, heroBgImage: url }));
-      onUpdateSiteSettings({ heroBgImage: url });
+    setSyncStatusNote(null);
+    try {
+      const url = await uploadFileToR2(file);
+      if (url) {
+        setLocalSettings((prev) => {
+          const next = { ...prev, heroBgImage: url };
+          onUpdateSiteSettings(next);
+          return next;
+        });
+        setSyncStatusNote('✓ Hero banner uploaded to R2 and updated live! (Products & categories intact)');
+        setTimeout(() => setSyncStatusNote(null), 4500);
+      }
+    } catch (err: any) {
+      console.error('Banner upload error:', err);
+      setSyncStatusNote(`✕ Banner upload error: ${err.message || 'Failed'}`);
+    } finally {
+      setIsUploading(false);
     }
-    setIsUploading(false);
   };
 
   // Header Logo / Mascot Upload
@@ -846,6 +859,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsForceSyncing(false);
       setTimeout(() => setSyncStatusNote(null), 5000);
+    }
+  };
+
+  // Force Reconnect & Re-index R2 / Disk Store
+  const handleReconnectLiveR2 = async () => {
+    setIsReconnectingR2(true);
+    setSyncStatusNote(null);
+    try {
+      const res = await fetch('/api/sync/reconnect', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSyncStatusNote(`✓ Reconnected to R2 storage! Active: ${data.productsCount} products, ${data.categoriesCount} categories. Live website restored!`);
+        window.dispatchEvent(new CustomEvent('spidey_reconnect_sync', { detail: data }));
+        setTimeout(() => {
+          window.location.reload();
+        }, 1200);
+      } else {
+        setSyncStatusNote(`✕ Reconnect failed: ${data.message || 'Check storage binding'}`);
+      }
+    } catch (err: any) {
+      setSyncStatusNote(`✕ Reconnect error: ${err.message || 'Network error'}`);
+    } finally {
+      setIsReconnectingR2(false);
     }
   };
 
@@ -1750,6 +1786,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </form>
 
+              {/* Fail-Safe Protection Card */}
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <span className="text-xs font-extrabold text-emerald-950 block">
+                      R2 Banner Isolation & Catalog Protection Active
+                    </span>
+                    <span className="text-[11px] text-emerald-700 block">
+                      Banner uploads only update the hero banner. Product & category datasets are locked and protected against resets.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleReconnectLiveR2}
+                  disabled={isReconnectingR2}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isReconnectingR2 ? 'animate-spin' : ''}`} />
+                  <span>{isReconnectingR2 ? 'Reconnecting...' : 'Reconnect Live R2 Sync'}</span>
+                </button>
+              </div>
+
             </div>
           )}
 
@@ -2299,7 +2359,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* Reconnect R2 & Restore Live Website Button */}
+                    <button
+                      onClick={handleReconnectLiveR2}
+                      disabled={isReconnectingR2}
+                      className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                      title="Reconnects to Cloudflare R2 / Disk and re-syncs all live products, categories, and banners"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isReconnectingR2 ? 'animate-spin' : ''}`} />
+                      <span>{isReconnectingR2 ? 'Reconnecting R2...' : 'Reconnect R2 & Restore Site'}</span>
+                    </button>
+
                     {/* Force Cloud Sync Button */}
                     <button
                       onClick={handleForceSyncAll}

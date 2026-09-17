@@ -40,7 +40,13 @@ function loadJsonFile<T>(filePath: string, defaultValue: T): T {
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, 'utf-8');
       if (data && data.trim()) {
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // If parsed is empty array but defaultValue has items, prioritize backup
+        if (Array.isArray(parsed) && parsed.length === 0 && Array.isArray(defaultValue) && defaultValue.length > 0) {
+          console.warn(`File ${filePath} is an empty array, attempting backup recovery...`);
+        } else {
+          return parsed;
+        }
       }
     }
   } catch (e) {
@@ -52,8 +58,11 @@ function loadJsonFile<T>(filePath: string, defaultValue: T): T {
     if (fs.existsSync(backupPath)) {
       const backupData = fs.readFileSync(backupPath, 'utf-8');
       if (backupData && backupData.trim()) {
-        console.log(`✓ Recovered data for ${path.basename(filePath)} from backup file`);
-        return JSON.parse(backupData);
+        const parsed = JSON.parse(backupData);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log(`✓ Recovered non-empty data for ${path.basename(filePath)} from backup file`);
+          return parsed as T;
+        }
       }
     }
   } catch (backupErr) {
@@ -65,16 +74,27 @@ function loadJsonFile<T>(filePath: string, defaultValue: T): T {
 
 // Helper to atomically save JSON with automatic backup rotation
 function saveJsonFile(filePath: string, data: any) {
+  // Strict Safeguard: Block saving empty products or categories over existing files
+  if (filePath === PRODUCTS_FILE || filePath === CATEGORIES_FILE) {
+    if (!Array.isArray(data) || data.length === 0) {
+      console.warn(`Blocked attempt to write empty array to ${filePath}`);
+      return;
+    }
+  }
+
   const backupPath = `${filePath}.bak`;
   const tempPath = `${filePath}.tmp.${Date.now()}`;
   try {
     const jsonString = JSON.stringify(data, null, 2);
     // 1. Write to temp file first
     fs.writeFileSync(tempPath, jsonString, 'utf-8');
-    // 2. Rotate current file to backup if it exists
+    // 2. Rotate current file to backup ONLY if it has meaningful content
     if (fs.existsSync(filePath)) {
       try {
-        fs.copyFileSync(filePath, backupPath);
+        const stat = fs.statSync(filePath);
+        if (stat.size > 10) {
+          fs.copyFileSync(filePath, backupPath);
+        }
       } catch {}
     }
     // 3. Atomically replace target file
@@ -122,7 +142,15 @@ products.forEach((p, idx) => {
 
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
-let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
+if (!Array.isArray(categoryItems) || categoryItems.length === 0) {
+  categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+  saveJsonFile(CATEGORIES_FILE, categoryItems);
+}
+if (!Array.isArray(products) || products.length === 0) {
+  products = [...INITIAL_JERSEYS];
+  saveJsonFile(PRODUCTS_FILE, products);
+}
 let deletedCategoryIds: string[] = loadJsonFile<string[]>(DELETED_CATEGORIES_FILE, []);
 if (deletedCategoryIds.length > 0) {
   const delSet = new Set(deletedCategoryIds);
@@ -357,6 +385,12 @@ async function startServer() {
       if (Array.isArray(loaded) && loaded.length > 0) {
         categoryItems = loaded;
       }
+    }
+
+    // Fail-safe: If categories is empty, recover from initial catalog
+    if (!Array.isArray(categoryItems) || categoryItems.length === 0) {
+      categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
     }
 
     // Stamp sortOrder and position if missing
@@ -672,6 +706,12 @@ async function startServer() {
       if (Array.isArray(loaded) && loaded.length > 0) {
         products = loaded;
       }
+    }
+
+    // Fail-safe: If products is empty, recover from initial catalog
+    if (!Array.isArray(products) || products.length === 0) {
+      products = [...INITIAL_JERSEYS];
+      saveJsonFile(PRODUCTS_FILE, products);
     }
 
     // Ensure sortOrder and position are stamped
@@ -1218,6 +1258,42 @@ async function startServer() {
       rehydrated: { productsUpdated, categoriesUpdated, settingsUpdated }
     });
   });
+
+  // Reconnect & Force Re-Index Store Data: POST /api/sync/reconnect or /api/sync/resync
+  const handleResync = (_req: Request, res: Response) => {
+    // 1. Re-read master files
+    const loadedProducts = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, [...INITIAL_JERSEYS]);
+    if (Array.isArray(loadedProducts) && loadedProducts.length > 0) {
+      products = loadedProducts;
+    } else {
+      products = [...INITIAL_JERSEYS];
+      saveJsonFile(PRODUCTS_FILE, products);
+    }
+
+    const loadedCategories = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
+    if (Array.isArray(loadedCategories) && loadedCategories.length > 0) {
+      categoryItems = loadedCategories;
+    } else {
+      categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
+    }
+
+    siteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
+    orders = loadJsonFile<Order[]>(ORDERS_FILE, []);
+
+    res.json({
+      success: true,
+      message: 'Store state and database re-indexed successfully!',
+      productsCount: products.length,
+      categoriesCount: categoryItems.length,
+      settings: siteSettings,
+      products,
+      categories: categoryItems
+    });
+  };
+
+  app.post('/api/sync/reconnect', handleResync);
+  app.post('/api/sync/resync', handleResync);
 
   // Admin Stats
   app.get('/api/stats', (req: Request, res: Response) => {
