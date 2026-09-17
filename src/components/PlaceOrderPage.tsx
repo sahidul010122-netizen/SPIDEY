@@ -677,19 +677,14 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                               style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 transparent' }}
                             >
                               {filteredProducts.length > 0 ? (
-                                <>
-                                  <div className="px-3.5 py-1.5 bg-neutral-50/90 border-b border-neutral-100 flex items-center justify-between text-[10px] font-semibold text-neutral-500 uppercase tracking-wider sticky top-0 z-10 backdrop-blur-xs">
-                                    <span>{filteredProducts.length} Jerseys Found</span>
-                                    <span className="text-neutral-400 font-normal">Tap to select</span>
-                                  </div>
-                                  {filteredProducts.map((prod) => (
-                                    <button
-                                      type="button"
-                                      key={prod.id}
+                                filteredProducts.map((prod) => (
+                                  <button
+                                    type="button"
+                                    key={prod.id}
                                       onClick={() => handleSelectProduct(index, prod)}
                                       className="w-full p-3 sm:p-3.5 flex items-center gap-3 sm:gap-3.5 hover:bg-neutral-50 active:bg-neutral-100/80 text-left transition-all duration-150 group cursor-pointer focus:outline-none focus:bg-neutral-50"
                                     >
-                                      {/* Enlarge Product Thumbnail Image (56px - 60px) */}
+                                      {/* Left: Enlarged Product Thumbnail Image */}
                                       <div className="w-14 h-14 sm:w-15 sm:h-15 rounded-xl bg-neutral-50 p-1 border border-neutral-200/90 shadow-xs shrink-0 overflow-hidden flex items-center justify-center group-hover:border-neutral-300 transition-colors">
                                         <img 
                                           src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80'} 
@@ -700,48 +695,25 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                                         />
                                       </div>
 
-                                      {/* Typography & Spacing: Details Area */}
-                                      <div className="flex-1 min-w-0 flex flex-col justify-center space-y-1">
-                                        {/* Line 1: Code & Title */}
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          {prod.code && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-900 font-mono font-bold text-[11px] border border-neutral-200/80 shrink-0">
+                                      {/* Right: Stacked Layout (Top: Code, Bottom: Title) */}
+                                      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
+                                        {/* Top Line: Product Code */}
+                                        {prod.code && (
+                                          <div>
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-900 font-mono font-bold text-[11px] border border-neutral-200/80 tracking-wide">
                                               [{prod.code}]
                                             </span>
-                                          )}
-                                          <span className="text-xs sm:text-[13px] font-bold text-neutral-900 leading-snug break-words group-hover:text-black">
-                                            {prod.title}
-                                          </span>
-                                        </div>
+                                          </div>
+                                        )}
 
-                                        {/* Line 2: Edition / Sleeve variation, Season, Badge, and Price */}
-                                        <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 flex-wrap">
-                                          {prod.edition && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200/60">
-                                              {prod.edition}
-                                            </span>
-                                          )}
-                                          {prod.season && (
-                                            <span className="text-neutral-400 text-[10px] font-medium">
-                                              {prod.season}
-                                            </span>
-                                          )}
-                                          {prod.badge && (
-                                            <span className="text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded text-[9px] font-bold">
-                                              {prod.badge}
-                                            </span>
-                                          )}
-                                          {prod.price > 0 && (
-                                            <span className="text-neutral-900 font-bold ml-auto text-xs shrink-0">
-                                              ৳{prod.price.toLocaleString()}
-                                            </span>
-                                          )}
+                                        {/* Bottom Line: Main Product Title in Bold */}
+                                        <div className="text-xs sm:text-[13px] font-bold text-neutral-900 leading-snug break-words group-hover:text-black">
+                                          {prod.title}
                                         </div>
                                       </div>
                                     </button>
-                                  ))}
-                                </>
-                              ) : (
+                                  ))
+                                ) : (
                                 <div className="p-6 text-center space-y-1.5">
                                   <div className="text-neutral-700 font-bold text-xs">
                                     No jerseys found
