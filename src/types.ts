@@ -28,6 +28,9 @@ export interface JerseyProduct {
   sortOrder?: number;
   position?: number;
   priority?: number;
+  isPinned?: boolean; // When true, product stays at the top of frontend & admin list
+  pinnedAt?: number;  // Timestamp when pinned, preserving sequential selection order
+  pinnedOrder?: number; // Explicit sequential order index among pinned items
   createdAt: string;
   updatedAt?: string;
 }

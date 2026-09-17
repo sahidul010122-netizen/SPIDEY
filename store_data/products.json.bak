@@ -40,7 +40,11 @@
     "createdAt": "2024-08-03T10:00:00.000Z",
     "sortOrder": 0,
     "position": 0,
-    "priority": 0
+    "priority": 0,
+    "isPinned": true,
+    "pinnedOrder": 1,
+    "pinnedAt": 1710000000000,
+    "updatedAt": "2026-09-17T08:30:02.769Z"
   },
   {
     "id": "spidey-barca-1999-centenary",

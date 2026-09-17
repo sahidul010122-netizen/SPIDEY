@@ -8,11 +8,12 @@ import {
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
   Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save, RotateCcw,
-  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move
+  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move, Pin
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
 import { CurrencyCode, formatPrice, CURRENCY_RATES } from '../utils/currency';
+import { sortProductsWithPinned } from '../utils/productSort';
 import { OrderProcessManager } from './admin/OrderProcessManager';
 import { SteadfastApiSection } from './admin/SteadfastApiSection';
 import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
@@ -28,6 +29,7 @@ interface AdminPanelProps {
   onUpdateProduct: (id: string, product: Partial<JerseyProduct>) => Promise<boolean>;
   onDeleteProduct: (id: string) => Promise<boolean>;
   onReorderProducts?: (products: JerseyProduct[]) => Promise<boolean>;
+  onTogglePinProduct?: (id: string) => Promise<boolean>;
   onResetCatalog: () => Promise<void>;
   onUpdateSiteSettings: (settings: Partial<SiteSettings>) => void;
   onAddCategory: (cat: CategoryItem) => void;
@@ -55,6 +57,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onUpdateProduct,
   onDeleteProduct,
   onReorderProducts,
+  onTogglePinProduct,
   onResetCatalog,
   onUpdateSiteSettings,
   onAddCategory,
@@ -86,25 +89,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isSavingProductOrder, setIsSavingProductOrder] = useState(false);
   const [productOrderSavedToast, setProductOrderSavedToast] = useState(false);
 
-  // Optimistic local products state to prevent visual snap-back and ensure strict sortOrder
+  // Optimistic local products state strictly ordered: Pinned items float to Top, followed by drag-and-drop sequence
   const [localProducts, setLocalProducts] = useState<JerseyProduct[]>(() => {
-    return [...(Array.isArray(products) ? products : [])].sort((a, b) => {
-      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
-      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
-      return orderA - orderB;
-    });
+    return sortProductsWithPinned(Array.isArray(products) ? products : []);
   });
 
   // Keep localProducts synced when parent products prop updates (unless actively dragging or saving)
   useEffect(() => {
     if (!isSavingProductOrder && !draggedProductId) {
-      setLocalProducts([...(Array.isArray(products) ? products : [])].sort((a, b) => {
-        const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
-        const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
-        return orderA - orderB;
-      }));
+      setLocalProducts(sortProductsWithPinned(Array.isArray(products) ? products : []));
     }
   }, [products, isSavingProductOrder, draggedProductId]);
+
+  // Handle Quick Top (Pin / Unpin) toggle
+  const handleTogglePin = async (id: string) => {
+    const target = localProducts.find((p) => p.id === id || p.code === id);
+    if (!target) return;
+
+    const willBePinned = !target.isPinned;
+    let updated: JerseyProduct;
+
+    if (willBePinned) {
+      // Find highest pinnedOrder among currently pinned items to maintain sequential order
+      const currentlyPinned = localProducts.filter((p) => p.isPinned && p.id !== target.id && p.code !== target.id);
+      const maxPinnedOrder = currentlyPinned.reduce(
+        (max, p) => Math.max(max, typeof p.pinnedOrder === 'number' ? p.pinnedOrder : 0),
+        0
+      );
+      updated = {
+        ...target,
+        isPinned: true,
+        pinnedAt: Date.now(),
+        pinnedOrder: maxPinnedOrder + 1,
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      updated = {
+        ...target,
+        isPinned: false,
+        pinnedAt: undefined,
+        pinnedOrder: undefined,
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    // 1. Immediately update local state so item jumps to Top or drops to normal position without snapping back
+    const nextList = sortProductsWithPinned(
+      localProducts.map((p) => (p.id === target.id || p.code === target.id ? updated : p))
+    );
+    setLocalProducts(nextList);
+
+    // 2. Persist through parent or direct API
+    if (onTogglePinProduct) {
+      await onTogglePinProduct(id);
+    } else {
+      await onUpdateProduct(target.id, updated);
+    }
+  };
 
   const handleProductReorder = async (newOrder: JerseyProduct[]) => {
     const stamped = newOrder.map((p, idx) => ({
@@ -687,7 +728,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       inStock: formInStock,
       images: formImages.length > 0 ? formImages : ['/images/prod_pixel_case_1787668274006.jpg'],
       features: formFeatures.length > 0 ? formFeatures : ['Moisture-wicking breathable ventilation matrix'],
-      sizes: formSizes.length > 0 ? formSizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL']
+      sizes: formSizes.length > 0 ? formSizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+      isPinned: editingProduct ? editingProduct.isPinned : false,
+      pinnedAt: editingProduct ? editingProduct.pinnedAt : undefined,
+      pinnedOrder: editingProduct ? editingProduct.pinnedOrder : undefined
     };
 
     let success = false;
@@ -1486,6 +1530,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-800">
                               {prod.category}
                             </span>
+                            {prod.isPinned && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white flex items-center gap-1 shadow-xs">
+                                <Pin className="w-2.5 h-2.5 fill-current rotate-45" />
+                                <span>Top {typeof prod.pinnedOrder === 'number' ? `#${prod.pinnedOrder}` : ''}</span>
+                              </span>
+                            )}
                             {prod.badge && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white">
                                 {prod.badge}
@@ -1509,6 +1559,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePin(prod.id)}
+                            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer select-none active:scale-95 ${
+                              prod.isPinned
+                                ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white shadow-amber-500/20'
+                                : 'bg-white hover:bg-neutral-100 border-neutral-200 text-neutral-700 hover:text-neutral-900'
+                            }`}
+                            title={prod.isPinned ? "Click to Unpin from Top (returns to normal sequence)" : "Click to Pin to Top (floats to absolute top on store)"}
+                          >
+                            <Pin className={`w-3.5 h-3.5 transition-transform ${prod.isPinned ? 'fill-current rotate-45 text-white' : 'text-neutral-400 rotate-0'}`} />
+                            <span>{prod.isPinned ? 'Top Pinned' : 'Pin to Top'}</span>
+                          </button>
+
                           <button
                             onClick={() => openEditProductModal(prod)}
                             className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 border border-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"

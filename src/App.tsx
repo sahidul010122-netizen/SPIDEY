@@ -15,6 +15,7 @@ import { JerseyProduct, StoreStats } from './types';
 import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './types/settings';
 import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './data/mockJerseys';
 import { CurrencyCode } from './utils/currency';
+import { sortProductsWithPinned } from './utils/productSort';
 
 export default function App() {
   // Determine if running as standalone PWA or shortcut
@@ -235,18 +236,14 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed
-            .filter((p: any) => !delSet.has(p.id) && !delSet.has(p.code))
-            .sort((a: any, b: any) => {
-              const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
-              const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
-              return orderA - orderB;
-            });
+          const valid = parsed.filter((p: any) => !delSet.has(p.id) && !delSet.has(p.code));
+          return sortProductsWithPinned(valid);
         }
       }
-      return INITIAL_JERSEYS
+      const initialClean = INITIAL_JERSEYS
         .filter((p) => !delSet.has(p.id) && !delSet.has(p.code))
         .map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
+      return sortProductsWithPinned(initialClean);
     } catch {
       return INITIAL_JERSEYS.map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
     }
@@ -361,14 +358,10 @@ export default function App() {
             delSet = new Set(merged);
           } catch {}
 
-          // Filter against tombstone set and sort strictly by sortOrder / position / priority
-          const cleanProducts: JerseyProduct[] = data.products
-            .filter((p: JerseyProduct) => !delSet.has(p.id) && !delSet.has(p.code))
-            .sort((a: JerseyProduct, b: JerseyProduct) => {
-              const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
-              const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
-              return orderA - orderB;
-            });
+          // Filter against tombstone set and sort strictly: Pinned items float to Top, then drag-and-drop sortOrder
+          const cleanProducts: JerseyProduct[] = sortProductsWithPinned(
+            data.products.filter((p: JerseyProduct) => !delSet.has(p.id) && !delSet.has(p.code))
+          );
 
           setProducts(cleanProducts);
           try {
@@ -521,12 +514,8 @@ export default function App() {
       return matchesCategory && matchesSearch;
     });
 
-    // Strictly sort by sortOrder / position / priority
-    return filtered.sort((a, b) => {
-      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
-      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
-      return orderA - orderB;
-    });
+    // Strictly sort: Pinned ("Top") products float to top, followed by drag-and-drop sortOrder
+    return sortProductsWithPinned(filtered);
   }, [safeProductsList, selectedCategory, searchQuery, categoryItems]);
 
   // Wishlist Operations
@@ -695,6 +684,67 @@ export default function App() {
       console.error('Failed to sync product reorder:', err);
     }
     showToast('প্রোডাক্ট ক্রম সফলভাবে ডাটাবেস ও স্টোরে সেভ হয়েছে!', 'success');
+    return true;
+  };
+
+  // Quick "Top" (Pin to Top) Toggle for Products
+  const handleTogglePinProduct = async (productId: string): Promise<boolean> => {
+    const target = products.find((p) => p.id === productId || p.code === productId);
+    if (!target) return false;
+
+    const willBePinned = !target.isPinned;
+    let updatedProduct: JerseyProduct;
+
+    if (willBePinned) {
+      // Find highest pinnedOrder among currently pinned items so new pinned item stacks sequentially
+      const currentPinned = products.filter((p) => p.isPinned && p.id !== target.id && p.code !== target.id);
+      const maxPinnedOrder = currentPinned.reduce(
+        (max, p) => Math.max(max, typeof p.pinnedOrder === 'number' ? p.pinnedOrder : 0),
+        0
+      );
+      updatedProduct = {
+        ...target,
+        isPinned: true,
+        pinnedAt: Date.now(),
+        pinnedOrder: maxPinnedOrder + 1,
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      updatedProduct = {
+        ...target,
+        isPinned: false,
+        pinnedAt: undefined,
+        pinnedOrder: undefined,
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    // 1. Immediately update state so item jumps to Top or drops to normal position without snapping back
+    const nextProducts = sortProductsWithPinned(
+      products.map((p) => (p.id === target.id || p.code === target.id ? updatedProduct : p))
+    );
+    setProducts(nextProducts);
+    try {
+      localStorage.setItem('spidey_products', JSON.stringify(nextProducts));
+    } catch {}
+
+    // 2. Persist to server API
+    try {
+      await fetch(`/api/products/${encodeURIComponent(target.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedProduct)
+      });
+    } catch (err) {
+      console.error('Failed to sync pin status with server:', err);
+    }
+
+    if (willBePinned) {
+      showToast(`📌 "${target.title}" সফলভাবে সবার উপরে (Top) পিন করা হয়েছে!`, 'success');
+    } else {
+      showToast(`"${target.title}" আনপিন করা হয়েছে।`, 'info');
+    }
+
     return true;
   };
 
@@ -1167,6 +1217,7 @@ export default function App() {
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
               onReorderProducts={handleReorderProducts}
+              onTogglePinProduct={handleTogglePinProduct}
               onResetCatalog={handleResetCatalog}
               onUpdateSiteSettings={handleUpdateSiteSettings}
               onAddCategory={handleAddCategory}

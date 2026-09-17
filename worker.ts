@@ -717,7 +717,17 @@ export default {
         else if (sortBy === 'popular') list.sort((a, b) => b.reviewCount - a.reviewCount);
         else if (sortBy === 'newest') list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         else {
-          list.sort((a, b) => (Number(a.sortOrder ?? a.position ?? 0) - Number(b.sortOrder ?? b.position ?? 0)));
+          list.sort((a, b) => {
+            const aPinned = Boolean(a.isPinned);
+            const bPinned = Boolean(b.isPinned);
+            if (aPinned !== bPinned) return aPinned ? -1 : 1;
+            if (aPinned && bPinned) {
+              const orderA = typeof a.pinnedOrder === 'number' ? a.pinnedOrder : (typeof a.pinnedAt === 'number' ? a.pinnedAt : 0);
+              const orderB = typeof b.pinnedOrder === 'number' ? b.pinnedOrder : (typeof b.pinnedAt === 'number' ? b.pinnedAt : 0);
+              if (orderA !== orderB) return orderA - orderB;
+            }
+            return (Number(a.sortOrder ?? a.position ?? 0) - Number(b.sortOrder ?? b.position ?? 0));
+          });
         }
 
         return new Response(JSON.stringify({ success: true, count: list.length, products: list }), {

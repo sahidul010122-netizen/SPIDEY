@@ -34,6 +34,16 @@ export const JerseyCard: React.FC<JerseyCardProps> = ({
           className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
         />
 
+        {/* Floating Top / Pinned Badge */}
+        {jersey.isPinned && (
+          <div className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 pointer-events-none z-10">
+            <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold bg-neutral-900/90 text-amber-300 border border-amber-500/30 backdrop-blur-xs shadow-xs flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+              <span>Top</span>
+            </span>
+          </div>
+        )}
+
         {/* Floating Circular Wishlist Heart in Top-Right Corner */}
         <button
           id={`wishlist-btn-${jersey.id}`}
