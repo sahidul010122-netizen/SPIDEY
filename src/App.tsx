@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Heart, ShieldCheck, Check, ArrowUp, Key, Download, Lock, KeyRound, Smartphone, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle, X } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
@@ -188,7 +188,11 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.sort((a: any, b: any) => {
+            const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+            const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+            return orderA - orderB;
+          });
         }
       }
       return [];
@@ -231,12 +235,20 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((p: any) => !delSet.has(p.id) && !delSet.has(p.code));
+          return parsed
+            .filter((p: any) => !delSet.has(p.id) && !delSet.has(p.code))
+            .sort((a: any, b: any) => {
+              const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+              const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+              return orderA - orderB;
+            });
         }
       }
-      return INITIAL_JERSEYS.filter((p) => !delSet.has(p.id) && !delSet.has(p.code));
+      return INITIAL_JERSEYS
+        .filter((p) => !delSet.has(p.id) && !delSet.has(p.code))
+        .map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
     } catch {
-      return INITIAL_JERSEYS;
+      return INITIAL_JERSEYS.map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
     }
   });
   const [stats, setStats] = useState<StoreStats | null>(null);
@@ -326,10 +338,16 @@ export default function App() {
     };
   }, []);
 
-  // Fetch Products from Backend API (Server is authoritative)
+  // Fetch Products from Backend API (Server is authoritative with anti-cache)
   const fetchProducts = async () => {
     try {
-      const res = await fetch('/api/products');
+      const res = await fetch(`/api/products?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.products && Array.isArray(data.products)) {
@@ -343,10 +361,14 @@ export default function App() {
             delSet = new Set(merged);
           } catch {}
 
-          // Filter against tombstone set to guarantee deleted products never appear
-          const cleanProducts: JerseyProduct[] = data.products.filter(
-            (p: JerseyProduct) => !delSet.has(p.id) && !delSet.has(p.code)
-          );
+          // Filter against tombstone set and sort strictly by sortOrder / position / priority
+          const cleanProducts: JerseyProduct[] = data.products
+            .filter((p: JerseyProduct) => !delSet.has(p.id) && !delSet.has(p.code))
+            .sort((a: JerseyProduct, b: JerseyProduct) => {
+              const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+              const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+              return orderA - orderB;
+            });
 
           setProducts(cleanProducts);
           try {
@@ -362,7 +384,13 @@ export default function App() {
 
   const fetchSiteSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
+      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.settings && typeof data.settings === 'object') {
@@ -383,13 +411,24 @@ export default function App() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/categories');
+      const res = await fetch(`/api/categories?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.categories && Array.isArray(data.categories)) {
-          setCategoryItems(data.categories);
+          const cleanCategories: CategoryItem[] = data.categories.sort((a: CategoryItem, b: CategoryItem) => {
+            const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+            const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+            return orderA - orderB;
+          });
+          setCategoryItems(cleanCategories);
           try {
-            localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+            localStorage.setItem('spidey_categories', JSON.stringify(cleanCategories));
             localStorage.removeItem('orifake_categories');
             localStorage.removeItem('spidey_deleted_category_ids');
           } catch {}
@@ -403,7 +442,13 @@ export default function App() {
   // Fetch Stats
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/stats');
+      const res = await fetch(`/api/stats?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache'
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.stats) setStats(data.stats);
@@ -420,36 +465,69 @@ export default function App() {
     fetchStats();
   }, []);
 
-  // Filter products by selected category and search query
+  // When returning to showcase or customer-facing view, re-fetch immediately to guarantee fresh sequence
+  useEffect(() => {
+    if (currentView === 'showcase') {
+      fetchProducts();
+      fetchCategories();
+    }
+  }, [currentView]);
+
+  // Synchronize across tabs or local update events
+  useEffect(() => {
+    const handleSync = () => {
+      fetchProducts();
+      fetchCategories();
+    };
+    window.addEventListener('spidey_catalog_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('focus', handleSync);
+    return () => {
+      window.removeEventListener('spidey_catalog_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
+  }, []);
+
+  // Filter products by selected category and search query, and strictly sort by position / sortOrder
   const safeProductsList = Array.isArray(products) ? products : [];
-  const displayedProducts = safeProductsList.filter((p) => {
-    const pCat = p?.category?.toLowerCase() || '';
-    const pTitle = p?.title?.toLowerCase() || '';
-    const pSeason = p?.season?.toLowerCase() || '';
-    const pEdition = p?.edition?.toLowerCase() || '';
-    const pBadge = p?.badge?.toLowerCase() || '';
-    const selCat = (selectedCategory || 'all').toLowerCase();
-    const query = searchQuery.trim().toLowerCase();
+  const displayedProducts = useMemo(() => {
+    const filtered = safeProductsList.filter((p) => {
+      const pCat = p?.category?.toLowerCase() || '';
+      const pTitle = p?.title?.toLowerCase() || '';
+      const pSeason = p?.season?.toLowerCase() || '';
+      const pEdition = p?.edition?.toLowerCase() || '';
+      const pBadge = p?.badge?.toLowerCase() || '';
+      const selCat = (selectedCategory || 'all').toLowerCase();
+      const query = searchQuery.trim().toLowerCase();
 
-    const selCatObj = categoryItems.find(
-      (c) => c.id.toLowerCase() === selCat || c.name.toLowerCase() === selCat
-    );
-    const matchesCategory =
-      selCat === 'all' ||
-      pCat === selCat ||
-      (selCatObj && (pCat === selCatObj.id.toLowerCase() || pCat === selCatObj.name.toLowerCase())) ||
-      (selCat === 'kits' && (pCat.includes('madrid') || pCat.includes('barcelona') || pCat.includes('manchester')));
+      const selCatObj = categoryItems.find(
+        (c) => c.id.toLowerCase() === selCat || c.name.toLowerCase() === selCat
+      );
+      const matchesCategory =
+        selCat === 'all' ||
+        pCat === selCat ||
+        (selCatObj && (pCat === selCatObj.id.toLowerCase() || pCat === selCatObj.name.toLowerCase())) ||
+        (selCat === 'kits' && (pCat.includes('madrid') || pCat.includes('barcelona') || pCat.includes('manchester')));
 
-    const matchesSearch =
-      !query ||
-      pTitle.includes(query) ||
-      pCat.includes(query) ||
-      pSeason.includes(query) ||
-      pEdition.includes(query) ||
-      pBadge.includes(query);
+      const matchesSearch =
+        !query ||
+        pTitle.includes(query) ||
+        pCat.includes(query) ||
+        pSeason.includes(query) ||
+        pEdition.includes(query) ||
+        pBadge.includes(query);
 
-    return matchesCategory && matchesSearch;
-  });
+      return matchesCategory && matchesSearch;
+    });
+
+    // Strictly sort by sortOrder / position / priority
+    return filtered.sort((a, b) => {
+      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+      return orderA - orderB;
+    });
+  }, [safeProductsList, selectedCategory, searchQuery, categoryItems]);
 
   // Wishlist Operations
   const handleToggleWishlist = (jersey: JerseyProduct) => {
@@ -577,56 +655,92 @@ export default function App() {
   };
 
   const handleReorderProducts = async (reordered: JerseyProduct[]): Promise<boolean> => {
-    setProducts(reordered);
+    // Stamp explicit sequential positions
+    const stamped = reordered.map((p, idx) => ({
+      ...p,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
+
+    setProducts(stamped);
     try {
-      localStorage.setItem('spidey_products', JSON.stringify(reordered));
+      localStorage.setItem('spidey_products', JSON.stringify(stamped));
       localStorage.removeItem('orifake_products');
     } catch {}
 
     try {
       const res = await fetch('/api/products/reorder', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productIds: reordered.map((p) => p.id) })
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        body: JSON.stringify({
+          productIds: stamped.map((p) => p.id),
+          products: stamped
+        })
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.products)) {
-        setProducts(data.products);
-        localStorage.setItem('spidey_products', JSON.stringify(data.products));
-        showToast('প্রোডাক্ট ক্রম সফলভাবে সেভ হয়েছে!', 'success');
-        return true;
+        const sortedFromServer = data.products.map((p: any, idx: number) => ({
+          ...p,
+          sortOrder: p.sortOrder !== undefined ? p.sortOrder : idx,
+          position: p.position !== undefined ? p.position : idx,
+          priority: p.priority !== undefined ? p.priority : idx
+        }));
+        setProducts(sortedFromServer);
+        try {
+          localStorage.setItem('spidey_products', JSON.stringify(sortedFromServer));
+        } catch {}
       }
     } catch (err) {
       console.error('Failed to sync product reorder:', err);
     }
-    showToast('প্রোডাক্ট ক্রম সেভ হয়েছে', 'success');
+    window.dispatchEvent(new CustomEvent('spidey_catalog_updated'));
+    showToast('প্রোডাক্ট ক্রম সফলভাবে ডাটাবেস ও স্টোরে সেভ হয়েছে!', 'success');
     return true;
   };
 
   const handleReorderCategories = async (reordered: CategoryItem[]): Promise<boolean> => {
-    setCategoryItems(reordered);
+    // Stamp explicit sequential positions
+    const stamped = reordered.map((c, idx) => ({
+      ...c,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
+
+    setCategoryItems(stamped);
     try {
-      localStorage.setItem('spidey_categories', JSON.stringify(reordered));
+      localStorage.setItem('spidey_categories', JSON.stringify(stamped));
       localStorage.removeItem('orifake_categories');
     } catch {}
 
     try {
       const res = await fetch('/api/categories/reorder', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reordered)
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+        body: JSON.stringify({
+          categories: stamped,
+          categoryIds: stamped.map((c) => c.id)
+        })
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
-        setCategoryItems(data.categories);
-        localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
-        showToast('ক্যাটাগরি ক্রম সফলভাবে সেভ হয়েছে!', 'success');
-        return true;
+        const sortedFromServer = data.categories.map((c: any, idx: number) => ({
+          ...c,
+          sortOrder: c.sortOrder !== undefined ? c.sortOrder : idx,
+          position: c.position !== undefined ? c.position : idx,
+          priority: c.priority !== undefined ? c.priority : idx
+        }));
+        setCategoryItems(sortedFromServer);
+        try {
+          localStorage.setItem('spidey_categories', JSON.stringify(sortedFromServer));
+        } catch {}
       }
     } catch (err) {
       console.error('Failed to sync category reorder:', err);
     }
-    showToast('ক্যাটাগরি ক্রম সেভ হয়েছে', 'success');
+    window.dispatchEvent(new CustomEvent('spidey_catalog_updated'));
+    showToast('ক্যাটাগরি ক্রম সফলভাবে ডাটাবেস ও স্টোরে সেভ হয়েছে!', 'success');
     return true;
   };
 

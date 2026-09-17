@@ -61,4 +61,7 @@ export interface CategoryItem {
   subtitle?: string;
   image: string;
   tag?: string;
+  sortOrder?: number;
+  position?: number;
+  priority?: number;
 }

@@ -125,8 +125,14 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   const handleReorder = async (newCategories: CategoryItem[]) => {
     if (!onReorderCategories) return;
     setIsSavingOrder(true);
+    const stamped = newCategories.map((c, idx) => ({
+      ...c,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
     try {
-      await onReorderCategories(newCategories);
+      await onReorderCategories(stamped);
       setOrderSavedToast(true);
       setTimeout(() => setOrderSavedToast(false), 2200);
     } finally {
@@ -191,8 +197,15 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
     await handleReorder(updated);
   };
 
+  // Sort categories by sortOrder / position before filtering
+  const sortedCategories = [...categories].sort((a, b) => {
+    const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+    const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+    return orderA - orderB;
+  });
+
   // Filter categories by search
-  const filteredCategories = categories.filter((cat) => {
+  const filteredCategories = sortedCategories.filter((cat) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (

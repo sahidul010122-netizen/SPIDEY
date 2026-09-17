@@ -25,6 +25,9 @@ export interface JerseyProduct {
   reviewCount: number;
   customizable: boolean;
   colorTheme?: ColorTheme;
+  sortOrder?: number;
+  position?: number;
+  priority?: number;
   createdAt: string;
   updatedAt?: string;
 }

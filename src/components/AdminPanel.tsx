@@ -89,8 +89,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleProductReorder = async (newOrder: JerseyProduct[]) => {
     if (!onReorderProducts) return;
     setIsSavingProductOrder(true);
+    const stamped = newOrder.map((p, idx) => ({
+      ...p,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
     try {
-      await onReorderProducts(newOrder);
+      await onReorderProducts(stamped);
       setProductOrderSavedToast(true);
       setTimeout(() => setProductOrderSavedToast(false), 2200);
     } finally {

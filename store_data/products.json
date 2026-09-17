@@ -1,5 +1,48 @@
 [
   {
+    "id": "spidey-rm-2009-away",
+    "code": "SJ-EAXKF",
+    "title": "Real Madrid 2009-10 Away Long-Sleeve",
+    "category": "Real Madrid",
+    "price": 1150,
+    "originalPrice": 1450,
+    "season": "2009/10",
+    "edition": "Retro Long-Sleeve",
+    "badge": "CR9 Era",
+    "images": [
+      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80"
+    ],
+    "description": "The iconic black & gold long-sleeve away jersey from the iconic 2009/10 era with Bwin front sponsor.",
+    "features": [
+      "Full-length performance sleeves with ribbed cuffs",
+      "Metallic gold triple shoulder stripes",
+      "High-definition club crest"
+    ],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL",
+      "3XL"
+    ],
+    "inStock": true,
+    "stockCount": 16,
+    "rating": 4.9,
+    "reviewCount": 280,
+    "customizable": true,
+    "colorTheme": {
+      "primary": "#09090b",
+      "accent": "#eab308",
+      "glow": "rgba(234, 179, 8, 0.35)"
+    },
+    "createdAt": "2024-08-03T10:00:00.000Z",
+    "sortOrder": 0,
+    "position": 0,
+    "priority": 0
+  },
+  {
     "id": "spidey-barca-1999-centenary",
     "code": "SJ-CXYQD",
     "title": "Barcelona 1999-00 Centenary Nike Home",
@@ -38,7 +81,10 @@
       "accent": "#dc2626",
       "glow": "rgba(220, 38, 38, 0.35)"
     },
-    "createdAt": "2024-08-01T10:00:00.000Z"
+    "createdAt": "2024-08-01T10:00:00.000Z",
+    "sortOrder": 1,
+    "position": 1,
+    "priority": 1
   },
   {
     "id": "spidey-rm-2627-third",
@@ -78,47 +124,10 @@
       "accent": "#f59e0b",
       "glow": "rgba(245, 158, 11, 0.35)"
     },
-    "createdAt": "2025-01-15T12:00:00.000Z"
-  },
-  {
-    "id": "spidey-rm-2009-away",
-    "code": "SJ-EAXKF",
-    "title": "Real Madrid 2009-10 Away Long-Sleeve",
-    "category": "Real Madrid",
-    "price": 1150,
-    "originalPrice": 1450,
-    "season": "2009/10",
-    "edition": "Retro Long-Sleeve",
-    "badge": "CR9 Era",
-    "images": [
-      "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1000&q=80",
-      "https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80"
-    ],
-    "description": "The iconic black & gold long-sleeve away jersey from the iconic 2009/10 era with Bwin front sponsor.",
-    "features": [
-      "Full-length performance sleeves with ribbed cuffs",
-      "Metallic gold triple shoulder stripes",
-      "High-definition club crest"
-    ],
-    "sizes": [
-      "S",
-      "M",
-      "L",
-      "XL",
-      "XXL",
-      "3XL"
-    ],
-    "inStock": true,
-    "stockCount": 16,
-    "rating": 4.9,
-    "reviewCount": 280,
-    "customizable": true,
-    "colorTheme": {
-      "primary": "#09090b",
-      "accent": "#eab308",
-      "glow": "rgba(234, 179, 8, 0.35)"
-    },
-    "createdAt": "2024-08-03T10:00:00.000Z"
+    "createdAt": "2025-01-15T12:00:00.000Z",
+    "sortOrder": 2,
+    "position": 2,
+    "priority": 2
   },
   {
     "id": "spidey-chelsea-retro-home",
@@ -158,7 +167,10 @@
       "accent": "#ffffff",
       "glow": "rgba(29, 78, 216, 0.35)"
     },
-    "createdAt": "2024-08-04T15:00:00.000Z"
+    "createdAt": "2024-08-04T15:00:00.000Z",
+    "sortOrder": 3,
+    "position": 3,
+    "priority": 3
   },
   {
     "id": "spidey-rm-2425-home",
@@ -199,7 +211,10 @@
       "accent": "#eab308",
       "glow": "rgba(234, 179, 8, 0.3)"
     },
-    "createdAt": "2024-08-10T10:00:00.000Z"
+    "createdAt": "2024-08-10T10:00:00.000Z",
+    "sortOrder": 4,
+    "position": 4,
+    "priority": 4
   },
   {
     "id": "spidey-mufc-treble-99",
@@ -240,7 +255,10 @@
       "accent": "#fbbf24",
       "glow": "rgba(185, 28, 28, 0.35)"
     },
-    "createdAt": "2024-08-05T09:15:00.000Z"
+    "createdAt": "2024-08-05T09:15:00.000Z",
+    "sortOrder": 5,
+    "position": 5,
+    "priority": 5
   },
   {
     "id": "spidey-arsenal-neon-volt",
@@ -281,7 +299,10 @@
       "accent": "#84cc16",
       "glow": "rgba(132, 204, 22, 0.35)"
     },
-    "createdAt": "2024-08-15T11:00:00.000Z"
+    "createdAt": "2024-08-15T11:00:00.000Z",
+    "sortOrder": 6,
+    "position": 6,
+    "priority": 6
   },
   {
     "id": "spidey-psg-fourth-noir",
@@ -322,7 +343,10 @@
       "accent": "#06b6d4",
       "glow": "rgba(6, 182, 212, 0.35)"
     },
-    "createdAt": "2024-08-18T16:20:00.000Z"
+    "createdAt": "2024-08-18T16:20:00.000Z",
+    "sortOrder": 7,
+    "position": 7,
+    "priority": 7
   },
   {
     "id": "spidey-concept-spider-edition",
@@ -363,7 +387,10 @@
       "accent": "#ef4444",
       "glow": "rgba(239, 68, 68, 0.4)"
     },
-    "createdAt": "2024-08-20T19:00:00.000Z"
+    "createdAt": "2024-08-20T19:00:00.000Z",
+    "sortOrder": 8,
+    "position": 8,
+    "priority": 8
   },
   {
     "id": "spidey-retro-milan-kaka",
@@ -404,7 +431,10 @@
       "accent": "#dc2626",
       "glow": "rgba(220, 38, 38, 0.3)"
     },
-    "createdAt": "2024-08-02T13:45:00.000Z"
+    "createdAt": "2024-08-02T13:45:00.000Z",
+    "sortOrder": 9,
+    "position": 9,
+    "priority": 9
   },
   {
     "id": "orifake-slim-armor-fold6",
@@ -440,7 +470,10 @@
       "accent": "#38bdf8",
       "glow": "rgba(56, 189, 248, 0.25)"
     },
-    "createdAt": "2025-01-10T10:00:00.000Z"
+    "createdAt": "2025-01-10T10:00:00.000Z",
+    "sortOrder": 10,
+    "position": 10,
+    "priority": 10
   },
   {
     "id": "orifake-tough-armor-pixel9",
@@ -477,6 +510,9 @@
       "accent": "#22c55e",
       "glow": "rgba(34, 197, 94, 0.25)"
     },
-    "createdAt": "2025-01-12T14:30:00.000Z"
+    "createdAt": "2025-01-12T14:30:00.000Z",
+    "sortOrder": 11,
+    "position": 11,
+    "priority": 11
   }
 ]

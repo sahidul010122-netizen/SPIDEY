@@ -112,6 +112,14 @@ if (deletedProductIds.length > 0) {
     saveJsonFile(PRODUCTS_FILE, products);
   }
 }
+
+// Ensure every product has sortOrder and position stamped
+products.forEach((p, idx) => {
+  if (p.sortOrder === undefined) p.sortOrder = idx;
+  if (p.position === undefined) p.position = idx;
+  if (p.priority === undefined) p.priority = idx;
+});
+
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
 let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
@@ -124,6 +132,13 @@ if (deletedCategoryIds.length > 0) {
     saveJsonFile(CATEGORIES_FILE, categoryItems);
   }
 }
+
+// Ensure every category has sortOrder and position stamped
+categoryItems.forEach((c, idx) => {
+  if (c.sortOrder === undefined) c.sortOrder = idx;
+  if (c.position === undefined) c.position = idx;
+  if (c.priority === undefined) c.priority = idx;
+});
 let adminPasscode = 'spidey2026';
 
 // Persistent Steadfast Configuration
@@ -332,14 +347,31 @@ async function startServer() {
 
   // --- Categories (Carousels, Logos, Subtitles) ---
   app.get('/api/categories', (_req: Request, res: Response) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     // Always ensure in-memory state matches disk state
     if (fs.existsSync(CATEGORIES_FILE)) {
       const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
-      if (Array.isArray(loaded)) {
+      if (Array.isArray(loaded) && loaded.length > 0) {
         categoryItems = loaded;
       }
     }
-    res.json({ success: true, categories: categoryItems });
+
+    // Stamp sortOrder and position if missing
+    categoryItems.forEach((c, idx) => {
+      if (c.sortOrder === undefined) c.sortOrder = idx;
+      if (c.position === undefined) c.position = idx;
+      if (c.priority === undefined) c.priority = idx;
+    });
+
+    // Always sort by sortOrder / position
+    const sorted = [...categoryItems].sort(
+      (a, b) => (Number(a.sortOrder ?? a.position ?? 0) - Number(b.sortOrder ?? b.position ?? 0))
+    );
+
+    res.json({ success: true, categories: sorted, count: sorted.length });
   });
 
   // Bulk save or reorder categories
@@ -378,7 +410,17 @@ async function startServer() {
       })
       .filter((c): c is any => Boolean(c)) as CategoryItem[];
 
+    // Stamp sequential sortOrder and position
+    categoryItems.forEach((c, idx) => {
+      c.sortOrder = idx;
+      c.position = idx;
+      c.priority = idx;
+    });
+
     saveJsonFile(CATEGORIES_FILE, categoryItems);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({ success: true, message: 'All categories successfully synchronized to disk', categories: categoryItems });
   });
 
@@ -452,19 +494,37 @@ async function startServer() {
         .filter((c): c is any => Boolean(c)) as CategoryItem[];
     }
 
+    // Stamp sequential sortOrder and position
+    categoryItems.forEach((c, idx) => {
+      c.sortOrder = idx;
+      c.position = idx;
+      c.priority = idx;
+    });
+
     saveJsonFile(CATEGORIES_FILE, categoryItems);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({ success: true, message: 'Categories sequence successfully saved to disk', categories: categoryItems });
   });
 
   // Reset categories to default setup
   app.post('/api/categories/reset', (_req: Request, res: Response) => {
-    categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+    categoryItems = [...CATEGORY_CAROUSEL_ITEMS].map((c, idx) => ({
+      ...c,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
     saveJsonFile(CATEGORIES_FILE, categoryItems);
     try {
       if (fs.existsSync(DELETED_CATEGORIES_FILE)) {
         fs.unlinkSync(DELETED_CATEGORIES_FILE);
       }
     } catch {}
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({ success: true, message: 'Categories successfully restored to default setup', categories: categoryItems });
   });
 
@@ -601,6 +661,26 @@ async function startServer() {
   // --- Products Endpoints ---
   // List Products with Filters
   app.get('/api/products', (req: Request, res: Response) => {
+    // Dynamic anti-cache headers so client views immediately receive latest sequence
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    // Always ensure in-memory state matches disk state
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      const loaded = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        products = loaded;
+      }
+    }
+
+    // Ensure sortOrder and position are stamped
+    products.forEach((p, idx) => {
+      if (p.sortOrder === undefined) p.sortOrder = idx;
+      if (p.position === undefined) p.position = idx;
+      if (p.priority === undefined) p.priority = idx;
+    });
+
     const { category, search, sortBy, inStockOnly } = req.query;
 
     let list = [...products];
@@ -640,8 +720,10 @@ async function startServer() {
       list.sort((a, b) => b.reviewCount - a.reviewCount);
     } else if (sortBy === 'newest') {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } else {
+      // DEFAULT SORTING: Strictly sort by newly updated sortOrder / position / priority field!
+      list.sort((a, b) => (Number(a.sortOrder ?? a.position ?? 0) - Number(b.sortOrder ?? b.position ?? 0)));
     }
-    // Note: When no sortBy or default/custom, exact custom array sequence from products.json is preserved
 
     // Ensure deleted products are never returned
     if (deletedProductIds.length > 0) {
@@ -654,6 +736,9 @@ async function startServer() {
 
   // Get Single Product
   app.get('/api/products/:id', (req: Request, res: Response) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     const product = products.find((p) => p.id === req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
@@ -700,15 +785,28 @@ async function startServer() {
         accent: '#06b6d4',
         glow: 'rgba(6, 182, 212, 0.35)'
       },
+      sortOrder: 0,
+      position: 0,
+      priority: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     products.unshift(newProduct);
+    // Stamp sequential sortOrder and position on all products
+    products.forEach((p, idx) => {
+      p.sortOrder = idx;
+      p.position = idx;
+      p.priority = idx;
+    });
+
     // If this id or code was previously deleted, remove it from tombstone
     deletedProductIds = deletedProductIds.filter(id => id !== newProduct.id && id !== newProduct.code);
     saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
     saveJsonFile(PRODUCTS_FILE, products);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.status(201).json({ success: true, product: newProduct });
   });
 
@@ -752,8 +850,19 @@ async function startServer() {
       }
     }
 
+    // Assign explicit sortOrder and position matching new sequence
+    reordered.forEach((p, idx) => {
+      p.sortOrder = idx;
+      p.position = idx;
+      p.priority = idx;
+    });
+
     products = reordered;
     saveJsonFile(PRODUCTS_FILE, products);
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({ success: true, message: 'Products sequence successfully saved to disk', products });
   });
 
@@ -2061,14 +2170,27 @@ async function startServer() {
   app.post('/api/seed', (req: Request, res: Response) => {
     deletedProductIds = [];
     deletedCategoryIds = [];
-    products = [...INITIAL_JERSEYS];
-    categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
+    products = INITIAL_JERSEYS.map((p, idx) => ({
+      ...p,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
+    categoryItems = CATEGORY_CAROUSEL_ITEMS.map((c, idx) => ({
+      ...c,
+      sortOrder: idx,
+      position: idx,
+      priority: idx
+    }));
     siteSettings = { ...DEFAULT_SITE_SETTINGS };
     saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
     saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
     saveJsonFile(PRODUCTS_FILE, products);
     saveJsonFile(CATEGORIES_FILE, categoryItems);
     saveJsonFile(SETTINGS_FILE, siteSettings);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({
       success: true,
       message: 'Store reset to initial showcase jersey catalog',

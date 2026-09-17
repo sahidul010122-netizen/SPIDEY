@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { CategoryItem } from '../types/settings';
 
 interface ShopByCategoryProps {
@@ -17,7 +17,15 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const items = Array.isArray(categories) ? categories : [];
+  // Strictly sort categories based on sortOrder / position
+  const items = useMemo(() => {
+    if (!Array.isArray(categories)) return [];
+    return [...categories].sort((a, b) => {
+      const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
+      const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
+      return orderA - orderB;
+    });
+  }, [categories]);
 
   // Handle scroll to calculate active pagination dot
   const handleScroll = () => {
