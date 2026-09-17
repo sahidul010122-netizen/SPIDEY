@@ -7,7 +7,8 @@ import {
   ChevronRight, MoreVertical, Search, Settings, Home, Eye, Filter,
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
-  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save, RotateCcw
+  Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save, RotateCcw,
+  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -26,11 +27,13 @@ interface AdminPanelProps {
   onAddProduct: (product: Partial<JerseyProduct>) => Promise<boolean>;
   onUpdateProduct: (id: string, product: Partial<JerseyProduct>) => Promise<boolean>;
   onDeleteProduct: (id: string) => Promise<boolean>;
+  onReorderProducts?: (products: JerseyProduct[]) => Promise<boolean>;
   onResetCatalog: () => Promise<void>;
   onUpdateSiteSettings: (settings: Partial<SiteSettings>) => void;
   onAddCategory: (cat: CategoryItem) => void;
   onUpdateCategory: (id: string, cat: Partial<CategoryItem>) => void;
   onDeleteCategory: (id: string) => void;
+  onReorderCategories?: (categories: CategoryItem[]) => Promise<boolean>;
   onSaveAllCategories?: (categories?: CategoryItem[]) => Promise<boolean>;
   onRefreshCategories?: () => Promise<void>;
   onResetCategories?: () => Promise<void>;
@@ -51,11 +54,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
+  onReorderProducts,
   onResetCatalog,
   onUpdateSiteSettings,
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onReorderCategories,
   onSaveAllCategories,
   onRefreshCategories,
   onResetCategories,
@@ -74,6 +79,82 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Mobile Collapsible Sidebar State (Default to closed on mobile for maximum workspace)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Product Drag-and-drop & Reorder states
+  const [draggedProductId, setDraggedProductId] = useState<string | null>(null);
+  const [dragOverProductId, setDragOverProductId] = useState<string | null>(null);
+  const [isSavingProductOrder, setIsSavingProductOrder] = useState(false);
+  const [productOrderSavedToast, setProductOrderSavedToast] = useState(false);
+
+  const handleProductReorder = async (newOrder: JerseyProduct[]) => {
+    if (!onReorderProducts) return;
+    setIsSavingProductOrder(true);
+    try {
+      await onReorderProducts(newOrder);
+      setProductOrderSavedToast(true);
+      setTimeout(() => setProductOrderSavedToast(false), 2200);
+    } finally {
+      setIsSavingProductOrder(false);
+    }
+  };
+
+  const handleProductDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedProductId(id);
+  };
+
+  const handleProductDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverProductId !== id) {
+      setDragOverProductId(id);
+    }
+  };
+
+  const handleProductDragLeave = (e: React.DragEvent, id: string) => {
+    if (dragOverProductId === id) {
+      setDragOverProductId(null);
+    }
+  };
+
+  const handleProductDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverProductId(null);
+    const sourceId = draggedProductId || e.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId) {
+      setDraggedProductId(null);
+      return;
+    }
+
+    const fromIdx = products.findIndex((p) => p.id === sourceId || p.code === sourceId);
+    const toIdx = products.findIndex((p) => p.id === targetId || p.code === targetId);
+    if (fromIdx === -1 || toIdx === -1) {
+      setDraggedProductId(null);
+      return;
+    }
+
+    const updated: JerseyProduct[] = [...products];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+
+    setDraggedProductId(null);
+    await handleProductReorder(updated);
+  };
+
+  const handleProductShift = async (id: string, direction: 'up' | 'down') => {
+    const idx = products.findIndex((p) => p.id === id || p.code === id);
+    if (idx === -1) return;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= products.length) return;
+
+    const updated: JerseyProduct[] = [...products];
+    const [moved] = updated.splice(idx, 1);
+    updated.splice(targetIdx, 0, moved);
+
+    await handleProductReorder(updated);
+  };
 
   // Admin Master Password & Auto-login state
   const [adminPinInput, setAdminPinInput] = useState<string>(() => {
@@ -1229,6 +1310,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onUpdateCategory={async (id, updates) => onUpdateCategory(id, updates)}
               onDeleteCategory={async (id) => onDeleteCategory(id)}
               onRefreshCategories={onRefreshCategories}
+              onReorderCategories={onReorderCategories}
             />
           )}
 
@@ -1242,7 +1324,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     Product Drops & Catalog ({products.length})
                   </h3>
                   <p className="text-xs text-neutral-500">
-                    Manage prices, stocks, photography, and category tagging.
+                    Manage prices, stocks, photography, category tagging, and storefront sequence.
                   </p>
                 </div>
 
@@ -1268,80 +1350,152 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
+              {/* Drag & Drop Instructions & Real-Time Sync Status */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-neutral-50 rounded-2xl border border-neutral-200/80 text-xs">
+                <div className="flex items-center gap-2 text-neutral-700">
+                  <GripVertical className="w-4 h-4 text-neutral-400 shrink-0" />
+                  <span>
+                    <strong className="font-semibold text-neutral-900">Drag-and-Drop Sorting:</strong> Drag any product row using the grip handle (⋮⋮) or use the ↑ / ↓ buttons to rearrange. Sequence is automatically saved and synchronized with the storefront catalog and home view in real-time.
+                  </span>
+                </div>
+                {isSavingProductOrder ? (
+                  <span className="inline-flex items-center gap-1.5 font-bold text-neutral-900 shrink-0 bg-white px-2.5 py-1 rounded-full border border-neutral-200">
+                    <RefreshCw className="w-3 h-3 animate-spin text-neutral-900" />
+                    Saving sequence...
+                  </span>
+                ) : productOrderSavedToast ? (
+                  <span className="inline-flex items-center gap-1.5 font-bold text-emerald-600 shrink-0 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <Check className="w-3.5 h-3.5" />
+                    Catalog sequence saved!
+                  </span>
+                ) : null}
+              </div>
+
               {/* Product Rows */}
               <div className="space-y-2.5">
-                {filteredProducts.map((prod) => (
-                  <div
-                    key={prod.id}
-                    className="p-3.5 sm:p-4 rounded-2xl bg-[#f8f9fa] hover:bg-[#f1f3f5] border border-neutral-200/60 transition-all flex items-center justify-between gap-4 group"
-                  >
-                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                      <ChevronRight className="w-4 h-4 text-neutral-400 group-hover:text-neutral-900 transition-colors shrink-0" />
-                      
-                      <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden">
-                        <img
-                          src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
-                          alt={prod.title}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
+                {filteredProducts.map((prod, displayIdx) => {
+                  const actualIdx = products.findIndex((p) => p.id === prod.id || p.code === prod.id);
+                  const isFirst = actualIdx === 0;
+                  const isLast = actualIdx === products.length - 1;
+                  const isDragging = draggedProductId === prod.id;
+                  const isDragOver = dragOverProductId === prod.id;
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          {prod.code && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-neutral-900 text-rose-400 border border-neutral-800">
-                              {prod.code}
-                            </span>
-                          )}
-                          <h4 className="text-sm font-extrabold text-neutral-900 truncate">
-                            {prod.title}
-                          </h4>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-800">
-                            {prod.category}
+                  return (
+                    <div
+                      key={prod.id}
+                      draggable={!searchQuery}
+                      onDragStart={(e) => handleProductDragStart(e, prod.id)}
+                      onDragOver={(e) => handleProductDragOver(e, prod.id)}
+                      onDragLeave={(e) => handleProductDragLeave(e, prod.id)}
+                      onDrop={(e) => handleProductDrop(e, prod.id)}
+                      onDragEnd={() => {
+                        setDraggedProductId(null);
+                        setDragOverProductId(null);
+                      }}
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex items-center justify-between gap-4 group cursor-grab active:cursor-grabbing select-none ${
+                        isDragging
+                          ? 'opacity-30 scale-[0.99] border-dashed border-2 border-neutral-400 bg-neutral-100'
+                          : isDragOver
+                          ? 'ring-2 ring-neutral-900 border-neutral-900 bg-white shadow-xl scale-[1.01]'
+                          : 'bg-[#f8f9fa] hover:bg-[#f1f3f5] border-neutral-200/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        {/* Grip handle + Sequence badge + Shift buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <span className="p-1 rounded-md text-neutral-400 group-hover:text-neutral-700 transition-colors">
+                            <GripVertical className="w-4 h-4" />
                           </span>
-                          {prod.badge && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white">
-                              {prod.badge}
+                          <span className="w-6 h-6 rounded-full text-[10px] font-mono font-bold bg-neutral-900 text-white flex items-center justify-center">
+                            {actualIdx !== -1 ? actualIdx + 1 : displayIdx + 1}
+                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              disabled={isFirst || Boolean(searchQuery)}
+                              onClick={() => handleProductShift(prod.id, 'up')}
+                              title="Move product up"
+                              className="p-0.5 rounded hover:bg-neutral-200 text-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-90 cursor-pointer"
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isLast || Boolean(searchQuery)}
+                              onClick={() => handleProductShift(prod.id, 'down')}
+                              title="Move product down"
+                              className="p-0.5 rounded hover:bg-neutral-200 text-neutral-600 disabled:opacity-20 disabled:cursor-not-allowed transition-all active:scale-90 cursor-pointer"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden">
+                          <img
+                            src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
+                            alt={prod.title}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            {prod.code && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-neutral-900 text-rose-400 border border-neutral-800">
+                                {prod.code}
+                              </span>
+                            )}
+                            <h4 className="text-sm font-extrabold text-neutral-900 truncate">
+                              {prod.title}
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-800">
+                              {prod.category}
                             </span>
-                          )}
+                            {prod.badge && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white">
+                                {prod.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-neutral-500 truncate mt-0.5">
+                            {prod.edition} • Season {prod.season}
+                          </p>
                         </div>
-                        <p className="text-xs text-neutral-500 truncate mt-0.5">
-                          {prod.edition} • Season {prod.season}
-                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-6 sm:gap-10 text-xs font-semibold shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-neutral-900">
+                            {formatPrice(prod.price, currency)}
+                          </div>
+                          <span className="text-[11px] text-neutral-400 font-mono">
+                            Stock: {prod.stockCount}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openEditProductModal(prod)}
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 border border-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-neutral-600" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            onClick={() => setProductPendingDelete(prod)}
+                            className="p-2 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 text-neutral-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="Permanently Delete Product"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-6 sm:gap-10 text-xs font-semibold">
-                      <div className="text-right">
-                        <div className="text-sm font-bold text-neutral-900">
-                          {formatPrice(prod.price, currency)}
-                        </div>
-                        <span className="text-[11px] text-neutral-400 font-mono">
-                          Stock: {prod.stockCount}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEditProductModal(prod)}
-                          className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 border border-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-neutral-600" />
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          onClick={() => setProductPendingDelete(prod)}
-                          className="p-2 rounded-xl bg-white hover:bg-rose-50 border border-neutral-200 text-neutral-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Permanently Delete Product"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
             </div>

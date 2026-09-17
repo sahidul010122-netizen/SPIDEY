@@ -576,6 +576,60 @@ export default function App() {
     return true;
   };
 
+  const handleReorderProducts = async (reordered: JerseyProduct[]): Promise<boolean> => {
+    setProducts(reordered);
+    try {
+      localStorage.setItem('spidey_products', JSON.stringify(reordered));
+      localStorage.removeItem('orifake_products');
+    } catch {}
+
+    try {
+      const res = await fetch('/api/products/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productIds: reordered.map((p) => p.id) })
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.products)) {
+        setProducts(data.products);
+        localStorage.setItem('spidey_products', JSON.stringify(data.products));
+        showToast('প্রোডাক্ট ক্রম সফলভাবে সেভ হয়েছে!', 'success');
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to sync product reorder:', err);
+    }
+    showToast('প্রোডাক্ট ক্রম সেভ হয়েছে', 'success');
+    return true;
+  };
+
+  const handleReorderCategories = async (reordered: CategoryItem[]): Promise<boolean> => {
+    setCategoryItems(reordered);
+    try {
+      localStorage.setItem('spidey_categories', JSON.stringify(reordered));
+      localStorage.removeItem('orifake_categories');
+    } catch {}
+
+    try {
+      const res = await fetch('/api/categories/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reordered)
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.categories)) {
+        setCategoryItems(data.categories);
+        localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+        showToast('ক্যাটাগরি ক্রম সফলভাবে সেভ হয়েছে!', 'success');
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to sync category reorder:', err);
+    }
+    showToast('ক্যাটাগরি ক্রম সেভ হয়েছে', 'success');
+    return true;
+  };
+
   const handleResetCatalog = async () => {
     try {
       localStorage.removeItem('spidey_deleted_product_ids');
@@ -1000,11 +1054,13 @@ export default function App() {
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
+              onReorderProducts={handleReorderProducts}
               onResetCatalog={handleResetCatalog}
               onUpdateSiteSettings={handleUpdateSiteSettings}
               onAddCategory={handleAddCategory}
               onUpdateCategory={handleUpdateCategory}
               onDeleteCategory={handleDeleteCategory}
+              onReorderCategories={handleReorderCategories}
               onSaveAllCategories={handleSaveAllCategories}
               onRefreshCategories={fetchCategories}
               onResetCategories={handleResetCategories}

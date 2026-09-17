@@ -382,6 +382,80 @@ async function startServer() {
     res.json({ success: true, message: 'All categories successfully synchronized to disk', categories: categoryItems });
   });
 
+  // Dedicated Category Reorder endpoint
+  app.put('/api/categories/reorder', (req: Request, res: Response) => {
+    const body = req.body;
+    const items = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.categories)
+      ? body.categories
+      : Array.isArray(body?.categoryIds)
+      ? body.categoryIds
+      : null;
+
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ success: false, message: 'Categories array or categoryIds array is required' });
+    }
+
+    if (items.length > 0 && typeof items[0] === 'string') {
+      const catMap = new Map<string, CategoryItem>();
+      categoryItems.forEach(c => {
+        catMap.set(c.id, c);
+        catMap.set(c.id.toLowerCase(), c);
+        catMap.set(c.name.toLowerCase(), c);
+      });
+      const reordered: CategoryItem[] = [];
+      const addedIds = new Set<string>();
+
+      for (const idStr of items) {
+        const item = catMap.get(idStr) || catMap.get(String(idStr).toLowerCase());
+        if (item && !addedIds.has(item.id)) {
+          reordered.push(item);
+          addedIds.add(item.id);
+        }
+      }
+
+      // Add any not explicitly listed
+      for (const c of categoryItems) {
+        if (!addedIds.has(c.id)) {
+          reordered.push(c);
+          addedIds.add(c.id);
+        }
+      }
+      categoryItems = reordered;
+    } else {
+      const seenIds = new Set<string>();
+      categoryItems = items
+        .map((c: any) => {
+          const rawName = String(c?.name || '').trim();
+          if (!rawName) return null;
+
+          const rawId = String(c?.id || '').trim();
+          let finalId = rawId || rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+          if (!finalId) finalId = `cat-${Date.now().toString(36)}`;
+
+          let uniqueId = finalId;
+          let counter = 1;
+          while (seenIds.has(uniqueId.toLowerCase())) {
+            uniqueId = `${finalId}-${counter++}`;
+          }
+          seenIds.add(uniqueId.toLowerCase());
+
+          return {
+            id: uniqueId,
+            name: rawName,
+            subtitle: String(c?.subtitle || '').trim(),
+            image: sanitizeCategoryImage(c?.image, rawName),
+            tag: String(c?.tag || 'Drop').trim()
+          };
+        })
+        .filter((c): c is any => Boolean(c)) as CategoryItem[];
+    }
+
+    saveJsonFile(CATEGORIES_FILE, categoryItems);
+    res.json({ success: true, message: 'Categories sequence successfully saved to disk', categories: categoryItems });
+  });
+
   // Reset categories to default setup
   app.post('/api/categories/reset', (_req: Request, res: Response) => {
     categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
@@ -564,9 +638,10 @@ async function startServer() {
       list.sort((a, b) => b.rating - a.rating);
     } else if (sortBy === 'popular') {
       list.sort((a, b) => b.reviewCount - a.reviewCount);
-    } else {
+    } else if (sortBy === 'newest') {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
+    // Note: When no sortBy or default/custom, exact custom array sequence from products.json is preserved
 
     // Ensure deleted products are never returned
     if (deletedProductIds.length > 0) {
@@ -635,6 +710,51 @@ async function startServer() {
     saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
     saveJsonFile(PRODUCTS_FILE, products);
     res.status(201).json({ success: true, product: newProduct });
+  });
+
+  // Reorder Products endpoint (Admin drag-and-drop sync)
+  app.put('/api/products/reorder', (req: Request, res: Response) => {
+    const body = req.body;
+    const ids: string[] = Array.isArray(body)
+      ? body.map((item: any) => (typeof item === 'string' ? item : item?.id || item?.code))
+      : Array.isArray(body?.productIds)
+      ? body.productIds
+      : Array.isArray(body?.products)
+      ? body.products.map((p: any) => p?.id || p?.code)
+      : [];
+
+    if (!ids || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Valid product IDs array required' });
+    }
+
+    const productMap = new Map<string, JerseyProduct>();
+    products.forEach((p) => {
+      productMap.set(p.id, p);
+      if (p.code) productMap.set(p.code, p);
+    });
+
+    const reordered: JerseyProduct[] = [];
+    const addedIds = new Set<string>();
+
+    for (const id of ids) {
+      const prod = productMap.get(id);
+      if (prod && !addedIds.has(prod.id)) {
+        reordered.push(prod);
+        addedIds.add(prod.id);
+      }
+    }
+
+    // Keep any remaining products that were not in the reordered list
+    for (const p of products) {
+      if (!addedIds.has(p.id)) {
+        reordered.push(p);
+        addedIds.add(p.id);
+      }
+    }
+
+    products = reordered;
+    saveJsonFile(PRODUCTS_FILE, products);
+    res.json({ success: true, message: 'Products sequence successfully saved to disk', products });
   });
 
   // Update Product (Admin)

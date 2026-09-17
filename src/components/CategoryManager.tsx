@@ -12,7 +12,12 @@ import {
   ExternalLink,
   Layers,
   ChevronRight,
-  AlertTriangle
+  ChevronLeft,
+  AlertTriangle,
+  GripVertical,
+  ArrowLeft,
+  ArrowRight,
+  Move
 } from 'lucide-react';
 import { CategoryItem } from '../types/settings';
 import { JerseyProduct } from '../types';
@@ -24,6 +29,7 @@ interface CategoryManagerProps {
   onUpdateCategory: (id: string, updates: Partial<CategoryItem>) => Promise<void>;
   onDeleteCategory: (id: string) => Promise<void>;
   onRefreshCategories?: () => Promise<void>;
+  onReorderCategories?: (categories: CategoryItem[]) => Promise<void | boolean>;
 }
 
 // Client-side image compression helper to ensure fast uploads & avoid huge payload bottlenecks
@@ -88,11 +94,18 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
-  onRefreshCategories
+  onRefreshCategories,
+  onReorderCategories
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
+
+  // Drag-and-drop & Reorder states
+  const [draggedCatId, setDraggedCatId] = useState<string | null>(null);
+  const [dragOverCatId, setDragOverCatId] = useState<string | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [orderSavedToast, setOrderSavedToast] = useState(false);
 
   // Form states
   const [formName, setFormName] = useState('');
@@ -107,6 +120,76 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   const [showUrlInput, setShowUrlInput] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle reordering sequence and persist
+  const handleReorder = async (newCategories: CategoryItem[]) => {
+    if (!onReorderCategories) return;
+    setIsSavingOrder(true);
+    try {
+      await onReorderCategories(newCategories);
+      setOrderSavedToast(true);
+      setTimeout(() => setOrderSavedToast(false), 2200);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedCatId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverCatId !== id) {
+      setDragOverCatId(id);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, id: string) => {
+    if (dragOverCatId === id) {
+      setDragOverCatId(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverCatId(null);
+    const sourceId = draggedCatId || e.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId) {
+      setDraggedCatId(null);
+      return;
+    }
+
+    const fromIdx = categories.findIndex((c) => c.id === sourceId);
+    const toIdx = categories.findIndex((c) => c.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) {
+      setDraggedCatId(null);
+      return;
+    }
+
+    const updated: CategoryItem[] = [...categories];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+
+    setDraggedCatId(null);
+    await handleReorder(updated);
+  };
+
+  const handleShift = async (id: string, direction: 'prev' | 'next') => {
+    const idx = categories.findIndex((c) => c.id === id);
+    if (idx === -1) return;
+    const targetIdx = direction === 'prev' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= categories.length) return;
+
+    const updated: CategoryItem[] = [...categories];
+    const [moved] = updated.splice(idx, 1);
+    updated.splice(targetIdx, 0, moved);
+
+    await handleReorder(updated);
+  };
 
   // Filter categories by search
   const filteredCategories = categories.filter((cat) => {
@@ -305,6 +388,27 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
         </div>
       </div>
 
+      {/* Drag & Drop Instructions & Real-Time Sync Status */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-neutral-50 rounded-2xl border border-neutral-200/80 text-xs">
+        <div className="flex items-center gap-2 text-neutral-700">
+          <GripVertical className="w-4 h-4 text-neutral-400 shrink-0" />
+          <span>
+            <strong className="font-semibold text-neutral-900">Drag-and-Drop Reordering:</strong> Drag any category card or use the ◀ ▶ buttons to reorder. The top order is immediately synchronized with the storefront category slider.
+          </span>
+        </div>
+        {isSavingOrder ? (
+          <span className="inline-flex items-center gap-1.5 font-bold text-neutral-900 shrink-0 bg-white px-2.5 py-1 rounded-full border border-neutral-200">
+            <RefreshCw className="w-3 h-3 animate-spin text-neutral-900" />
+            Saving order...
+          </span>
+        ) : orderSavedToast ? (
+          <span className="inline-flex items-center gap-1.5 font-bold text-emerald-600 shrink-0 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+            <Check className="w-3.5 h-3.5" />
+            Slider order synced!
+          </span>
+        ) : null}
+      </div>
+
       {/* 2. Category Cards Grid */}
       {filteredCategories.length === 0 ? (
         <div className="bg-white rounded-3xl p-10 border border-neutral-200/80 text-center space-y-3">
@@ -331,7 +435,13 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {filteredCategories.map((cat) => {
+          {filteredCategories.map((cat, displayIdx) => {
+            const actualIdx = categories.findIndex((c) => c.id === cat.id);
+            const isFirst = actualIdx === 0;
+            const isLast = actualIdx === categories.length - 1;
+            const isDragging = draggedCatId === cat.id;
+            const isDragOver = dragOverCatId === cat.id;
+
             const linkedProductsCount = products.filter(
               (p) =>
                 p.category.toLowerCase() === cat.id.toLowerCase() ||
@@ -341,8 +451,60 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
             return (
               <div
                 key={cat.id}
-                className="bg-white rounded-3xl p-4 border border-neutral-200/80 hover:border-neutral-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between group"
+                draggable={!searchQuery}
+                onDragStart={(e) => handleDragStart(e, cat.id)}
+                onDragOver={(e) => handleDragOver(e, cat.id)}
+                onDragLeave={(e) => handleDragLeave(e, cat.id)}
+                onDrop={(e) => handleDrop(e, cat.id)}
+                onDragEnd={() => {
+                  setDraggedCatId(null);
+                  setDragOverCatId(null);
+                }}
+                className={`bg-white rounded-3xl p-4 border transition-all duration-200 flex flex-col justify-between group relative cursor-grab active:cursor-grabbing select-none ${
+                  isDragging
+                    ? 'opacity-30 scale-[0.98] border-dashed border-2 border-neutral-400 bg-neutral-100'
+                    : isDragOver
+                    ? 'ring-2 ring-neutral-900 border-neutral-900 bg-neutral-50 scale-[1.02] shadow-xl'
+                    : 'border-neutral-200/80 hover:border-neutral-300 hover:shadow-md'
+                }`}
               >
+                {/* Drag Handle & Order Reorder Header Bar */}
+                <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-neutral-100">
+                  <div className="flex items-center gap-1.5">
+                    <span className="p-1 rounded-md bg-neutral-100 text-neutral-400 group-hover:text-neutral-700 transition-colors">
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-neutral-900 text-white">
+                      #{actualIdx !== -1 ? actualIdx + 1 : displayIdx + 1}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 font-medium">
+                      Slider Position
+                    </span>
+                  </div>
+
+                  {/* Quick Shift buttons */}
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      disabled={isFirst || Boolean(searchQuery)}
+                      onClick={() => handleShift(cat.id, 'prev')}
+                      title="Move category earlier in slider sequence"
+                      className="p-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isLast || Boolean(searchQuery)}
+                      onClick={() => handleShift(cat.id, 'next')}
+                      title="Move category later in slider sequence"
+                      className="p-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
                 {/* Top Section: Photo + Texts */}
                 <div className="flex items-start gap-3.5">
                   {/* Category Image Thumbnail */}
@@ -392,7 +554,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                 </div>
 
                 {/* Bottom Actions Bar */}
-                <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-neutral-100">
+                <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-neutral-100" onClick={(e) => e.stopPropagation()}>
                   <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                     <Check className="w-3 h-3" /> Live in Store
                   </span>
@@ -401,7 +563,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(cat)}
-                      className="px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-1 transition-all active:scale-95"
+                      className="px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
                     >
                       <Edit3 className="w-3 h-3" />
                       <span>Edit</span>
@@ -410,7 +572,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                     <button
                       type="button"
                       onClick={() => setCategoryToDelete(cat)}
-                      className="p-1.5 rounded-xl bg-neutral-100 hover:bg-rose-50 text-neutral-400 hover:text-rose-600 transition-all active:scale-95"
+                      className="p-1.5 rounded-xl bg-neutral-100 hover:bg-rose-50 text-neutral-400 hover:text-rose-600 transition-all active:scale-95 cursor-pointer"
                       title="Delete category"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
