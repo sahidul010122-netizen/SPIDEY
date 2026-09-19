@@ -985,8 +985,10 @@ async function startServer() {
     try {
       const {
         category,
+        title: batchTitle,
+        commonTitle,
         caption,
-        titlePattern = 'clean_name',
+        titlePattern = 'exact',
         titlePrefix = '',
         price = 1150,
         originalPrice,
@@ -1119,19 +1121,37 @@ async function startServer() {
       imagesToProcess.forEach((imgItem, idx) => {
         const cleanName = makeCleanTitle(imgItem.filename || `Item ${idx + 1}`);
 
+        const effectiveBatchTitle = (batchTitle || commonTitle || '').trim();
         let finalTitle = cleanName;
-        if (titlePattern === 'caption_numbered') {
-          finalTitle = `${sharedCaption} #${idx + 1}`;
-        } else if (titlePattern === 'category_caption') {
-          finalTitle = `${category} - ${sharedCaption} #${idx + 1}`;
-        } else if (titlePattern === 'prefix_name') {
-          const prefix = titlePrefix.trim() ? `${titlePrefix.trim()} ` : '';
-          finalTitle = `${prefix}${cleanName}`;
-        } else if (imgItem.title) {
+
+        if (imgItem.title && imgItem.title.trim()) {
           finalTitle = imgItem.title.trim();
+        } else if (effectiveBatchTitle) {
+          if (titlePattern === 'numbered' || titlePattern === 'caption_numbered' || titlePattern === 'title_numbered') {
+            finalTitle = `${effectiveBatchTitle} #${idx + 1}`;
+          } else if (titlePattern === 'category_title' || titlePattern === 'category_caption') {
+            finalTitle = `${category} - ${effectiveBatchTitle} #${idx + 1}`;
+          } else if (titlePattern === 'prefix_name') {
+            const prefix = titlePrefix.trim() ? `${titlePrefix.trim()} ` : '';
+            finalTitle = `${prefix}${cleanName}`;
+          } else {
+            // 'exact' or default: all products share this exact title
+            finalTitle = effectiveBatchTitle;
+          }
+        } else if (titlePattern === 'prefix_name' && titlePrefix.trim()) {
+          finalTitle = `${titlePrefix.trim()} ${cleanName}`;
         }
 
         const uniqueCode = generateUniqueCode();
+        const rawCaption = (imgItem && (imgItem as any).caption) ? (imgItem as any).caption.trim() : sharedCaption;
+        const resolvedCaption = rawCaption
+          .replace(/{title}/gi, finalTitle)
+          .replace(/{code}/gi, uniqueCode)
+          .replace(/{price}/gi, String(Number(price) || 1150))
+          .replace(/{category}/gi, category.trim())
+          .replace(/{sizes}/gi, (Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL']).join(', '))
+          .replace(/{edition}/gi, edition || 'Player Issue Authentic');
+
         const newProduct: JerseyProduct = {
           id: `spidey-bulk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`,
           code: uniqueCode,
@@ -1143,7 +1163,7 @@ async function startServer() {
           edition: edition || 'Player Issue Authentic',
           badge: badge || 'New Drop',
           images: [imgItem.url],
-          description: sharedCaption, // Common shared caption applied to all products in batch
+          description: resolvedCaption, // Product caption/description with optional variables resolved
           features: [
             'Ultralight Aeroready seamless matrix structure',
             'High-definition heat-bonded silicone crest',

@@ -1165,8 +1165,10 @@ export default {
         const body: any = await request.json();
         const {
           category,
+          title: batchTitle,
+          commonTitle,
           caption,
-          titlePattern = 'clean_name',
+          titlePattern = 'exact',
           titlePrefix = '',
           price = 1150,
           originalPrice,
@@ -1237,18 +1239,37 @@ export default {
           const fname = typeof imgItem === 'object' && imgItem.filename ? imgItem.filename : url.split('/').pop() || `Item ${idx + 1}`;
           const cleanName = makeCleanTitle(fname);
 
+          const effectiveBatchTitle = (batchTitle || commonTitle || '').trim();
           let finalTitle = cleanName;
-          if (titlePattern === 'caption_numbered') {
-            finalTitle = `${sharedCaption} #${idx + 1}`;
-          } else if (titlePattern === 'category_caption') {
-            finalTitle = `${category} - ${sharedCaption} #${idx + 1}`;
-          } else if (titlePattern === 'prefix_name') {
-            finalTitle = `${titlePrefix ? titlePrefix.trim() + ' ' : ''}${cleanName}`;
-          } else if (imgItem?.title) {
+
+          if (imgItem?.title && imgItem.title.trim()) {
             finalTitle = imgItem.title.trim();
+          } else if (effectiveBatchTitle) {
+            if (titlePattern === 'numbered' || titlePattern === 'caption_numbered' || titlePattern === 'title_numbered') {
+              finalTitle = `${effectiveBatchTitle} #${idx + 1}`;
+            } else if (titlePattern === 'category_title' || titlePattern === 'category_caption') {
+              finalTitle = `${category} - ${effectiveBatchTitle} #${idx + 1}`;
+            } else if (titlePattern === 'prefix_name') {
+              const prefix = titlePrefix ? titlePrefix.trim() + ' ' : '';
+              finalTitle = `${prefix}${cleanName}`;
+            } else {
+              // 'exact' or default: all products share this exact title
+              finalTitle = effectiveBatchTitle;
+            }
+          } else if (titlePattern === 'prefix_name' && titlePrefix.trim()) {
+            finalTitle = `${titlePrefix.trim()} ${cleanName}`;
           }
 
           const uniqueCode = generateUniqueCode();
+          const rawCaption = (imgItem && imgItem.caption) ? imgItem.caption.trim() : sharedCaption;
+          const resolvedCaption = rawCaption
+            .replace(/{title}/gi, finalTitle)
+            .replace(/{code}/gi, uniqueCode)
+            .replace(/{price}/gi, String(Number(price) || 1150))
+            .replace(/{category}/gi, category.trim())
+            .replace(/{sizes}/gi, (Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL']).join(', '))
+            .replace(/{edition}/gi, edition || 'Player Issue Authentic');
+
           const prod: JerseyProduct = {
             id: `spidey-bulk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`,
             code: uniqueCode,
@@ -1260,7 +1281,7 @@ export default {
             edition: edition || 'Player Issue Authentic',
             badge: badge || 'New Drop',
             images: [url],
-            description: sharedCaption,
+            description: resolvedCaption,
             features: [
               'Ultralight Aeroready seamless matrix structure',
               'High-definition heat-bonded silicone crest',
