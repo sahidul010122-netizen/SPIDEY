@@ -570,6 +570,13 @@ export default function App() {
     return false;
   };
 
+  const handleBulkAddProducts = (newProducts: JerseyProduct[]) => {
+    if (!Array.isArray(newProducts) || newProducts.length === 0) return;
+    setProducts((prev) => [...newProducts, ...prev]);
+    showToast(`Successfully imported ${newProducts.length} products!`);
+    fetchStats();
+  };
+
   const handleUpdateProduct = async (id: string, updateData: Partial<JerseyProduct>): Promise<boolean> => {
     try {
       const res = await fetch(`/api/products/${id}`, {
@@ -1239,6 +1246,7 @@ export default function App() {
               siteSettings={siteSettings}
               stats={stats}
               onAddProduct={handleAddProduct}
+              onBulkAddProducts={handleBulkAddProducts}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
               onReorderProducts={handleReorderProducts}

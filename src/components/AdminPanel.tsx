@@ -8,7 +8,7 @@ import {
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
   Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save, RotateCcw,
-  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move, Pin
+  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move, Pin, FolderUp
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -18,6 +18,7 @@ import { OrderProcessManager } from './admin/OrderProcessManager';
 import { SteadfastApiSection } from './admin/SteadfastApiSection';
 import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
 import { PlaceOrderInstallSection } from './admin/PlaceOrderInstallSection';
+import { BulkFolderImportModal } from './admin/BulkFolderImportModal';
 import { CategoryManager } from './CategoryManager';
 
 interface AdminPanelProps {
@@ -26,6 +27,7 @@ interface AdminPanelProps {
   siteSettings: SiteSettings;
   stats: StoreStats | null;
   onAddProduct: (product: Partial<JerseyProduct>) => Promise<boolean>;
+  onBulkAddProducts?: (newProducts: JerseyProduct[]) => Promise<void> | void;
   onUpdateProduct: (id: string, product: Partial<JerseyProduct>) => Promise<boolean>;
   onDeleteProduct: (id: string) => Promise<boolean>;
   onReorderProducts?: (products: JerseyProduct[]) => Promise<boolean>;
@@ -54,6 +56,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   siteSettings,
   stats,
   onAddProduct,
+  onBulkAddProducts,
   onUpdateProduct,
   onDeleteProduct,
   onReorderProducts,
@@ -284,6 +287,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Product Form Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isBulkFolderImportOpen, setIsBulkFolderImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<JerseyProduct | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
 
@@ -1449,13 +1453,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search products..."
-                      className="pl-8 pr-3 py-2 text-xs bg-neutral-100 rounded-full border border-neutral-200 text-neutral-900 focus:outline-none focus:bg-white w-48 sm:w-60"
+                      className="pl-8 pr-3 py-2 text-xs bg-neutral-100 rounded-full border border-neutral-200 text-neutral-900 focus:outline-none focus:bg-white w-40 sm:w-56"
                     />
                   </div>
 
                   <button
+                    type="button"
+                    onClick={() => setIsBulkFolderImportOpen(true)}
+                    className="px-3.5 py-2 rounded-full bg-neutral-100 hover:bg-neutral-200/90 text-neutral-800 border border-neutral-300 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+                    title="Bulk upload draft products from storage folder with auto-generated codes & common caption"
+                  >
+                    <FolderUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                    <span className="hidden sm:inline">Upload from Folder</span>
+                    <span className="sm:hidden">Bulk Import</span>
+                  </button>
+
+                  <button
                     onClick={openAddProductModal}
-                    className="px-4 py-2 rounded-full bg-[#0d0f12] hover:bg-neutral-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                    className="px-4 py-2 rounded-full bg-[#0d0f12] hover:bg-neutral-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>Add New Product</span>
@@ -2930,6 +2945,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
       )}
+
+      {/* BULK PRODUCT IMPORT VIA STORAGE FOLDER MODAL */}
+      <BulkFolderImportModal
+        isOpen={isBulkFolderImportOpen}
+        onClose={() => setIsBulkFolderImportOpen(false)}
+        categories={categories}
+        existingProducts={localProducts}
+        currency={currency}
+        onImportSuccess={(createdBatch) => {
+          setLocalProducts((prev) => [...createdBatch, ...prev]);
+          if (onBulkAddProducts) {
+            onBulkAddProducts(createdBatch);
+          }
+        }}
+      />
 
     </div>
   );

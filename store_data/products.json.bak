@@ -1,5 +1,48 @@
 [
   {
+    "id": "spidey-bulk-1789777101808-x63o-1",
+    "code": "SJ-6B22R",
+    "title": "Test Bulk Jersey Beta",
+    "category": "EDC",
+    "price": 1250,
+    "season": "2025/26",
+    "edition": "Player Issue Authentic",
+    "badge": "New Drop",
+    "images": [
+      "/images/cat_edc_wallet_1787668177890.jpg"
+    ],
+    "description": "Special Edition Carbon Fiber Weave with Anti-Odor Aeroready Mesh",
+    "features": [
+      "Ultralight Aeroready seamless matrix structure",
+      "High-definition heat-bonded silicone crest",
+      "Anti-odor active breathability yarn integration",
+      "Laser-cut ventilation zone mapping"
+    ],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL",
+      "3XL"
+    ],
+    "inStock": true,
+    "stockCount": 20,
+    "rating": 5,
+    "reviewCount": 0,
+    "customizable": true,
+    "colorTheme": {
+      "primary": "#0f172a",
+      "accent": "#06b6d4",
+      "glow": "rgba(6, 182, 212, 0.35)"
+    },
+    "sortOrder": 1,
+    "position": 1,
+    "priority": 1,
+    "createdAt": "2026-09-19T00:18:21.808Z",
+    "updatedAt": "2026-09-19T00:18:21.808Z"
+  },
+  {
     "id": "spidey-rm-2009-away",
     "code": "SJ-EAXKF",
     "title": "Real Madrid 2009-10 Away Long-Sleeve",
@@ -38,13 +81,13 @@
       "glow": "rgba(234, 179, 8, 0.35)"
     },
     "createdAt": "2024-08-03T10:00:00.000Z",
-    "sortOrder": 0,
-    "position": 0,
-    "priority": 0,
-    "isPinned": true,
-    "pinnedOrder": 1,
-    "pinnedAt": 1710000000000,
-    "updatedAt": "2026-09-17T08:30:02.769Z"
+    "sortOrder": 2,
+    "position": 2,
+    "priority": 2,
+    "isPinned": false,
+    "pinnedOrder": null,
+    "pinnedAt": null,
+    "updatedAt": "2026-09-17T08:30:14.376Z"
   },
   {
     "id": "spidey-barca-1999-centenary",
@@ -86,9 +129,9 @@
       "glow": "rgba(220, 38, 38, 0.35)"
     },
     "createdAt": "2024-08-01T10:00:00.000Z",
-    "sortOrder": 1,
-    "position": 1,
-    "priority": 1
+    "sortOrder": 3,
+    "position": 3,
+    "priority": 3
   },
   {
     "id": "spidey-rm-2627-third",
@@ -129,9 +172,9 @@
       "glow": "rgba(245, 158, 11, 0.35)"
     },
     "createdAt": "2025-01-15T12:00:00.000Z",
-    "sortOrder": 2,
-    "position": 2,
-    "priority": 2
+    "sortOrder": 4,
+    "position": 4,
+    "priority": 4
   },
   {
     "id": "spidey-chelsea-retro-home",
@@ -172,9 +215,9 @@
       "glow": "rgba(29, 78, 216, 0.35)"
     },
     "createdAt": "2024-08-04T15:00:00.000Z",
-    "sortOrder": 3,
-    "position": 3,
-    "priority": 3
+    "sortOrder": 5,
+    "position": 5,
+    "priority": 5
   },
   {
     "id": "spidey-rm-2425-home",
@@ -216,9 +259,9 @@
       "glow": "rgba(234, 179, 8, 0.3)"
     },
     "createdAt": "2024-08-10T10:00:00.000Z",
-    "sortOrder": 4,
-    "position": 4,
-    "priority": 4
+    "sortOrder": 6,
+    "position": 6,
+    "priority": 6
   },
   {
     "id": "spidey-mufc-treble-99",
@@ -260,9 +303,9 @@
       "glow": "rgba(185, 28, 28, 0.35)"
     },
     "createdAt": "2024-08-05T09:15:00.000Z",
-    "sortOrder": 5,
-    "position": 5,
-    "priority": 5
+    "sortOrder": 7,
+    "position": 7,
+    "priority": 7
   },
   {
     "id": "spidey-arsenal-neon-volt",
@@ -304,9 +347,9 @@
       "glow": "rgba(132, 204, 22, 0.35)"
     },
     "createdAt": "2024-08-15T11:00:00.000Z",
-    "sortOrder": 6,
-    "position": 6,
-    "priority": 6
+    "sortOrder": 8,
+    "position": 8,
+    "priority": 8
   },
   {
     "id": "spidey-psg-fourth-noir",
@@ -348,9 +391,9 @@
       "glow": "rgba(6, 182, 212, 0.35)"
     },
     "createdAt": "2024-08-18T16:20:00.000Z",
-    "sortOrder": 7,
-    "position": 7,
-    "priority": 7
+    "sortOrder": 9,
+    "position": 9,
+    "priority": 9
   },
   {
     "id": "spidey-concept-spider-edition",
@@ -392,9 +435,9 @@
       "glow": "rgba(239, 68, 68, 0.4)"
     },
     "createdAt": "2024-08-20T19:00:00.000Z",
-    "sortOrder": 8,
-    "position": 8,
-    "priority": 8
+    "sortOrder": 10,
+    "position": 10,
+    "priority": 10
   },
   {
     "id": "spidey-retro-milan-kaka",
@@ -436,9 +479,9 @@
       "glow": "rgba(220, 38, 38, 0.3)"
     },
     "createdAt": "2024-08-02T13:45:00.000Z",
-    "sortOrder": 9,
-    "position": 9,
-    "priority": 9
+    "sortOrder": 11,
+    "position": 11,
+    "priority": 11
   },
   {
     "id": "orifake-slim-armor-fold6",
@@ -475,9 +518,9 @@
       "glow": "rgba(56, 189, 248, 0.25)"
     },
     "createdAt": "2025-01-10T10:00:00.000Z",
-    "sortOrder": 10,
-    "position": 10,
-    "priority": 10
+    "sortOrder": 12,
+    "position": 12,
+    "priority": 12
   },
   {
     "id": "orifake-tough-armor-pixel9",
@@ -515,8 +558,8 @@
       "glow": "rgba(34, 197, 94, 0.25)"
     },
     "createdAt": "2025-01-12T14:30:00.000Z",
-    "sortOrder": 11,
-    "position": 11,
-    "priority": 11
+    "sortOrder": 13,
+    "position": 13,
+    "priority": 13
   }
 ]

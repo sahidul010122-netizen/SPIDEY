@@ -980,6 +980,227 @@ async function startServer() {
     });
   });
 
+  // Bulk Product Upload via R2 Folder / Storage Selection with Auto-Code Generation & Common Caption
+  app.post('/api/products/bulk-import-folder', (req: Request, res: Response) => {
+    try {
+      const {
+        category,
+        caption,
+        titlePattern = 'clean_name',
+        titlePrefix = '',
+        price = 1150,
+        originalPrice,
+        season = '2025/26',
+        edition = 'Player Issue Authentic',
+        badge = 'New Drop',
+        sizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+        stockCount = 20,
+        inStock = true,
+        customizable = true,
+        selectedImages,
+        folder = 'uploads'
+      } = req.body;
+
+      if (!category) {
+        return res.status(400).json({ success: false, message: 'Category selection is required for bulk import.' });
+      }
+
+      // Collect images to process
+      let imagesToProcess: Array<{ filename?: string; url: string; title?: string }> = [];
+
+      if (Array.isArray(selectedImages) && selectedImages.length > 0) {
+        imagesToProcess = selectedImages.map((img: any) => {
+          if (typeof img === 'string') {
+            return { url: img, filename: path.basename(img) };
+          }
+          return {
+            url: img.url,
+            filename: img.filename || path.basename(img.url),
+            title: img.title
+          };
+        });
+      } else {
+        // Automatically scan the folder if no explicit selectedImages array was passed
+        const targetDirs: string[] = [];
+        let urlPrefix = '/uploads';
+
+        if (folder === 'images' || folder.startsWith('images/')) {
+          targetDirs.push(path.join(process.cwd(), 'public', folder));
+          urlPrefix = `/${folder}`;
+        } else {
+          const sub = folder === 'uploads' ? '' : folder.replace(/^uploads\//, '');
+          targetDirs.push(
+            path.join(UPLOADS_DIR, sub),
+            path.join(PUBLIC_UPLOADS_DIR, sub),
+            path.join(DATA_DIR, 'uploads', sub)
+          );
+          urlPrefix = `/${folder}`;
+        }
+
+        const foundMap = new Map<string, string>();
+        for (const dir of targetDirs) {
+          if (fs.existsSync(dir)) {
+            try {
+              const files = fs.readdirSync(dir);
+              for (const file of files) {
+                const ext = path.extname(file).toLowerCase();
+                if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.avif'].includes(ext)) {
+                  if (!foundMap.has(file)) {
+                    foundMap.set(file, `${urlPrefix}/${file}`);
+                  }
+                }
+              }
+            } catch (scanErr) {
+              console.warn('Folder auto-scan error:', scanErr);
+            }
+          }
+        }
+
+        for (const [key, item] of imageStore.entries()) {
+          if (key.startsWith(`${folder}/`)) {
+            const filename = key.replace(`${folder}/`, '');
+            if (!foundMap.has(filename)) {
+              foundMap.set(filename, `/api/images/${encodeURIComponent(key)}`);
+            }
+          }
+        }
+
+        imagesToProcess = Array.from(foundMap.entries()).map(([filename, url]) => ({
+          filename,
+          url
+        }));
+      }
+
+      if (imagesToProcess.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No images found in the selected folder or provided image list.'
+        });
+      }
+
+      // Existing SKU codes cache for 100% collision-free auto-code generation
+      const existingCodes = new Set<string>();
+      products.forEach((p) => {
+        if (p.code) existingCodes.add(p.code.toUpperCase());
+      });
+
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      const generateUniqueCode = () => {
+        let code = '';
+        let attempts = 0;
+        do {
+          code = 'SJ-';
+          for (let i = 0; i < 5; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          attempts++;
+          if (attempts > 500) {
+            code += Math.floor(Math.random() * 900 + 100);
+            break;
+          }
+        } while (existingCodes.has(code));
+        existingCodes.add(code);
+        return code;
+      };
+
+      const makeCleanTitle = (fname: string) => {
+        const nameWithoutExt = fname.replace(/\.[^/.]+$/, '');
+        const clean = nameWithoutExt
+          .replace(/^\d+[-_]/, '')
+          .replace(/[-_]\d{10,}$/, '')
+          .replace(/[-_]/g, ' ')
+          .trim();
+        return clean.replace(/\b\w/g, (l) => l.toUpperCase()) || 'Product Item';
+      };
+
+      const sharedCaption = (caption || '').trim() || `${category} Collection`;
+      const createdBatch: JerseyProduct[] = [];
+
+      imagesToProcess.forEach((imgItem, idx) => {
+        const cleanName = makeCleanTitle(imgItem.filename || `Item ${idx + 1}`);
+
+        let finalTitle = cleanName;
+        if (titlePattern === 'caption_numbered') {
+          finalTitle = `${sharedCaption} #${idx + 1}`;
+        } else if (titlePattern === 'category_caption') {
+          finalTitle = `${category} - ${sharedCaption} #${idx + 1}`;
+        } else if (titlePattern === 'prefix_name') {
+          const prefix = titlePrefix.trim() ? `${titlePrefix.trim()} ` : '';
+          finalTitle = `${prefix}${cleanName}`;
+        } else if (imgItem.title) {
+          finalTitle = imgItem.title.trim();
+        }
+
+        const uniqueCode = generateUniqueCode();
+        const newProduct: JerseyProduct = {
+          id: `spidey-bulk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`,
+          code: uniqueCode,
+          title: finalTitle,
+          category: category.trim(),
+          price: Number(price) || 1150,
+          originalPrice: originalPrice ? Number(originalPrice) : undefined,
+          season: season || '2025/26',
+          edition: edition || 'Player Issue Authentic',
+          badge: badge || 'New Drop',
+          images: [imgItem.url],
+          description: sharedCaption, // Common shared caption applied to all products in batch
+          features: [
+            'Ultralight Aeroready seamless matrix structure',
+            'High-definition heat-bonded silicone crest',
+            'Anti-odor active breathability yarn integration',
+            'Laser-cut ventilation zone mapping'
+          ],
+          sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+          inStock: inStock !== false,
+          stockCount: stockCount !== undefined ? Number(stockCount) : 20,
+          rating: 5.0,
+          reviewCount: 0,
+          customizable: customizable !== false,
+          colorTheme: {
+            primary: '#0f172a',
+            accent: '#06b6d4',
+            glow: 'rgba(6, 182, 212, 0.35)'
+          },
+          sortOrder: 0,
+          position: 0,
+          priority: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        createdBatch.push(newProduct);
+      });
+
+      // Insert all new products at the top of the catalog
+      products.unshift(...createdBatch);
+
+      // Re-index sort order
+      products.forEach((p, idx) => {
+        p.sortOrder = idx;
+        p.position = idx;
+        p.priority = idx;
+      });
+
+      saveJsonFile(PRODUCTS_FILE, products);
+
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+
+      console.log(`✓ Bulk imported ${createdBatch.length} products to category "${category}" from folder "${folder}"`);
+
+      res.status(201).json({
+        success: true,
+        message: `Successfully created ${createdBatch.length} products in category "${category}" with unique codes.`,
+        count: createdBatch.length,
+        products: createdBatch
+      });
+    } catch (err: any) {
+      console.error('Bulk folder import error:', err);
+      res.status(500).json({ success: false, message: err.message || 'Bulk import failed' });
+    }
+  });
+
   // Image Upload Handler (Emulating Cloudflare R2 bucket binding MY_BUCKET.put)
   app.post('/api/upload', (req: Request, res: Response) => {
     try {
@@ -1122,6 +1343,203 @@ async function startServer() {
         hasBackupCategories: fs.existsSync(`${CATEGORIES_FILE}.bak`)
       }
     });
+  });
+
+  // Storage Folders Scanner (For Bulk Import / Folder Browser)
+  app.get('/api/storage/folders', (_req: Request, res: Response) => {
+    try {
+      const folders: Array<{
+        id: string;
+        name: string;
+        path: string;
+        imageCount: number;
+        sampleThumbnails: string[];
+      }> = [];
+
+      const getImageFiles = (dir: string): string[] => {
+        if (!fs.existsSync(dir)) return [];
+        try {
+          return fs.readdirSync(dir).filter((f) => {
+            const ext = path.extname(f).toLowerCase();
+            return ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.avif'].includes(ext);
+          });
+        } catch {
+          return [];
+        }
+      };
+
+      // 1. R2 / Disk uploads folder
+      const uploadFiles = new Set<string>();
+      getImageFiles(UPLOADS_DIR).forEach((f) => uploadFiles.add(f));
+      getImageFiles(PUBLIC_UPLOADS_DIR).forEach((f) => uploadFiles.add(f));
+      getImageFiles(path.join(DATA_DIR, 'uploads')).forEach((f) => uploadFiles.add(f));
+      for (const key of imageStore.keys()) {
+        if (key.startsWith('uploads/')) {
+          uploadFiles.add(key.replace(/^uploads\//, ''));
+        }
+      }
+      const uploadFilesArr = Array.from(uploadFiles);
+      folders.push({
+        id: 'uploads',
+        name: 'R2 Cloud Uploads (/uploads)',
+        path: '/uploads',
+        imageCount: uploadFilesArr.length,
+        sampleThumbnails: uploadFilesArr.slice(0, 6).map((f) => `/uploads/${encodeURIComponent(f)}`)
+      });
+
+      // 2. public/images folder
+      const publicImagesDir = path.join(process.cwd(), 'public', 'images');
+      const catalogImages = getImageFiles(publicImagesDir);
+      folders.push({
+        id: 'images',
+        name: 'Catalog Media (/images)',
+        path: '/images',
+        imageCount: catalogImages.length,
+        sampleThumbnails: catalogImages.slice(0, 6).map((f) => `/images/${encodeURIComponent(f)}`)
+      });
+
+      // 3. Scan for any subfolders inside UPLOADS_DIR or PUBLIC_UPLOADS_DIR
+      const scanSubdirs = (baseDir: string, prefix: string) => {
+        if (!fs.existsSync(baseDir)) return;
+        try {
+          const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const subDirPath = path.join(baseDir, entry.name);
+              const subImages = getImageFiles(subDirPath);
+              const folderKey = `${prefix}/${entry.name}`;
+              if (!folders.some((f) => f.id === folderKey)) {
+                folders.push({
+                  id: folderKey,
+                  name: `${prefix}/${entry.name}`,
+                  path: `/${prefix}/${entry.name}`,
+                  imageCount: subImages.length,
+                  sampleThumbnails: subImages.slice(0, 6).map((f) => `/${prefix}/${entry.name}/${encodeURIComponent(f)}`)
+                });
+              }
+            }
+          }
+        } catch (subErr) {
+          console.warn('Subdir scan error:', subErr);
+        }
+      };
+      scanSubdirs(UPLOADS_DIR, 'uploads');
+      scanSubdirs(PUBLIC_UPLOADS_DIR, 'uploads');
+      scanSubdirs(publicImagesDir, 'images');
+
+      res.json({ success: true, folders });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to list folders' });
+    }
+  });
+
+  // Folder Images Scanner (Returns files & thumbnail URLs inside chosen storage folder)
+  app.get('/api/storage/folder-images', (req: Request, res: Response) => {
+    try {
+      const folder = String(req.query.folder || 'uploads').trim().replace(/^\/+|\/+$/g, '');
+      const targetDirs: string[] = [];
+      let urlPrefix = '/uploads';
+
+      if (folder === 'images' || folder.startsWith('images/')) {
+        targetDirs.push(path.join(process.cwd(), 'public', folder));
+        urlPrefix = `/${folder}`;
+      } else {
+        const sub = folder === 'uploads' ? '' : folder.replace(/^uploads\//, '');
+        targetDirs.push(
+          path.join(UPLOADS_DIR, sub),
+          path.join(PUBLIC_UPLOADS_DIR, sub),
+          path.join(DATA_DIR, 'uploads', sub)
+        );
+        urlPrefix = `/${folder}`;
+      }
+
+      const foundFiles = new Map<string, { filename: string; url: string; size: number; modifiedAt: string }>();
+
+      for (const dir of targetDirs) {
+        if (fs.existsSync(dir)) {
+          try {
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+              const ext = path.extname(file).toLowerCase();
+              if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg', '.avif'].includes(ext)) {
+                if (!foundFiles.has(file)) {
+                  try {
+                    const stat = fs.statSync(path.join(dir, file));
+                    foundFiles.set(file, {
+                      filename: file,
+                      url: `${urlPrefix}/${file}`,
+                      size: stat.size,
+                      modifiedAt: stat.mtime.toISOString()
+                    });
+                  } catch {
+                    foundFiles.set(file, {
+                      filename: file,
+                      url: `${urlPrefix}/${file}`,
+                      size: 0,
+                      modifiedAt: new Date().toISOString()
+                    });
+                  }
+                }
+              }
+            }
+          } catch (dirErr) {
+            console.warn('Error reading directory:', dir, dirErr);
+          }
+        }
+      }
+
+      // Merge items from in-memory imageStore
+      for (const [key, item] of imageStore.entries()) {
+        if (key.startsWith(`${folder}/`)) {
+          const filename = key.replace(`${folder}/`, '');
+          if (!foundFiles.has(filename)) {
+            foundFiles.set(filename, {
+              filename,
+              url: `/api/images/${encodeURIComponent(key)}`,
+              size: item.size || 0,
+              modifiedAt: item.uploadedAt || new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      // Check which images are already used by products
+      const usedImageUrls = new Set<string>();
+      products.forEach((p) => {
+        p.images?.forEach((img) => {
+          usedImageUrls.add(img);
+          usedImageUrls.add(path.basename(img));
+        });
+      });
+
+      const makeCleanTitle = (fname: string) => {
+        const nameWithoutExt = fname.replace(/\.[^/.]+$/, '');
+        const clean = nameWithoutExt
+          .replace(/^\d+[-_]/, '')
+          .replace(/[-_]\d{10,}$/, '')
+          .replace(/[-_]/g, ' ')
+          .trim();
+        return clean.replace(/\b\w/g, (l) => l.toUpperCase()) || 'Product Item';
+      };
+
+      const images = Array.from(foundFiles.values()).map((item) => ({
+        ...item,
+        cleanTitle: makeCleanTitle(item.filename),
+        alreadyUsed: usedImageUrls.has(item.url) || usedImageUrls.has(item.filename)
+      }));
+
+      // Sort newest modified first
+      images.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+
+      res.json({
+        success: true,
+        folder,
+        count: images.length,
+        images
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Failed to list folder images' });
+    }
   });
 
   // Full Catalog Snapshot Backup Export

@@ -1160,6 +1160,179 @@ export default {
         });
       }
 
+      // 11b. Bulk Product Import via Folder / Storage Selection (POST)
+      if (pathname === '/api/products/bulk-import-folder' && request.method === 'POST') {
+        const body: any = await request.json();
+        const {
+          category,
+          caption,
+          titlePattern = 'clean_name',
+          titlePrefix = '',
+          price = 1150,
+          originalPrice,
+          season = '2025/26',
+          edition = 'Player Issue Authentic',
+          badge = 'New Drop',
+          sizes = ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+          stockCount = 20,
+          inStock = true,
+          customizable = true,
+          selectedImages = []
+        } = body;
+
+        if (!category) {
+          return new Response(JSON.stringify({ success: false, message: 'Category is required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        if (!Array.isArray(selectedImages) || selectedImages.length === 0) {
+          return new Response(JSON.stringify({ success: false, message: 'Selected images required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+
+        const allProducts = await getStoredProducts(env);
+        const existingCodes = new Set<string>();
+        allProducts.forEach((p) => {
+          if (p.code) existingCodes.add(p.code.toUpperCase());
+        });
+
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const generateUniqueCode = () => {
+          let code = '';
+          let attempts = 0;
+          do {
+            code = 'SJ-';
+            for (let i = 0; i < 5; i++) {
+              code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            attempts++;
+            if (attempts > 500) {
+              code += Math.floor(Math.random() * 900 + 100);
+              break;
+            }
+          } while (existingCodes.has(code));
+          existingCodes.add(code);
+          return code;
+        };
+
+        const makeCleanTitle = (fname: string) => {
+          const nameWithoutExt = fname.replace(/\.[^/.]+$/, '');
+          const clean = nameWithoutExt
+            .replace(/^\d+[-_]/, '')
+            .replace(/[-_]\d{10,}$/, '')
+            .replace(/[-_]/g, ' ')
+            .trim();
+          return clean.replace(/\b\w/g, (l) => l.toUpperCase()) || 'Product Item';
+        };
+
+        const sharedCaption = (caption || '').trim() || `${category} Collection`;
+        const newBatch: JerseyProduct[] = [];
+
+        selectedImages.forEach((imgItem: any, idx: number) => {
+          const url = typeof imgItem === 'string' ? imgItem : imgItem.url;
+          const fname = typeof imgItem === 'object' && imgItem.filename ? imgItem.filename : url.split('/').pop() || `Item ${idx + 1}`;
+          const cleanName = makeCleanTitle(fname);
+
+          let finalTitle = cleanName;
+          if (titlePattern === 'caption_numbered') {
+            finalTitle = `${sharedCaption} #${idx + 1}`;
+          } else if (titlePattern === 'category_caption') {
+            finalTitle = `${category} - ${sharedCaption} #${idx + 1}`;
+          } else if (titlePattern === 'prefix_name') {
+            finalTitle = `${titlePrefix ? titlePrefix.trim() + ' ' : ''}${cleanName}`;
+          } else if (imgItem?.title) {
+            finalTitle = imgItem.title.trim();
+          }
+
+          const uniqueCode = generateUniqueCode();
+          const prod: JerseyProduct = {
+            id: `spidey-bulk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`,
+            code: uniqueCode,
+            title: finalTitle,
+            category: category.trim(),
+            price: Number(price) || 1150,
+            originalPrice: originalPrice ? Number(originalPrice) : undefined,
+            season: season || '2025/26',
+            edition: edition || 'Player Issue Authentic',
+            badge: badge || 'New Drop',
+            images: [url],
+            description: sharedCaption,
+            features: [
+              'Ultralight Aeroready seamless matrix structure',
+              'High-definition heat-bonded silicone crest',
+              'Anti-odor active breathability yarn integration'
+            ],
+            sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+            inStock: inStock !== false,
+            stockCount: stockCount !== undefined ? Number(stockCount) : 20,
+            rating: 5.0,
+            reviewCount: 0,
+            customizable: customizable !== false,
+            colorTheme: {
+              primary: '#0f172a',
+              accent: '#06b6d4',
+              glow: 'rgba(6, 182, 212, 0.35)'
+            },
+            sortOrder: 0,
+            position: 0,
+            priority: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          newBatch.push(prod);
+        });
+
+        allProducts.unshift(...newBatch);
+        allProducts.forEach((p, idx) => {
+          p.sortOrder = idx;
+          p.position = idx;
+          p.priority = idx;
+        });
+
+        await saveStoredProducts(env, allProducts);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Created ${newBatch.length} products with unique codes`,
+            count: newBatch.length,
+            products: newBatch
+          }),
+          {
+            status: 201,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          }
+        );
+      }
+
+      // 11c. Storage Folders & Images (GET)
+      if (pathname === '/api/storage/folders' && request.method === 'GET') {
+        const folders = [
+          {
+            id: 'uploads',
+            name: 'R2 Cloud Uploads (/uploads)',
+            path: '/uploads',
+            imageCount: 15,
+            sampleThumbnails: ['/images/prod_fold_case_1787668257317.jpg']
+          },
+          {
+            id: 'images',
+            name: 'Catalog Media (/images)',
+            path: '/images',
+            imageCount: 8,
+            sampleThumbnails: ['/images/prod_pixel_case_1787668274006.jpg']
+          }
+        ];
+        return new Response(JSON.stringify({ success: true, folders }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+
       // 12. Update Product (PUT)
       if (pathname.startsWith('/api/products/') && request.method === 'PUT') {
         const id = pathname.replace('/api/products/', '');
