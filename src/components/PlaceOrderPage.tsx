@@ -273,16 +273,21 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
     setIsSubmitting(true);
 
     try {
+      const parsedCodAmount = Math.max(0, parseFloat(codAmount) || 0);
+      const itemPriceShare = parsedCodAmount > 0 ? Math.round(parsedCodAmount / Math.max(1, items.length)) : 0;
+
       const cartItems: CartItem[] = items.map((it, idx) => ({
         itemKey: `order-item-${Date.now()}-${idx}`,
-        product: it.product!,
+        product: {
+          ...it.product!,
+          // Decouple from catalog database price so manual COD amount is respected everywhere
+          price: parsedCodAmount > 0 ? itemPriceShare : (it.product?.price || 0)
+        },
         selectedSize: it.selectedSize,
         customName: it.customNameNumber.trim() || undefined,
         quantity: 1,
         addedAt: Date.now()
       }));
-
-      const parsedCodAmount = parseFloat(codAmount) || 0;
 
       const newOrder: Order = {
         id: `SPIDEY-${Date.now().toString(36).toUpperCase()}`,
@@ -301,6 +306,7 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
         discount: 0,
         shippingFee: 0,
         totalAmount: parsedCodAmount,
+        codAmount: parsedCodAmount,
         status: 'confirmed',
         createdAt: new Date().toISOString()
       };

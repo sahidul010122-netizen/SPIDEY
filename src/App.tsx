@@ -815,30 +815,11 @@ export default function App() {
   };
 
   const handleResetCatalog = async () => {
-    try {
-      localStorage.removeItem('spidey_deleted_product_ids');
-      localStorage.removeItem('spidey_deleted_category_ids');
-      localStorage.removeItem('spidey_products');
-      localStorage.removeItem('orifake_products');
-      localStorage.removeItem('spidey_categories');
-      localStorage.removeItem('orifake_categories');
-      const res = await fetch('/api/seed', { method: 'POST' });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.products)) {
-        setProducts(data.products);
-        setCategoryItems(Array.isArray(data.categories) ? data.categories : CATEGORY_CAROUSEL_ITEMS);
-        setSiteSettings(DEFAULT_SITE_SETTINGS);
-        showToast('Store reset to original demo setup!');
-        fetchStats();
-        return;
-      }
-    } catch (err) {
-      // Fallback
-    }
-    setProducts(INITIAL_JERSEYS);
-    setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
-    setSiteSettings(DEFAULT_SITE_SETTINGS);
-    showToast('Store reset to original demo setup!');
+    // Protected against destructive wipe: only re-fetch active persisted data from server
+    await fetchProducts();
+    await fetchCategories();
+    await fetchStats();
+    showToast('Catalog synchronized with active database.');
   };
 
   // CMS Settings Actions (Sync with R2 backend)
@@ -1021,32 +1002,10 @@ export default function App() {
     return false;
   };
 
-  // Reset categories to clean default state
+  // Sync categories safely with active database without wiping custom items
   const handleResetCategories = async () => {
-    try {
-      const res = await fetch('/api/categories/reset', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.categories)) {
-          setCategoryItems(data.categories);
-          try {
-            localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
-            localStorage.removeItem('orifake_categories');
-            localStorage.removeItem('spidey_deleted_category_ids');
-          } catch {}
-          showToast('সকল ক্যাটাগরি সফলভাবে ডিফল্ট অবস্থায় রিস্টোর করা হয়েছে!', 'success');
-          return;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to reset categories on server:', e);
-    }
-    setCategoryItems(CATEGORY_CAROUSEL_ITEMS);
-    try {
-      localStorage.setItem('spidey_categories', JSON.stringify(CATEGORY_CAROUSEL_ITEMS));
-      localStorage.removeItem('orifake_categories');
-    } catch {}
-    showToast('সকল ক্যাটাগরি রিস্টোর হয়েছে!', 'success');
+    await fetchCategories();
+    showToast('ক্যাটাগরি ডাটাবেসের সাথে সিঙ্ক হয়েছে!', 'success');
   };
 
   // Auth Actions with Remember Device / Auto-Login logic

@@ -438,8 +438,6 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     setStagedOrders([]);
     setRawBulkInput('');
     showToast(`🎉 Successfully saved ${convertedOrders.length} orders! Master total is now ${nextSavedOrders.length} orders.`);
-    
-    if (onRefreshStats) onRefreshStats();
   };
 
   // Select / Deselect All checkbox toggle
@@ -665,8 +663,8 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
         customName: it.customName || '',
         quantity: it.quantity || 1
       })),
-      totalAmount: staged.codAmount || 650,
-      codAmount: staged.codAmount || 650,
+      totalAmount: staged.codAmount !== undefined ? staged.codAmount : 0,
+      codAmount: staged.codAmount !== undefined ? staged.codAmount : 0,
       isExchange: staged.isExchange,
       courierStatus: 'pending',
       trackingCode: (849000000 + (idx * 143)).toString().substring(0, 9),
@@ -723,7 +721,6 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     }
 
     showToast('✓ Order permanently removed from database & storage.');
-    if (onRefreshStats) onRefreshStats();
   };
 
   // Bulk Delete Selected Orders Permanently
@@ -771,7 +768,6 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     }
 
     showToast(`✓ ${count} orders permanently deleted from database & storage.`);
-    if (onRefreshStats) onRefreshStats();
   };
 
   // Permanently Delete All Master Orders
@@ -818,7 +814,6 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     }
 
     showToast(`✓ All ${count} orders permanently deleted. Database & storage is clean.`);
-    if (onRefreshStats) onRefreshStats();
   };
 
   // Filtered orders list for display

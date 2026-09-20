@@ -32,7 +32,7 @@ interface AdminPanelProps {
   onDeleteProduct: (id: string) => Promise<boolean>;
   onReorderProducts?: (products: JerseyProduct[]) => Promise<boolean>;
   onTogglePinProduct?: (id: string) => Promise<boolean>;
-  onResetCatalog: () => Promise<void>;
+  onResetCatalog?: () => Promise<void>;
   onUpdateSiteSettings: (settings: Partial<SiteSettings>) => void;
   onAddCategory: (cat: CategoryItem) => void;
   onUpdateCategory: (id: string, cat: Partial<CategoryItem>) => void;
@@ -551,18 +551,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       await onRefreshCategories();
     } finally {
       setIsRefreshingCats(false);
-    }
-  };
-
-  const [isResettingCats, setIsResettingCats] = useState(false);
-  const handleResetCategoriesDirectly = async () => {
-    if (!onResetCategories) return;
-    if (!window.confirm('সকল ক্যাটাগরি ডিফল্ট প্রিসেটে রিস্টোর করবেন? সব টেস্ট বা অপ্রয়োজনীয় ক্যাটাগরি মুছে অফিসিয়াল ফুটবল ও স্টোর ক্যাটাগরি সেট হবে।')) return;
-    setIsResettingCats(true);
-    try {
-      await onResetCategories();
-    } finally {
-      setIsResettingCats(false);
     }
   };
 
@@ -1195,14 +1183,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           )}
 
           <button
-            onClick={onResetCatalog}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-semibold text-neutral-400 hover:text-white hover:bg-white/5 transition-all"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Reset Demo Data</span>
-          </button>
-
-          <button
             onClick={onLogoutAdmin}
             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all"
           >
@@ -1291,7 +1271,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <OrderProcessManager 
               products={products}
               siteSettings={localSettings}
-              onRefreshStats={onResetCatalog}
+              onRefreshStats={() => {}}
               onNavigateToSteadfastApi={() => setActiveMenu('steadfast_api')}
               onNavigateToBarcodeScanner={() => setActiveMenu('barcode_scanner')}
             />

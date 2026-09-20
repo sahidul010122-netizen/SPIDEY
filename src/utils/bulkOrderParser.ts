@@ -243,9 +243,17 @@ export function parseSingleOrderBlock(block: string, products: JerseyProduct[], 
     }
 
     // 4. Check for COD Amount / Total:
-    if (/^(?:amount|cod\s*amount|total|price|টাকা|মূল্য)\s*[:\-]/i.test(line) || /\d+\s*৳/.test(line) || /৳\s*\d+/.test(line)) {
+    // Captures exact numerical amount written in that specific order text/box, independent of catalog prices
+    if (/^(?:cod\s*(?:amount)?|amount|total\s*(?:amount|price)?|price|cash\s*on\s*delivery|টাকা|মূল্য|বাকি)\s*[:\-]/i.test(line)) {
       const converted = convertBengaliToEnglishDigits(line);
-      const digitsMatch = converted.match(/(?:amount|cod|total|price|৳|\b)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+      const digitsMatch = converted.match(/(?:cod\s*(?:amount)?|amount|total\s*(?:amount|price)?|price|cash\s*on\s*delivery|টাকা|মূল্য|বাকি)\s*[:\-]?\s*(\d+(?:\.\d+)?)/i);
+      if (digitsMatch) {
+        codAmount = Math.max(0, parseFloat(digitsMatch[1]) || 0);
+      }
+      continue;
+    } else if (/\b\d+\s*(?:৳|tk|taka|\/-)\b/i.test(line) || /৳\s*\d+/.test(line)) {
+      const converted = convertBengaliToEnglishDigits(line);
+      const digitsMatch = converted.match(/(\d+(?:\.\d+)?)\s*(?:৳|tk|taka|\/-)/i) || converted.match(/৳\s*(\d+(?:\.\d+)?)/);
       if (digitsMatch) {
         codAmount = Math.max(0, parseFloat(digitsMatch[1]) || 0);
       }
@@ -378,14 +386,20 @@ export function parseBulkOrders(rawText: string, products: JerseyProduct[]): Par
  */
 export function convertParsedOrderToMasterOrder(parsed: ParsedOrder, index: number = 0): Order {
   const parsedItems = Array.isArray(parsed.items) ? parsed.items : [];
+  const finalCod = typeof parsed.codAmount === 'number' && !isNaN(parsed.codAmount) ? Math.max(0, parsed.codAmount) : 0;
+
   const cartItems: CartItem[] = parsedItems.map((it, idx) => {
-    // Fallback dummy product if no match
-    const dummyProduct: JerseyProduct = it.matchedProduct || {
+    // Keep individual product representation but decouple from the custom order COD total
+    const itemShare = finalCod > 0 ? Math.round(finalCod / Math.max(1, parsedItems.length)) : (it.matchedProduct?.price || 1000);
+    const dummyProduct: JerseyProduct = it.matchedProduct ? {
+      ...it.matchedProduct,
+      price: itemShare
+    } : {
       id: `prod-${it.code || 'custom'}-${idx}`,
       code: it.code || `SJ-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
       title: it.title,
       category: 'Matchwear',
-      price: parsed.codAmount > 0 ? parsed.codAmount : 1000,
+      price: itemShare,
       season: '2025/26',
       edition: 'Pro Issue',
       images: [
@@ -425,11 +439,11 @@ export function convertParsedOrderToMasterOrder(parsed: ParsedOrder, index: numb
     giftBoxType: parsed.giftBoxType,
     orderNote: parsed.orderNote,
     orderType: 'bulk_entry',
-    subtotal: parsed.codAmount,
+    subtotal: finalCod,
     discount: 0,
     shippingFee: 0,
-    totalAmount: parsed.codAmount,
-    codAmount: parsed.codAmount,
+    totalAmount: finalCod,
+    codAmount: finalCod,
     status: 'confirmed',
     courierStatus: 'pending',
     createdAt: new Date().toISOString()

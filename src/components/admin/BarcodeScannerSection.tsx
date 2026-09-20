@@ -1472,7 +1472,7 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
                       {/* COD / Price */}
                       <td className="p-3.5 font-mono font-bold text-neutral-900">
-                        {formatPrice(order.totalAmount || 0, currency as CurrencyCode)}
+                        {formatPrice(order.codAmount !== undefined ? order.codAmount : (order.totalAmount || 0), currency as CurrencyCode)}
                       </td>
 
                       {/* Status */}

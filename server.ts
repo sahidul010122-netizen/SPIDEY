@@ -542,24 +542,21 @@ async function startServer() {
     res.json({ success: true, message: 'Categories sequence successfully saved to disk', categories: categoryItems });
   });
 
-  // Reset categories to default setup
+  // Reset categories endpoint - Protected against destructive resets
   app.post('/api/categories/reset', (_req: Request, res: Response) => {
-    categoryItems = [...CATEGORY_CAROUSEL_ITEMS].map((c, idx) => ({
-      ...c,
-      sortOrder: idx,
-      position: idx,
-      priority: idx
-    }));
-    saveJsonFile(CATEGORIES_FILE, categoryItems);
-    try {
-      if (fs.existsSync(DELETED_CATEGORIES_FILE)) {
-        fs.unlinkSync(DELETED_CATEGORIES_FILE);
-      }
-    } catch {}
+    // Reload from disk if available to preserve custom user categories
+    const diskCategories = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+    if (Array.isArray(diskCategories) && diskCategories.length > 0) {
+      categoryItems = diskCategories;
+    }
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
-    res.json({ success: true, message: 'Categories successfully restored to default setup', categories: categoryItems });
+    res.json({ 
+      success: true, 
+      message: 'Categories protected: factory wipe disabled to preserve user custom categories', 
+      categories: categoryItems 
+    });
   });
 
   app.post('/api/categories', (req: Request, res: Response) => {
@@ -1766,23 +1763,47 @@ async function startServer() {
       shippingAddress, 
       paymentMethod, 
       isExchange,
+      hasGiftBox,
+      giftBoxType,
       orderNote,
       orderType,
       discount, 
-      shippingFee 
+      shippingFee,
+      totalAmount,
+      codAmount
     } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart items are required' });
     }
 
-    const subtotal = items.reduce((acc: number, item: any) => acc + (item.product?.price || 0) * (item.quantity || 1), 0);
-    const disc = discount || 0;
-    const ship = shippingFee || 0;
-    const total = Math.max(0, subtotal - disc + ship);
+    // Manual COD Pricing Logic: If user or admin entered an exact manual COD / Total amount,
+    // honor it as authoritative and DO NOT override with product catalog prices.
+    const hasManualCod = codAmount !== undefined && codAmount !== null && !isNaN(Number(codAmount));
+    const hasManualTotal = totalAmount !== undefined && totalAmount !== null && !isNaN(Number(totalAmount));
+
+    let subtotal: number;
+    let finalTotal: number;
+    let finalCod: number;
+
+    if (hasManualCod) {
+      finalCod = Math.max(0, Number(codAmount));
+      finalTotal = finalCod;
+      subtotal = finalCod;
+    } else if (hasManualTotal) {
+      finalTotal = Math.max(0, Number(totalAmount));
+      finalCod = finalTotal;
+      subtotal = finalTotal;
+    } else {
+      subtotal = items.reduce((acc: number, item: any) => acc + (item.product?.price || 0) * (item.quantity || 1), 0);
+      const disc = discount || 0;
+      const ship = shippingFee || 0;
+      finalTotal = Math.max(0, subtotal - disc + ship);
+      finalCod = finalTotal;
+    }
 
     const newOrder: Order = {
-      id: `SPIDEY-ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
+      id: req.body.id || `SPIDEY-ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
       items,
       customerName: customerName || 'Guest Collector',
       customerEmail: customerEmail || (phoneNumber ? `${phoneNumber}@spideyorder.com` : 'guest@spideyjersey.com'),
@@ -1790,14 +1811,19 @@ async function startServer() {
       shippingAddress: shippingAddress || '123 Cyber Way, Neo City',
       paymentMethod: paymentMethod || 'COD (Cash On Delivery)',
       isExchange: !!isExchange,
+      hasGiftBox: !!hasGiftBox,
+      giftBoxType: giftBoxType || undefined,
       orderNote: orderNote || undefined,
       orderType: orderType || 'quick_form',
       subtotal,
-      discount: disc,
-      shippingFee: ship,
-      totalAmount: total,
-      status: 'confirmed',
-      createdAt: new Date().toISOString()
+      discount: discount || 0,
+      shippingFee: shippingFee || 0,
+      totalAmount: finalTotal,
+      codAmount: finalCod,
+      status: req.body.status || 'confirmed',
+      courierStatus: req.body.courierStatus || 'pending',
+      trackingCode: req.body.trackingCode || undefined,
+      createdAt: req.body.createdAt || new Date().toISOString()
     };
 
     orders.unshift(newOrder);
@@ -2690,34 +2716,28 @@ async function startServer() {
     });
   });
 
-  // Reset / Seed Catalog
-  app.post('/api/seed', (req: Request, res: Response) => {
-    deletedProductIds = [];
-    deletedCategoryIds = [];
-    products = INITIAL_JERSEYS.map((p, idx) => ({
-      ...p,
-      sortOrder: idx,
-      position: idx,
-      priority: idx
-    }));
-    categoryItems = CATEGORY_CAROUSEL_ITEMS.map((c, idx) => ({
-      ...c,
-      sortOrder: idx,
-      position: idx,
-      priority: idx
-    }));
-    siteSettings = { ...DEFAULT_SITE_SETTINGS };
-    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
-    saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
-    saveJsonFile(PRODUCTS_FILE, products);
-    saveJsonFile(CATEGORIES_FILE, categoryItems);
-    saveJsonFile(SETTINGS_FILE, siteSettings);
+  // Protected Seed / Sync Catalog Endpoint (Destructive wipe disabled)
+  app.post('/api/seed', (_req: Request, res: Response) => {
+    // Reload latest state from disk, preserving all custom products, categories, and settings
+    const diskProducts = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
+    if (Array.isArray(diskProducts) && diskProducts.length > 0) {
+      products = diskProducts;
+    }
+    const diskCategories = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+    if (Array.isArray(diskCategories) && diskCategories.length > 0) {
+      categoryItems = diskCategories;
+    }
+    const diskSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, DEFAULT_SITE_SETTINGS);
+    if (diskSettings && typeof diskSettings === 'object') {
+      siteSettings = diskSettings;
+    }
+
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     res.json({
       success: true,
-      message: 'Store reset to initial showcase jersey catalog',
+      message: 'Catalog protected: destructive factory wipe disabled to preserve all uploaded data.',
       count: products.length,
       products,
       categories: categoryItems,

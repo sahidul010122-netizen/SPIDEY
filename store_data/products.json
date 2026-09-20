@@ -1,5 +1,48 @@
 [
   {
+    "id": "spidey-bulk-1789777101808-x63o-1",
+    "code": "SJ-6B22R",
+    "title": "Test Bulk Jersey Beta",
+    "category": "EDC",
+    "price": 1250,
+    "season": "2025/26",
+    "edition": "Player Issue Authentic",
+    "badge": "New Drop",
+    "images": [
+      "/images/cat_edc_wallet_1787668177890.jpg"
+    ],
+    "description": "Special Edition Carbon Fiber Weave with Anti-Odor Aeroready Mesh",
+    "features": [
+      "Ultralight Aeroready seamless matrix structure",
+      "High-definition heat-bonded silicone crest",
+      "Anti-odor active breathability yarn integration",
+      "Laser-cut ventilation zone mapping"
+    ],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL",
+      "3XL"
+    ],
+    "inStock": true,
+    "stockCount": 20,
+    "rating": 5,
+    "reviewCount": 0,
+    "customizable": true,
+    "colorTheme": {
+      "primary": "#0f172a",
+      "accent": "#06b6d4",
+      "glow": "rgba(6, 182, 212, 0.35)"
+    },
+    "sortOrder": 1,
+    "position": 1,
+    "priority": 1,
+    "createdAt": "2026-09-19T00:18:21.808Z",
+    "updatedAt": "2026-09-19T00:18:21.808Z"
+  },
+  {
     "id": "spidey-rm-2009-away",
     "code": "SJ-EAXKF",
     "title": "Real Madrid 2009-10 Away Long-Sleeve",

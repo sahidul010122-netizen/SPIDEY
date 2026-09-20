@@ -1420,6 +1420,7 @@ export default {
 
         if (request.method === 'POST') {
           const { 
+            id,
             items, 
             customerName, 
             customerEmail, 
@@ -1427,10 +1428,14 @@ export default {
             shippingAddress, 
             paymentMethod, 
             isExchange,
+            hasGiftBox,
+            giftBoxType,
             orderNote,
             orderType,
             discount, 
-            shippingFee 
+            shippingFee,
+            totalAmount,
+            codAmount
           } = await request.json() as any;
 
           if (!items || !Array.isArray(items) || items.length === 0) {
@@ -1440,13 +1445,33 @@ export default {
             });
           }
 
-          const subtotal = items.reduce((acc: number, item: any) => acc + (item.product?.price || 0) * (item.quantity || 1), 0);
-          const disc = discount || 0;
-          const ship = shippingFee || 0;
-          const total = Math.max(0, subtotal - disc + ship);
+          // Manual COD Pricing Logic: If user/admin typed or parsed an exact COD or total amount,
+          // honor it as authoritative and DO NOT override with product catalog prices.
+          const hasManualCod = codAmount !== undefined && codAmount !== null && !isNaN(Number(codAmount));
+          const hasManualTotal = totalAmount !== undefined && totalAmount !== null && !isNaN(Number(totalAmount));
+
+          let subtotal: number;
+          let finalTotal: number;
+          let finalCod: number;
+
+          if (hasManualCod) {
+            finalCod = Math.max(0, Number(codAmount));
+            finalTotal = finalCod;
+            subtotal = finalCod;
+          } else if (hasManualTotal) {
+            finalTotal = Math.max(0, Number(totalAmount));
+            finalCod = finalTotal;
+            subtotal = finalTotal;
+          } else {
+            subtotal = items.reduce((acc: number, item: any) => acc + (item.product?.price || 0) * (item.quantity || 1), 0);
+            const disc = discount || 0;
+            const ship = shippingFee || 0;
+            finalTotal = Math.max(0, subtotal - disc + ship);
+            finalCod = finalTotal;
+          }
 
           const newOrder: Order = {
-            id: `SPIDEY-ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
+            id: id || `SPIDEY-ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
             items,
             customerName: customerName || 'Guest Collector',
             customerEmail: customerEmail || (phoneNumber ? `${phoneNumber}@spideyorder.com` : 'guest@spideyjersey.com'),
@@ -1454,12 +1479,15 @@ export default {
             shippingAddress: shippingAddress || '123 Cyber Way, Neo City',
             paymentMethod: paymentMethod || 'COD (Cash On Delivery)',
             isExchange: !!isExchange,
+            hasGiftBox: !!hasGiftBox,
+            giftBoxType: giftBoxType || undefined,
             orderNote: orderNote || undefined,
             orderType: orderType || 'quick_form',
             subtotal,
-            discount: disc,
-            shippingFee: ship,
-            totalAmount: total,
+            discount: discount || 0,
+            shippingFee: shippingFee || 0,
+            totalAmount: finalTotal,
+            codAmount: finalCod,
             status: 'confirmed',
             createdAt: new Date().toISOString()
           };
@@ -1662,20 +1690,17 @@ export default {
         });
       }
 
-      // 16. Reset / Seed Catalog
+      // 16. Protected Catalog Endpoint (Destructive factory wipe disabled)
       if (pathname === '/api/seed' && request.method === 'POST') {
-        const freshProducts = [...INITIAL_JERSEYS];
-        const freshCategories = [...CATEGORY_CAROUSEL_ITEMS];
-        const freshSettings = { ...DEFAULT_SITE_SETTINGS };
-
-        await saveStoredProducts(env, freshProducts);
-        await saveStoredCategories(env, freshCategories);
-        await saveStoredSettings(env, freshSettings);
+        const currentProducts = await getStoredProducts(env);
+        const currentCategories = await getStoredCategories(env);
 
         return new Response(JSON.stringify({ 
           success: true, 
-          message: 'Store reset to default showcase catalog', 
-          count: freshProducts.length 
+          message: 'Catalog protected: destructive factory wipe disabled to preserve all uploaded data.', 
+          count: currentProducts.length,
+          products: currentProducts,
+          categories: currentCategories
         }), {
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
