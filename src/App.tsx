@@ -4,14 +4,18 @@ import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryFilter } from './components/CategoryFilter';
 import { JerseyCard } from './components/JerseyCard';
-import { ProductModal } from './components/ProductModal';
+import { SingleProductPage } from './components/SingleProductPage';
+import { CartPage } from './components/CartPage';
+import { CheckoutPage } from './components/CheckoutPage';
 import { AdminPanel } from './components/AdminPanel';
 import { WishlistModal } from './components/WishlistModal';
 import { R2DeploymentGuideModal } from './components/R2DeploymentGuideModal';
 import { AuthModal } from './components/AuthModal';
 import { PlaceOrderPage } from './components/PlaceOrderPage';
 import { PwaInstallModal } from './components/admin/PwaInstallModal';
-import { JerseyProduct, StoreStats } from './types';
+import { CouponPopup } from './components/CouponPopup';
+import { FloatingCartItemWidget } from './components/FloatingCartItemWidget';
+import { JerseyProduct, StoreStats, CartItem } from './types';
 import { SiteSettings, DEFAULT_SITE_SETTINGS, CategoryItem } from './types/settings';
 import { INITIAL_JERSEYS, CATEGORY_CAROUSEL_ITEMS } from './data/mockJerseys';
 import { CurrencyCode } from './utils/currency';
@@ -30,13 +34,45 @@ export default function App() {
   };
 
   // Determine initial view from URL path and PWA mode
-  const getInitialView = (): 'showcase' | 'admin' | 'order' => {
+  const getInitialView = (): 'showcase' | 'product' | 'cart' | 'checkout' | 'admin' | 'order' => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
       const hash = window.location.hash.toLowerCase();
 
-      // 1. Check for Place Order first (via path, query param, or hash)
+      // 1. Check for Cart view (Separate dedicated page)
+      if (
+        path === '/cart' || 
+        path.startsWith('/cart') || 
+        search.includes('view=cart') || 
+        hash === '#/cart' || 
+        hash.includes('cart')
+      ) {
+        return 'cart';
+      }
+
+      // 2. Check for Checkout view (Separate dedicated page)
+      if (
+        path === '/checkout' || 
+        path.startsWith('/checkout') || 
+        search.includes('view=checkout') || 
+        hash === '#/checkout' || 
+        hash.includes('checkout')
+      ) {
+        return 'checkout';
+      }
+
+      // 3. Check for Single Product view (Separate dedicated page)
+      if (
+        path.startsWith('/product') || 
+        search.includes('view=product') || 
+        search.includes('product=') || 
+        hash.startsWith('#/product')
+      ) {
+        return 'product';
+      }
+
+      // 4. Check for Place Order view
       if (
         path === '/place-order' || 
         path.startsWith('/place-order') || 
@@ -56,7 +92,7 @@ export default function App() {
         return 'order';
       }
 
-      // 2. Check for Admin view
+      // 5. Check for Admin view
       if (
         path === '/admin' || 
         path.startsWith('/admin') || 
@@ -69,7 +105,7 @@ export default function App() {
         return 'admin';
       }
       
-      // 3. If launched from standalone PWA icon on root or admin shortcut
+      // 6. If launched from standalone PWA icon on root or admin shortcut
       if (isPwaStandalone() && !search.includes('view=showcase') && !search.includes('view=order')) {
         return 'admin';
       }
@@ -78,9 +114,10 @@ export default function App() {
   };
 
   // Navigation & Filter States
-  const [currentView, setCurrentView] = useState<'showcase' | 'admin' | 'order'>(getInitialView);
+  const [currentView, setCurrentView] = useState<'showcase' | 'product' | 'cart' | 'checkout' | 'admin' | 'order'>(getInitialView);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedProduct, setSelectedProduct] = useState<JerseyProduct | null>(null);
   const [selectedOrderProductId, setSelectedOrderProductId] = useState<string | undefined>(undefined);
   const [selectedOrderSize, setSelectedOrderSize] = useState<string | undefined>(undefined);
   const [currency, setCurrency] = useState<CurrencyCode>('BDT');
@@ -171,6 +208,12 @@ export default function App() {
         if (manifestEl) manifestEl.setAttribute('href', '/manifest-placeorder.json');
         if (appleTitle) appleTitle.setAttribute('content', 'Spidey Place Order');
         document.title = 'Spidey Place Order';
+      } else if (currentView === 'cart') {
+        document.title = 'শপিং কার্ট | ' + (siteSettings.storeName || 'Spidey Jersey');
+      } else if (currentView === 'checkout') {
+        document.title = 'চেকআউট ও ডেলিভারি | ' + (siteSettings.storeName || 'Spidey Jersey');
+      } else if (currentView === 'product') {
+        document.title = (selectedProduct?.title || 'প্রোডাক্ট বিবরণ') + ' | ' + (siteSettings.storeName || 'Spidey Jersey');
       } else if (currentView === 'admin') {
         if (manifestEl) manifestEl.setAttribute('href', '/manifest-admin.json');
         if (appleTitle) appleTitle.setAttribute('content', 'Spidey Admin');
@@ -181,7 +224,7 @@ export default function App() {
         document.title = siteSettings.storeName || 'Spidey Jersey';
       }
     } catch (e) {}
-  }, [currentView, siteSettings.storeName]);
+  }, [currentView, siteSettings.storeName, selectedProduct?.title]);
 
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>(() => {
     try {
@@ -250,10 +293,41 @@ export default function App() {
       return INITIAL_JERSEYS.map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
     }
   });
-  const [stats, setStats] = useState<StoreStats | null>(null);
 
-  // Selected Modal State for Zoom & Swipe
-  const [inspectedJersey, setInspectedJersey] = useState<JerseyProduct | null>(null);
+  // Sync browser back/forward buttons (Popstate navigation)
+  useEffect(() => {
+    const handlePopState = () => {
+      const v = getInitialView();
+      setCurrentView(v);
+      if (v === 'product') {
+        const match = window.location.pathname.match(/\/product\/([^/?#]+)/i);
+        const urlId = new URLSearchParams(window.location.search).get('product') || (match ? match[1] : null);
+        if (urlId) {
+          const found = products.find((p) => p.id === urlId || p.code?.toLowerCase() === urlId.toLowerCase());
+          if (found) setSelectedProduct(found);
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [products]);
+
+  // Resolve selectedProduct if directly landed on /product/:id or ?product=id
+  useEffect(() => {
+    if (currentView === 'product' && !selectedProduct && products.length > 0) {
+      const match = window.location.pathname.match(/\/product\/([^/?#]+)/i);
+      const urlId = new URLSearchParams(window.location.search).get('product') || (match ? match[1] : null);
+      if (urlId) {
+        const found = products.find((p) => p.id === urlId || p.code?.toLowerCase() === urlId.toLowerCase());
+        if (found) {
+          setSelectedProduct(found);
+          return;
+        }
+      }
+      setSelectedProduct(products[0]);
+    }
+  }, [currentView, selectedProduct, products]);
+  const [stats, setStats] = useState<StoreStats | null>(null);
 
   // Wishlist / Saved Favorites
   const [wishlist, setWishlist] = useState<JerseyProduct[]>(() => {
@@ -266,6 +340,98 @@ export default function App() {
   });
   const [isWishlistOpen, setIsWishlistOpen] = useState<boolean>(false);
   const [isR2GuideOpen, setIsR2GuideOpen] = useState<boolean>(false);
+
+  // Cart Items State & Persistence
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('spidey_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [appliedCouponFromPopup, setAppliedCouponFromPopup] = useState<string>('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('spidey_cart', JSON.stringify(cartItems));
+    } catch (e) {
+      console.warn('Storage error for cart', e);
+    }
+  }, [cartItems]);
+
+  // Open Single Product Page (Dedicated Full Page, Not a Popup!)
+  const handleOpenProduct = (jersey: JerseyProduct) => {
+    setSelectedProduct(jersey);
+    setCurrentView('product');
+    window.history.pushState({}, '', `/product/${jersey.id}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleAddToCart = (item: CartItem) => {
+    setCartItems((prev) => {
+      const existingIdx = prev.findIndex(
+        (i) => i.product.id === item.product.id &&
+               i.selectedSize === item.selectedSize &&
+               (i.customName || '') === (item.customName || '') &&
+               (i.customNumber || '') === (item.customNumber || '')
+      );
+      if (existingIdx !== -1) {
+        const copy = [...prev];
+        copy[existingIdx].quantity = (copy[existingIdx].quantity || 1) + (item.quantity || 1);
+        return copy;
+      }
+      return [item, ...prev];
+    });
+    showToast(`${item.product.title} কার্টে যোগ করা হয়েছে!`, 'success');
+    // Open separate dedicated Cart Page as requested
+    setCurrentView('cart');
+    window.history.pushState({}, '', '/cart');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBuyNow = (item: CartItem) => {
+    // Add item to cart
+    setCartItems((prev) => {
+      const existingIdx = prev.findIndex(
+        (i) => i.product.id === item.product.id &&
+               i.selectedSize === item.selectedSize &&
+               (i.customName || '') === (item.customName || '') &&
+               (i.customNumber || '') === (item.customNumber || '')
+      );
+      if (existingIdx !== -1) {
+        const copy = [...prev];
+        copy[existingIdx].quantity = (copy[existingIdx].quantity || 1) + (item.quantity || 1);
+        return copy;
+      }
+      return [item, ...prev];
+    });
+    // Open separate dedicated Checkout Page as requested
+    setCurrentView('checkout');
+    window.history.pushState({}, '', '/checkout');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleUpdateQuantity = (itemKey: string, qty: number) => {
+    setCartItems((prev) => 
+      prev.map((i) => i.itemKey === itemKey ? { ...i, quantity: Math.max(1, qty) } : i)
+    );
+  };
+
+  const handleUpdateItem = (itemKey: string, updates: Partial<CartItem>) => {
+    setCartItems((prev) =>
+      prev.map((i) => (i.itemKey === itemKey ? { ...i, ...updates } : i))
+    );
+  };
+
+  const handleRemoveItem = (itemKey: string) => {
+    setCartItems((prev) => prev.filter((i) => i.itemKey !== itemKey));
+    showToast('আইটেমটি কার্ট থেকে সরানো হয়েছে।', 'info');
+  };
+
+  const handleClearCart = () => {
+    setCartItems([]);
+  };
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1081,7 +1247,8 @@ export default function App() {
         currentView={currentView}
         setCurrentView={(view) => {
           setCurrentView(view);
-          window.history.pushState({}, '', view === 'admin' ? '/admin' : view === 'order' ? '/place-order' : '/');
+          const path = view === 'admin' ? '/admin' : view === 'order' ? '/place-order' : view === 'cart' ? '/cart' : view === 'checkout' ? '/checkout' : '/';
+          window.history.pushState({}, '', path);
         }}
         onOpenPlaceOrder={() => {
           setSelectedOrderProductId(undefined);
@@ -1091,6 +1258,12 @@ export default function App() {
         }}
         wishlistCount={wishlist.length}
         openWishlist={() => setIsWishlistOpen(true)}
+        cartCount={cartItems.reduce((acc, i) => acc + (i.quantity || 1), 0)}
+        openCart={() => {
+          setCurrentView('cart');
+          window.history.pushState({}, '', '/cart');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         currency={currency}
         setCurrency={setCurrency}
         searchQuery={searchQuery}
@@ -1121,7 +1294,62 @@ export default function App() {
               setSelectedOrderSize(undefined);
               setCurrentView('showcase');
               window.history.pushState({}, '', '/');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
+          />
+        ) : currentView === 'cart' ? (
+          <CartPage
+            items={cartItems}
+            onUpdateQuantity={handleUpdateQuantity}
+            onUpdateItem={handleUpdateItem}
+            onRemoveItem={handleRemoveItem}
+            onClearCart={handleClearCart}
+            onContinueShopping={() => {
+              setCurrentView('showcase');
+              window.history.pushState({}, '', '/');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onProceedToCheckout={() => {
+              setCurrentView('checkout');
+              window.history.pushState({}, '', '/checkout');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            currency={currency}
+            siteSettings={siteSettings}
+          />
+        ) : currentView === 'checkout' ? (
+          <CheckoutPage
+            items={cartItems}
+            onBackToCart={() => {
+              setCurrentView('cart');
+              window.history.pushState({}, '', '/cart');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onClearCart={handleClearCart}
+            onOrderSuccess={(order) => {
+              showToast(`অর্ডার #${order.id} সফলভাবে সম্পন্ন হয়েছে!`, 'success');
+            }}
+            currency={currency}
+            siteSettings={siteSettings}
+            appliedCouponFromPopup={appliedCouponFromPopup}
+            onUpdateQuantity={handleUpdateQuantity}
+            onUpdateItem={handleUpdateItem}
+            onRemoveItem={handleRemoveItem}
+          />
+        ) : currentView === 'product' && selectedProduct ? (
+          <SingleProductPage
+            jersey={selectedProduct}
+            onBackToShop={() => {
+              setCurrentView('showcase');
+              window.history.pushState({}, '', '/');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onAddToCart={handleAddToCart}
+            onBuyNow={handleBuyNow}
+            isWishlisted={isWishlisted(selectedProduct.id)}
+            onToggleWishlist={handleToggleWishlist}
+            currency={currency}
+            siteSettings={siteSettings}
           />
         ) : currentView === 'showcase' ? (
           <>
@@ -1186,7 +1414,7 @@ export default function App() {
                     <JerseyCard
                       key={jersey.id}
                       jersey={jersey}
-                      onInspect={(j) => setInspectedJersey(j)}
+                      onInspect={(j) => handleOpenProduct(j)}
                       isWishlisted={isWishlisted(jersey.id)}
                       onToggleWishlist={handleToggleWishlist}
                       currency={currency}
@@ -1393,21 +1621,30 @@ export default function App() {
         isStandalone={isStandalone}
       />
 
-      {/* Interactive Zoom & Swipe Modal */}
-      <ProductModal
-        jersey={inspectedJersey}
-        onClose={() => setInspectedJersey(null)}
-        isWishlisted={inspectedJersey ? isWishlisted(inspectedJersey.id) : false}
-        onToggleWishlist={handleToggleWishlist}
-        currency={currency}
+      {/* 10-Second Popup Coupon System (Requirement 5) */}
+      <CouponPopup
         siteSettings={siteSettings}
-        onOrderProduct={(jersey, size) => {
-          setSelectedOrderProductId(jersey.id);
-          setSelectedOrderSize(size);
-          setInspectedJersey(null);
-          setCurrentView('order');
-          window.history.pushState({}, '', '/place-order');
+        onApplyCouponToCart={(code) => {
+          setAppliedCouponFromPopup(code);
+          showToast(`কুপন কোড ${code} যুক্ত হয়েছে!`, 'success');
         }}
+      />
+
+      {/* Floating Sticky Mini Cart Widget (Requirement 4) */}
+      <FloatingCartItemWidget
+        items={cartItems}
+        onOpenCart={() => {
+          setCurrentView('cart');
+          window.history.pushState({ view: 'cart' }, '', '/cart');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onOpenCheckout={() => {
+          setCurrentView('checkout');
+          window.history.pushState({ view: 'checkout' }, '', '/checkout');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        currency={currency}
+        currentView={currentView}
       />
 
       {/* Wishlist Modal */}
@@ -1416,7 +1653,10 @@ export default function App() {
         onClose={() => setIsWishlistOpen(false)}
         wishlist={wishlist}
         onRemove={handleToggleWishlist}
-        onInspect={(j) => setInspectedJersey(j)}
+        onInspect={(j) => {
+          setIsWishlistOpen(false);
+          handleOpenProduct(j);
+        }}
         currency={currency}
       />
 

@@ -23,33 +23,69 @@
   "sizeGuideMeasurements": [
     {
       "size": "S",
-      "chest": "36 - 38\"",
-      "length": "27\""
+      "chest": "36\"",
+      "length": "26\"",
+      "shoulder": "15.5\""
     },
     {
       "size": "M",
-      "chest": "38 - 40\"",
-      "length": "28\""
+      "chest": "38\"",
+      "length": "27\"",
+      "shoulder": "16.5\""
     },
     {
       "size": "L",
-      "chest": "40 - 42\"",
-      "length": "29\""
+      "chest": "40\"",
+      "length": "28\"",
+      "shoulder": "17.5\""
     },
     {
       "size": "XL",
-      "chest": "42 - 44\"",
-      "length": "30\""
+      "chest": "42\"",
+      "length": "29\"",
+      "shoulder": "18.5\""
     },
     {
       "size": "XXL",
-      "chest": "44 - 46\"",
-      "length": "31\""
+      "chest": "44\"",
+      "length": "30\"",
+      "shoulder": "19.5\""
     },
     {
-      "size": "3XL",
-      "chest": "46 - 48\"",
-      "length": "32\""
+      "size": "XXXL",
+      "chest": "46\"",
+      "length": "31\"",
+      "shoulder": "20.5\""
     }
-  ]
+  ],
+  "telegramBotToken": "8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw",
+  "telegramChatId": "-1003901747514",
+  "telegramNotificationsEnabled": true,
+  "trustBadge1Title": "ফ্রি ডেলিভারি",
+  "trustBadge1Subtitle": "৳২০০০+ অর্ডারে",
+  "trustBadge1Icon": "check-circle",
+  "trustBadge1Enabled": false,
+  "trustBadge2Title": "১০০% অরিজিনাল",
+  "trustBadge2Subtitle": "অথেনটিক গ্যারান্টি",
+  "trustBadge2Icon": "shield",
+  "trustBadge2Enabled": true,
+  "trustBadge3Title": "৭ দিন রিটার্ন",
+  "trustBadge3Subtitle": "সহজ পলিসি",
+  "trustBadge3Icon": "package",
+  "trustBadge3Enabled": true,
+  "deliveryChargeInsideDhaka": 70,
+  "deliveryChargeSubDhaka": 100,
+  "deliveryChargeOutsideDhaka": 130,
+  "deliveryZoneInsideDhakaTitle": "ঢাকার ভেতরে",
+  "deliveryZoneSubDhakaTitle": "ঢাকার সাব",
+  "deliveryZoneOutsideDhakaTitle": "ঢাকার বাইরে",
+  "enableCouponPopup": true,
+  "couponPopupDelaySeconds": 10,
+  "couponPopupTitle": "স্পেশাল ডিসকাউন্ট অফার!",
+  "couponPopupSubtitle": "আজকের অর্ডারে উপভোগ করুন ৫০৳ বিশেষ ছাড়!",
+  "couponPopupCode": "SPIDEY50",
+  "couponPopupDiscountAmount": 50,
+  "couponPopupDiscountType": "fixed",
+  "defaultCustomizationCharge": 0,
+  "defaultCustomizationChargeType": "free"
 }

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Search, Heart, X, ArrowLeft } from 'lucide-react';
+import { Search, Heart, X, ArrowLeft, ShoppingBag } from 'lucide-react';
 import { CurrencyCode, CURRENCY_RATES } from '../utils/currency';
 import { SiteSettings } from '../types/settings';
 
 interface NavbarProps {
-  currentView: 'showcase' | 'admin' | 'order';
-  setCurrentView: (view: 'showcase' | 'admin' | 'order') => void;
+  currentView: 'showcase' | 'product' | 'cart' | 'checkout' | 'admin' | 'order';
+  setCurrentView: (view: 'showcase' | 'product' | 'cart' | 'checkout' | 'admin' | 'order') => void;
   wishlistCount: number;
   openWishlist: () => void;
+  cartCount?: number;
+  openCart?: () => void;
   currency: CurrencyCode;
   setCurrency: (c: CurrencyCode) => void;
   searchQuery: string;
@@ -27,6 +29,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setCurrentView,
   wishlistCount,
   openWishlist,
+  cartCount = 0,
+  openCart,
   currency,
   setCurrency,
   searchQuery,
@@ -83,8 +87,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* 3. Right: "Place Order" Button & Search Bar Controls */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           
-          {/* Admin Back to Store Indicator if admin view */}
-          {currentView === 'admin' ? (
+          {/* Back to Storefront if not in showcase */}
+          {currentView !== 'showcase' ? (
             <button
               onClick={() => {
                 setCurrentView('showcase');
@@ -94,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Return to Storefront"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Storefront</span>
+              <span>হোম পেজ</span>
             </button>
           ) : null}
 
@@ -132,6 +136,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* Slide Cart Button */}
+          {openCart && (
+            <button
+              id="nav-cart-btn"
+              onClick={openCart}
+              aria-label="Cart"
+              className="relative p-1.5 text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
+              title="শপিং কার্ট"
+            >
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-neutral-900 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
       </div>

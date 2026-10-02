@@ -1753,6 +1753,125 @@ async function startServer() {
     res.json({ success: true, stats, totalInventoryValue });
   });
 
+  // --- Telegram Order Notification Helper (Requirement 4) ---
+  function formatTelegramOrderText(order: Order, settings?: SiteSettings): string {
+    const customerName = order.customerName || 'N/A';
+    const phoneNumber = order.phoneNumber || 'N/A';
+    const rawAddress = (order.shippingAddress || 'N/A').trim();
+
+    // Delivery Zone resolving (e.g. inside_dhaka -> "ঢাকার ভেতরে")
+    let zoneTitle = '';
+    const currentSettings = settings || siteSettings;
+    if (order.deliveryZone === 'inside_dhaka') {
+      zoneTitle = currentSettings.deliveryZoneInsideDhakaTitle || 'ঢাকার ভেতরে';
+    } else if (order.deliveryZone === 'sub_dhaka') {
+      zoneTitle = currentSettings.deliveryZoneSubDhakaTitle || 'ঢাকার সাব-এরিয়া';
+    } else if (order.deliveryZone === 'outside_dhaka') {
+      zoneTitle = currentSettings.deliveryZoneOutsideDhakaTitle || 'ঢাকার বাইরে';
+    } else if (order.deliveryZone) {
+      zoneTitle = order.deliveryZone;
+    }
+
+    const finalAddress = zoneTitle && !rawAddress.includes(`[ ${zoneTitle} ]`) && !rawAddress.includes(`[${zoneTitle}]`)
+      ? `${rawAddress} [ ${zoneTitle} ]`
+      : rawAddress;
+
+    const itemsList: string[] = [];
+    let itemIndex = 1;
+
+    for (const it of (order.items || [])) {
+      const qty = Math.max(1, it.quantity || 1);
+      const codePart = it.product?.code ? `[${it.product.code}] ` : (it.product?.id ? `[${it.product.id}] ` : '');
+      const titlePart = it.product?.title || 'Jersey';
+      const sizePart = it.selectedSize || 'L';
+      
+      // Customization part: e.g. -  "TORRES 9"
+      const customParts = [it.customName, it.customNumber].filter(Boolean);
+      const customText = customParts.length > 0 ? ` -  "${customParts.join(' ')}"` : '';
+
+      const singleLine = `${codePart}${titlePart} (Size: ${sizePart})${customText}`;
+
+      for (let q = 0; q < qty; q++) {
+        itemsList.push(`${itemIndex}. ${singleLine}`);
+        itemIndex++;
+      }
+    }
+
+    const itemsFormatted = itemsList.length > 0 ? itemsList.join('\n') : '1. Jersey (Size: L)';
+    const amountVal = order.totalAmount || order.codAmount || 0;
+
+    return `Name: ${customerName}
+Mobile: ${phoneNumber}
+Address: ${finalAddress}
+
+ITEMS:
+${itemsFormatted}
+Amount: ${amountVal}৳`;
+  }
+
+  function normalizeTelegramChatIds(rawChatId: string): string[] {
+    const clean = rawChatId.trim();
+    if (!clean) return [];
+    const candidates = new Set<string>();
+
+    if (clean.startsWith('-100')) {
+      candidates.add(clean);
+    } else if (clean.startsWith('100')) {
+      // Very common: User copies supergroup ID without minus sign, e.g. 1003901747514 -> -1003901747514
+      candidates.add(`-${clean}`);
+      candidates.add(clean);
+    } else if (clean.startsWith('-')) {
+      // E.g. -3901747514
+      candidates.add(clean);
+      candidates.add(`-100${clean.slice(1)}`);
+    } else {
+      // Plain numbers: try supergroup prefix first, then direct
+      candidates.add(`-100${clean}`);
+      candidates.add(clean);
+      candidates.add(`-${clean}`);
+    }
+
+    return Array.from(candidates);
+  }
+
+  async function sendTelegramOrderNotification(order: Order, settings: SiteSettings): Promise<{ success: boolean; message?: string; chatId?: string }> {
+    const token = (settings.telegramBotToken || '8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw').trim();
+    const rawChatId = (settings.telegramChatId || '-1003901747514').trim();
+
+    if (!token || !rawChatId || settings.telegramNotificationsEnabled === false) {
+      return { success: false, message: 'Telegram notification is disabled or not configured.' };
+    }
+
+    const text = formatTelegramOrderText(order, settings);
+    const candidateIds = normalizeTelegramChatIds(rawChatId);
+
+    let lastError = '';
+    for (const cid of candidateIds) {
+      try {
+        const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: cid,
+            text
+          })
+        });
+        const data = await resp.json() as any;
+        if (data.ok) {
+          console.log(`✓ Telegram notification sent successfully to chat_id: ${cid}`);
+          return { success: true, chatId: cid };
+        } else {
+          lastError = data.description || 'Unknown Telegram response';
+        }
+      } catch (e: any) {
+        lastError = e.message || 'Telegram network exception';
+      }
+    }
+
+    console.log(`Telegram dispatch ended without successful delivery: ${lastError}`);
+    return { success: false, message: lastError };
+  }
+
   // Orders / Checkout Simulation
   app.post('/api/orders', (req: Request, res: Response) => {
     const { 
@@ -1762,6 +1881,8 @@ async function startServer() {
       phoneNumber,
       shippingAddress, 
       paymentMethod, 
+      deliveryZone,
+      couponCode,
       isExchange,
       hasGiftBox,
       giftBoxType,
@@ -1795,7 +1916,11 @@ async function startServer() {
       finalCod = finalTotal;
       subtotal = finalTotal;
     } else {
-      subtotal = items.reduce((acc: number, item: any) => acc + (item.product?.price || 0) * (item.quantity || 1), 0);
+      subtotal = items.reduce((acc: number, item: any) => {
+        const itemPrice = (item.product?.price || 0);
+        const customFee = (item.customizationFee || 0);
+        return acc + (itemPrice + customFee) * (item.quantity || 1);
+      }, 0);
       const disc = discount || 0;
       const ship = shippingFee || 0;
       finalTotal = Math.max(0, subtotal - disc + ship);
@@ -1810,11 +1935,13 @@ async function startServer() {
       phoneNumber: phoneNumber || undefined,
       shippingAddress: shippingAddress || '123 Cyber Way, Neo City',
       paymentMethod: paymentMethod || 'COD (Cash On Delivery)',
+      deliveryZone: deliveryZone || undefined,
+      couponCode: couponCode || undefined,
       isExchange: !!isExchange,
       hasGiftBox: !!hasGiftBox,
       giftBoxType: giftBoxType || undefined,
       orderNote: orderNote || undefined,
-      orderType: orderType || 'quick_form',
+      orderType: orderType || 'standard',
       subtotal,
       discount: discount || 0,
       shippingFee: shippingFee || 0,
@@ -1826,8 +1953,12 @@ async function startServer() {
       createdAt: req.body.createdAt || new Date().toISOString()
     };
 
-    orders.unshift(newOrder);
-    saveJsonFile(ORDERS_FILE, orders);
+    // Requirement 7: When user places an order, do not save order record in website's admin panel database
+    // Only dispatch directly to Telegram without saving locally as standard backend order
+    if (req.body.saveToDatabase === true) {
+      orders.unshift(newOrder);
+      saveJsonFile(ORDERS_FILE, orders);
+    }
 
     // Deduct stock
     for (const item of items) {
@@ -1841,11 +1972,58 @@ async function startServer() {
     }
     saveJsonFile(PRODUCTS_FILE, products);
 
+    // Asynchronously dispatch Telegram order notification to group
+    sendTelegramOrderNotification(newOrder, siteSettings).catch((err) => {
+      console.warn('Telegram notification async dispatch error:', err);
+    });
+
     res.status(201).json({
       success: true,
       order: newOrder,
-      message: 'Order confirmed and registered in Spidey Jersey ledger'
+      message: 'Order confirmed and notification sent directly to Telegram'
     });
+  });
+
+  // Test Telegram Integration Endpoint
+  app.post('/api/telegram/test', async (req: Request, res: Response) => {
+    try {
+      const testSettings = { ...siteSettings, ...(req.body?.settings || {}) };
+      const testOrder: Order = {
+        id: `TEST-${Date.now().toString(36).toUpperCase()}`,
+        items: [
+          {
+            itemKey: 'test-item-1',
+            product: products[0] || INITIAL_JERSEYS[0],
+            selectedSize: 'L',
+            customName: 'TEST NAME',
+            customNumber: '10',
+            hasCustomization: true,
+            customizationFee: 100,
+            quantity: 1,
+            addedAt: Date.now()
+          }
+        ],
+        customerName: 'টেস্ট কাস্টমার (Test User)',
+        customerEmail: 'test@spideyorder.com',
+        phoneNumber: '01712345678',
+        shippingAddress: 'মিরপুর-১০, ঢাকা, বাংলাদেশ',
+        paymentMethod: 'Cash On Delivery (COD)',
+        deliveryZone: 'inside_dhaka',
+        subtotal: 1250,
+        discount: 50,
+        couponCode: 'SPIDEY50',
+        shippingFee: 70,
+        totalAmount: 1270,
+        codAmount: 1270,
+        status: 'confirmed',
+        createdAt: new Date().toISOString()
+      };
+
+      const result = await sendTelegramOrderNotification(testOrder, testSettings);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ success: false, message: e.message || 'Telegram test failed' });
+    }
   });
 
   // Get All Orders (Admin)
@@ -1992,13 +2170,14 @@ async function startServer() {
         const oid = (o.id || '').trim().toLowerCase();
         const ph = (o.phoneNumber || '').replace(/[^0-9]/g, '');
         const cleanCode = code.replace(/[^a-zA-Z0-9_-]/g, '');
+        const cleanDigits = code.replace(/[^0-9]/g, '');
 
         return (
-          (inv && (inv === code || inv === cleanCode)) ||
-          (trk && (trk === code || trk === cleanCode)) ||
-          (cid && (cid === code || cid === cleanCode)) ||
-          (oid && (oid === code || oid === cleanCode)) ||
-          (ph && code.length >= 10 && ph.includes(code))
+          (inv && (inv === code || inv === cleanCode || inv.endsWith(code) || code.endsWith(inv) || inv.includes(cleanCode))) ||
+          (trk && (trk === code || trk === cleanCode || trk.includes(cleanCode) || cleanCode.includes(trk))) ||
+          (cid && (cid === code || cid === cleanCode || cid.includes(cleanCode) || cleanCode.includes(cid))) ||
+          (oid && (oid === code || oid === cleanCode || oid.includes(cleanCode) || cleanCode.includes(oid))) ||
+          (ph && cleanDigits.length >= 10 && ph.includes(cleanDigits))
         );
       });
     }

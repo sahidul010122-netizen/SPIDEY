@@ -111,6 +111,100 @@ async function saveStoredSteadfastConfig(env: Env, config: WorkerSteadfastConfig
   }
 }
 
+function escapeTelegramWorkerHtml(str: string | number | undefined | null): string {
+  if (str === undefined || str === null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+async function sendWorkerTelegramOrderNotification(order: Order, settings: SiteSettings): Promise<{ success: boolean; message?: string; chatId?: string }> {
+  const token = (settings.telegramBotToken || '8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw').trim();
+  const rawChatId = (settings.telegramChatId || '1003901747514').trim();
+
+  if (!token || !rawChatId || settings.telegramNotificationsEnabled === false) {
+    return { success: false, message: 'Telegram notification is disabled or not configured.' };
+  }
+
+  const itemsList = (order.items || []).map((it, idx) => {
+    const code = it.product?.code ? `[${escapeTelegramWorkerHtml(it.product.code)}] ` : '';
+    const title = escapeTelegramWorkerHtml(it.product?.title || 'Jersey Item');
+    const size = escapeTelegramWorkerHtml(it.selectedSize || 'N/A');
+    const custom = (it.customName || it.customNumber)
+      ? `\n   ↳ <i>কাস্টমাইজেশন:</i> <b>${escapeTelegramWorkerHtml([it.customName, it.customNumber].filter(Boolean).join(' - '))}</b>${it.customizationFee ? ` (+৳${it.customizationFee})` : ''}`
+      : '';
+    const itemPrice = it.product?.price ? ` • ৳${it.product.price}` : '';
+    const qty = (it.quantity && it.quantity > 1) ? ` x${it.quantity}` : '';
+    return `${idx + 1}. <b>${code}${title}</b> (Size: <b>${size}</b>${qty})${itemPrice}${custom}`;
+  }).join('\n');
+
+  let zoneLabel = 'ঢাকার বাইরে';
+  if (order.deliveryZone === 'inside_dhaka') zoneLabel = 'ঢাকার ভেতরে';
+  else if (order.deliveryZone === 'sub_dhaka') zoneLabel = 'ঢাকার সাব-এরিয়া / আশেপাশের এলাকা';
+  else if (order.deliveryZone === 'outside_dhaka') zoneLabel = 'ঢাকার জেলার বাইরে';
+  else if (order.deliveryZone) zoneLabel = String(order.deliveryZone);
+
+  const formattedDate = new Date().toLocaleString('en-GB', { 
+    timeZone: 'Asia/Dhaka',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  const text = `🛒 <b>নতুন ওয়েবসাইট অর্ডার গ্রহণ করা হয়েছে!</b>
+━━━━━━━━━━━━━━━━━━
+🆔 <b>Order ID:</b> <code>#${escapeTelegramWorkerHtml(order.id)}</code>
+👤 <b>কাস্টমার:</b> <b>${escapeTelegramWorkerHtml(order.customerName || 'N/A')}</b>
+📞 <b>মোবাইল:</b> <code>${escapeTelegramWorkerHtml(order.phoneNumber || 'N/A')}</code>
+📍 <b>ঠিকানা:</b> ${escapeTelegramWorkerHtml(order.shippingAddress || 'N/A')}
+🚚 <b>ডেলিভারি জোন:</b> ${escapeTelegramWorkerHtml(zoneLabel)} (৳${order.shippingFee || 0})
+
+📦 <b>অর্ডারকৃত আইটেমস:</b>
+${itemsList || 'No items listed'}
+
+━━━━━━━━━━━━━━━━━━
+💰 <b>সাবটোটাল:</b> ৳${order.subtotal || 0}
+${order.discount ? `🏷️ <b>কুপন ডিসকাউন্ট:</b> -৳${order.discount}${order.couponCode ? ` (${escapeTelegramWorkerHtml(order.couponCode)})` : ''}\n` : ''}🚚 <b>ডেলিভারি চার্জ:</b> ৳${order.shippingFee || 0}
+💵 <b>সর্বমোট ক্যাশ অন ডেলিভারি (COD):</b> ৳${order.totalAmount || order.codAmount || 0}
+━━━━━━━━━━━━━━━━━━
+⏰ <b>অর্ডারের সময়:</b> ${formattedDate}`;
+
+  const candidateIds = [rawChatId];
+  if (!rawChatId.startsWith('-')) {
+    candidateIds.push(`-100${rawChatId}`);
+    candidateIds.push(`-${rawChatId}`);
+  }
+
+  let lastError = '';
+  for (const cid of candidateIds) {
+    try {
+      const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: cid,
+          text,
+          parse_mode: 'HTML'
+        })
+      });
+      const data = await resp.json() as any;
+      if (data.ok) {
+        return { success: true, chatId: cid };
+      } else {
+        lastError = data.description || 'Unknown Telegram error';
+      }
+    } catch (e: any) {
+      lastError = e.message || 'Telegram network exception';
+    }
+  }
+
+  return { success: false, message: lastError };
+}
+
 async function callSteadfastWorkerApi(
   env: Env,
   endpointPath: string,
@@ -1427,6 +1521,8 @@ export default {
             phoneNumber,
             shippingAddress, 
             paymentMethod, 
+            deliveryZone,
+            couponCode,
             isExchange,
             hasGiftBox,
             giftBoxType,
@@ -1463,7 +1559,11 @@ export default {
             finalCod = finalTotal;
             subtotal = finalTotal;
           } else {
-            subtotal = items.reduce((acc: number, item: any) => acc + (item.product?.price || 0) * (item.quantity || 1), 0);
+            subtotal = items.reduce((acc: number, item: any) => {
+              const itemPrice = (item.product?.price || 0);
+              const customFee = (item.customizationFee || 0);
+              return acc + (itemPrice + customFee) * (item.quantity || 1);
+            }, 0);
             const disc = discount || 0;
             const ship = shippingFee || 0;
             finalTotal = Math.max(0, subtotal - disc + ship);
@@ -1478,11 +1578,13 @@ export default {
             phoneNumber: phoneNumber || undefined,
             shippingAddress: shippingAddress || '123 Cyber Way, Neo City',
             paymentMethod: paymentMethod || 'COD (Cash On Delivery)',
+            deliveryZone: deliveryZone || undefined,
+            couponCode: couponCode || undefined,
             isExchange: !!isExchange,
             hasGiftBox: !!hasGiftBox,
             giftBoxType: giftBoxType || undefined,
             orderNote: orderNote || undefined,
-            orderType: orderType || 'quick_form',
+            orderType: orderType || 'standard',
             subtotal,
             discount: discount || 0,
             shippingFee: shippingFee || 0,
@@ -1511,11 +1613,60 @@ export default {
             await saveStoredProducts(env, allProducts);
           }
 
+          // Asynchronously dispatch Telegram order notification
+          const currentSettings = await getStoredSettings(env);
+          sendWorkerTelegramOrderNotification(newOrder, currentSettings).catch((err) => {
+            console.warn('Worker Telegram send error:', err);
+          });
+
           return new Response(JSON.stringify({ success: true, order: newOrder, message: 'Order confirmed' }), {
             status: 201,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
         }
+      }
+
+      // 14-test. Test Telegram Integration (POST)
+      if (pathname === '/api/telegram/test' && request.method === 'POST') {
+        const body: any = await request.json().catch(() => ({}));
+        const currentSettings = await getStoredSettings(env);
+        const testSettings = { ...currentSettings, ...(body?.settings || {}) };
+        const allProds = await getStoredProducts(env);
+        const testOrder: Order = {
+          id: `TEST-${Date.now().toString(36).toUpperCase()}`,
+          items: [
+            {
+              itemKey: 'test-item-1',
+              product: allProds[0] || INITIAL_JERSEYS[0],
+              selectedSize: 'L',
+              customName: 'TEST NAME',
+              customNumber: '10',
+              hasCustomization: true,
+              customizationFee: 100,
+              quantity: 1,
+              addedAt: Date.now()
+            }
+          ],
+          customerName: 'টেস্ট কাস্টমার (Test User)',
+          customerEmail: 'test@spideyorder.com',
+          phoneNumber: '01712345678',
+          shippingAddress: 'মিরপুর-১০, ঢাকা, বাংলাদেশ',
+          paymentMethod: 'Cash On Delivery (COD)',
+          deliveryZone: 'inside_dhaka',
+          subtotal: 1250,
+          discount: 50,
+          couponCode: 'SPIDEY50',
+          shippingFee: 70,
+          totalAmount: 1270,
+          codAmount: 1270,
+          status: 'confirmed',
+          createdAt: new Date().toISOString()
+        };
+
+        const result = await sendWorkerTelegramOrderNotification(testOrder, testSettings);
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
 
       // 14a. Bulk Save / Sync Orders (POST)

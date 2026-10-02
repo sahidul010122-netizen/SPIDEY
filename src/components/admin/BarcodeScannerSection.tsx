@@ -223,6 +223,16 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
 
     serverOrders = serverOrders.filter(o => !deletedIds.has(o.id));
 
+    // Read persistent scanned order IDs so done/scanned orders never revert to pending
+    let scannedIds = new Set<string>();
+    try {
+      const rawScanned = localStorage.getItem('spidey_scanned_order_ids');
+      if (rawScanned) {
+        const parsed = JSON.parse(rawScanned);
+        if (Array.isArray(parsed)) scannedIds = new Set(parsed);
+      }
+    } catch {}
+
     let localOrders: Order[] = [];
     try {
       const cached = localStorage.getItem('spidey_master_orders');
@@ -235,30 +245,43 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
     } catch {}
 
     // Intelligent merge of local and server orders
-    if (serverOrders.length > 0 && localOrders.length > 0) {
+    if (serverOrders.length > 0 || localOrders.length > 0) {
       const serverMap = new Map(serverOrders.map(o => [o.id, o]));
       const merged: Order[] = [];
 
       for (const s of serverOrders) {
         const l = localOrders.find(o => o.id === s.id);
-        if (l && (l.barcodeScanned || l.status === 'shipped') && !s.barcodeScanned) {
-          merged.push({ ...s, barcodeScanned: l.barcodeScanned, status: l.status });
+        const isDone = scannedIds.has(s.id) || (l && (l.barcodeScanned || l.status === 'shipped' || l.status === 'dispatched')) || s.barcodeScanned || s.status === 'shipped' || s.status === 'dispatched';
+        
+        if (isDone) {
+          merged.push({ 
+            ...s, 
+            ...(l || {}), 
+            barcodeScanned: true, 
+            status: 'shipped',
+            outboundStockDeducted: true,
+            courierStatus: (l?.courierStatus === 'delivered' || s.courierStatus === 'delivered') ? 'delivered' : 'sent_to_courier'
+          });
         } else {
-          merged.push(s);
+          merged.push(l ? { ...s, ...l } : s);
+        }
+      }
+
+      for (const l of localOrders) {
+        if (!serverMap.has(l.id)) {
+          const isDone = scannedIds.has(l.id) || l.barcodeScanned || l.status === 'shipped' || l.status === 'dispatched';
+          merged.push({
+            ...l,
+            barcodeScanned: isDone ? true : l.barcodeScanned,
+            status: isDone ? 'shipped' : l.status,
+            outboundStockDeducted: isDone ? true : l.outboundStockDeducted
+          });
         }
       }
 
       setOrders(merged);
       try {
         localStorage.setItem('spidey_master_orders', JSON.stringify(merged));
-      } catch {}
-      return;
-    }
-
-    if (serverOrders.length > 0) {
-      setOrders(serverOrders);
-      try {
-        localStorage.setItem('spidey_master_orders', JSON.stringify(serverOrders));
       } catch {}
       return;
     }
@@ -455,15 +478,37 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         timestamp: Date.now()
       });
 
-      // Synchronize in background non-blockingly
+      // Persist to permanent scanned order IDs registry
+      try {
+        const rawScanned = localStorage.getItem('spidey_scanned_order_ids');
+        const parsedScanned = rawScanned ? JSON.parse(rawScanned) : [];
+        if (!parsedScanned.includes(updatedOrder.id)) {
+          parsedScanned.push(updatedOrder.id);
+          localStorage.setItem('spidey_scanned_order_ids', JSON.stringify(parsedScanned));
+        }
+      } catch {}
+
+      // Synchronize in background with both scanCode and orderId
       fetch('/api/warehouse/scan-dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scanCode: cleanCode })
+        body: JSON.stringify({ scanCode: cleanCode, orderId: updatedOrder.id })
       }).then(res => res.json()).then(data => {
         if (Array.isArray(data.updatedProducts) && data.updatedProducts.length > 0) {
           setProducts(data.updatedProducts);
         }
+      }).catch(() => {});
+
+      // Backup update order status on server to guarantee completed status
+      fetch(`/api/orders/${updatedOrder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'shipped',
+          barcodeScanned: true,
+          outboundStockDeducted: true,
+          courierStatus: updatedOrder.courierStatus
+        })
       }).catch(() => {});
 
       setIsProcessingScan(false);
@@ -758,6 +803,17 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
           fetchProducts();
         }
 
+        try {
+          const rawScanned = localStorage.getItem('spidey_scanned_order_ids');
+          if (rawScanned) {
+            const parsedScanned = JSON.parse(rawScanned);
+            if (Array.isArray(parsedScanned)) {
+              const filteredScanned = parsedScanned.filter((id: string) => id !== order.id);
+              localStorage.setItem('spidey_scanned_order_ids', JSON.stringify(filteredScanned));
+            }
+          }
+        } catch {}
+
         setLastScanResult(null);
         showToast(`Order #${order.invoiceNumber || order.id.slice(-6)} reverted to pending and stock restored!`, 'success');
       } else {
@@ -875,6 +931,18 @@ export const BarcodeScannerSection: React.FC<BarcodeScannerSectionProps> = ({
         } catch {}
       }
     }
+
+    try {
+      const rawScanned = localStorage.getItem('spidey_scanned_order_ids');
+      if (rawScanned) {
+        const parsedScanned = JSON.parse(rawScanned);
+        if (Array.isArray(parsedScanned)) {
+          const idSet = new Set(ids);
+          const filteredScanned = parsedScanned.filter((id: string) => !idSet.has(id));
+          localStorage.setItem('spidey_scanned_order_ids', JSON.stringify(filteredScanned));
+        }
+      }
+    } catch {}
 
     setSelectedOrderIds(new Set());
     fetchOrders();

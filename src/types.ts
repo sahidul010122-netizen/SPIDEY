@@ -24,6 +24,8 @@ export interface JerseyProduct {
   rating: number;
   reviewCount: number;
   customizable: boolean;
+  customizationCharge?: number; // 0 for Free, or specific amount like 100
+  customizationChargeType?: 'free' | 'paid';
   colorTheme?: ColorTheme;
   sortOrder?: number;
   position?: number;
@@ -41,6 +43,8 @@ export interface CartItem {
   selectedSize: string;
   customName?: string;
   customNumber?: string;
+  hasCustomization?: boolean;
+  customizationFee?: number;
   quantity: number;
   addedAt: number;
 }
@@ -53,6 +57,8 @@ export interface Order {
   phoneNumber?: string;
   shippingAddress: string;
   paymentMethod: string;
+  deliveryZone?: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
+  couponCode?: string;
   isExchange?: boolean;
   hasGiftBox?: boolean;
   giftBoxType?: string;

@@ -96,7 +96,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Premium classic mesh knit construction',
       'Tailored athletic vintage fit'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 25,
     rating: 5.0,
@@ -129,7 +129,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Heat-applied metallic gold crest',
       'Ergonomic athletic performance cut'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 30,
     rating: 4.9,
@@ -162,7 +162,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Metallic gold triple shoulder stripes',
       'High-definition club crest'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 16,
     rating: 4.9,
@@ -195,7 +195,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Embroidered golden star details',
       'Heavyweight match-grade fabric'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 20,
     rating: 4.8,
@@ -229,7 +229,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Ribbed V-neck with engineered micro-mesh side inserts',
       'Officially licensed Real Madrid CF authentic kit'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 18,
     rating: 4.9,
@@ -263,7 +263,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Camp Nou 90+1 / 90+3 commemorative sleeve timestamps',
       'Authentic vintage boxy fit'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 14,
     rating: 4.9,
@@ -297,7 +297,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Ergonomic laser-cut shoulder venting slits',
       'Anti-odor silver yarn integration'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 22,
     rating: 4.8,
@@ -331,7 +331,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Hidden Parc des Princes chant on inner collar',
       'Numbered authenticity patch at lower left hem'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 11,
     rating: 4.9,
@@ -365,7 +365,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Smart thermal regulation fabric core',
       'Collector edition metal authentication badge with serial # included'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 7,
     rating: 5.0,
@@ -399,7 +399,7 @@ export const INITIAL_JERSEYS: JerseyProduct[] = [
       'Honorary 7 European Cups badge on sleeve',
       'Heritage cut with gold trim piping along seams'
     ],
-    sizes: ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+    sizes: ['M', 'L', 'XL', 'XXL', 'XXXL'],
     inStock: true,
     stockCount: 12,
     rating: 4.9,

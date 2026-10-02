@@ -8,7 +8,8 @@ import {
   TrendingUp, BarChart2, Folder, Globe, Compass, ArrowUpRight,
   PackageCheck, Truck, Download, UploadCloud, HardDrive, ScanLine,
   Menu, PanelLeftClose, PanelLeftOpen, ChevronLeft, Ruler, Boxes, Smartphone, Save, RotateCcw,
-  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move, Pin, FolderUp
+  GripVertical, ChevronUp, ChevronDown, ArrowUp, ArrowDown, Move, Pin, FolderUp,
+  Send, Bell, Gift, Percent
 } from 'lucide-react';
 import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
@@ -20,6 +21,7 @@ import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
 import { PlaceOrderInstallSection } from './admin/PlaceOrderInstallSection';
 import { BulkFolderImportModal } from './admin/BulkFolderImportModal';
 import { CategoryManager } from './CategoryManager';
+import { TrustBadgeIcon } from './TrustBadgeIcon';
 
 interface AdminPanelProps {
   products: JerseyProduct[];
@@ -80,8 +82,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   // Active Sidebar Menu Tab
   const [activeMenu, setActiveMenu] = useState<
-    'order_process' | 'barcode_scanner' | 'steadfast_api' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
+    'order_process' | 'barcode_scanner' | 'steadfast_api' | 'telegram' | 'checkout_coupons' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
   >('order_process');
+
+  // Telegram Test State
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [telegramTestStatus, setTelegramTestStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Customization Pricing State in Product Add/Edit Form
+  const [formCustomizationChargeType, setFormCustomizationChargeType] = useState<'free' | 'paid'>('free');
+  const [formCustomizationCharge, setFormCustomizationCharge] = useState<string>('0');
 
   // Mobile Collapsible Sidebar State (Default to closed on mobile for maximum workspace)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -274,7 +284,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
+  const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'telegram' | 'checkout_coupons' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
     setActiveMenu(menu);
     // Auto-collapse sidebar on mobile after selecting a menu
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -376,8 +386,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormTitle('');
     setFormCategory(categories[0]?.id || 'EDC');
     setFormCustomCategory('');
-    setFormPrice('129.99');
-    setFormOriginalPrice('159.99');
+    setFormPrice('1150');
+    setFormOriginalPrice('1350');
     setFormSeason('2025');
     setFormEdition('Pro Edition / Titanium');
     setFormBadge('New Drop');
@@ -391,6 +401,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       'Authentic heat-pressed club emblem',
       'Athletic ergonomic seam construction'
     ]);
+    setFormCustomizationChargeType(localSettings.defaultCustomizationChargeType || 'free');
+    setFormCustomizationCharge(String(localSettings.defaultCustomizationCharge || 0));
     setIsProductModalOpen(true);
   };
 
@@ -412,6 +424,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormSizes(Array.isArray(prod.sizes) && prod.sizes.length > 0 ? [...prod.sizes] : ['S', 'M', 'L', 'XL', 'XXL', '3XL']);
     setFormImages(prod.images.length > 0 ? [...prod.images] : []);
     setFormFeatures(prod.features.length > 0 ? [...prod.features] : []);
+    setFormCustomizationChargeType(prod.customizationChargeType || (prod.customizationCharge && prod.customizationCharge > 0 ? 'paid' : 'free'));
+    setFormCustomizationCharge(String(prod.customizationCharge || 0));
     setIsProductModalOpen(true);
   };
 
@@ -734,6 +748,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       images: formImages.length > 0 ? formImages : ['/images/prod_pixel_case_1787668274006.jpg'],
       features: formFeatures.length > 0 ? formFeatures : ['Moisture-wicking breathable ventilation matrix'],
       sizes: formSizes.length > 0 ? formSizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
+      customizable: true,
+      customizationChargeType: formCustomizationChargeType,
+      customizationCharge: formCustomizationChargeType === 'paid' ? Math.max(0, parseFloat(formCustomizationCharge) || 0) : 0,
       isPinned: editingProduct ? editingProduct.isPinned : false,
       pinnedAt: editingProduct ? editingProduct.pinnedAt : undefined,
       pinnedOrder: editingProduct ? editingProduct.pinnedOrder : undefined
@@ -1020,6 +1037,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 activeMenu === 'steadfast_api' ? 'bg-neutral-900 text-white font-bold' : 'bg-rose-500/20 text-rose-300'
               }`}>
                 Auto Sync
+              </span>
+            </button>
+
+            {/* Telegram Order Notifications (Requirement 1) */}
+            <button
+              onClick={() => handleSelectMenu('telegram')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'telegram'
+                  ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/30 font-extrabold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Send className="w-4 h-4 text-sky-400" />
+                <span className="font-extrabold tracking-tight">Telegram Alerts</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'telegram' ? 'bg-white text-sky-900 font-black' : 'bg-sky-500/20 text-sky-300 font-bold'
+              }`}>
+                Live Bot
+              </span>
+            </button>
+
+            {/* Delivery Charges & Coupon Popups (Requirements 4, 5, 6) */}
+            <button
+              onClick={() => handleSelectMenu('checkout_coupons')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'checkout_coupons'
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30 font-extrabold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Gift className="w-4 h-4 text-amber-400" />
+                <span className="font-extrabold tracking-tight">Checkout & Coupons</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'checkout_coupons' ? 'bg-white text-amber-900 font-black' : 'bg-amber-500/20 text-amber-300 font-bold'
+              }`}>
+                3-Tier COD
               </span>
             </button>
 
@@ -2099,6 +2156,393 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                {/* CHECKOUT TRUST BADGES & FEATURES SECTION (ADMIN CONTROL & CUSTOMIZATION) */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-5">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-neutral-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-neutral-900">
+                          চেকআউট ও প্রোডাক্ট ফিচার/ট্রাস্ট বক্স (Checkout Trust Badges & Features)
+                        </h4>
+                        <p className="text-[11px] text-neutral-500">
+                          চেকআউট ও প্রোডাক্ট পেজে প্রদর্শিত ফিচার বক্সগুলোর আইকন, টাইটেল ও সাবটাইটেল আলাদাভাবে কাস্টমাইজ করুন।
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trust Badge 1 */}
+                  <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-neutral-900 text-white text-[11px] font-bold flex items-center justify-center">1</span>
+                        <h5 className="text-xs font-black text-neutral-900">ফিচার বক্স ১ (Feature / Trust Box 1)</h5>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-neutral-700">
+                        <input
+                          type="checkbox"
+                          checked={localSettings.trustBadge1Enabled !== false}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge1Enabled: e.target.checked })}
+                          className="rounded text-neutral-900 focus:ring-0"
+                        />
+                        <span>সক্রিয় (Active)</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">আইকন নির্বাচন (Default Icon):</label>
+                        <select
+                          value={localSettings.trustBadge1Icon || 'truck'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge1Icon: e.target.value })}
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-bold focus:outline-none"
+                        >
+                          <option value="truck">🚚 Truck (ফ্রি ডেলিভারি / শিপিং)</option>
+                          <option value="shield">🛡️ Shield (১০০% অরিজিনাল / নিরাপত্তা)</option>
+                          <option value="rotate-ccw">🔄 Return (৭ দিন রিটার্ন / এক্সচেঞ্জ)</option>
+                          <option value="award">🎖️ Award (অথেনটিক গ্যারান্টি)</option>
+                          <option value="check-circle">✅ Check Circle (যাচাইকৃত সুবিধা)</option>
+                          <option value="zap">⚡ Zap (সুপারফাস্ট ডেলিভারি)</option>
+                          <option value="package">📦 Package (সুরক্ষিত প্যাকেজিং)</option>
+                          <option value="heart">❤️ Heart (কাস্টমার স্যাটিসফ্যাকশন)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">বোল্ড টাইটেল (Bold Title):</label>
+                        <input
+                          type="text"
+                          value={localSettings.trustBadge1Title || 'ফ্রি ডেলিভারি'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge1Title: e.target.value })}
+                          placeholder="e.g. ফ্রি ডেলিভারি"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-black focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">ছোট সাবটাইটেল (Subtitle Text):</label>
+                        <input
+                          type="text"
+                          value={localSettings.trustBadge1Subtitle || '৳২০০০+ অর্ডারে'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge1Subtitle: e.target.value })}
+                          placeholder="e.g. ৳২০০০+ অর্ডারে"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-neutral-600">কাস্টম আইকন (Custom Icon - ফাইল আপলোড অথবা URL):</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold rounded-lg border border-neutral-300 cursor-pointer transition-colors flex items-center gap-1.5 shrink-0">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>আইকন ছবি আপলোড করুন</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  if (event.target?.result) {
+                                    setLocalSettings({ ...localSettings, trustBadge1Icon: event.target.result as string });
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <div className="flex-1 min-w-[200px]">
+                          <input
+                            type="text"
+                            value={localSettings.trustBadge1Icon?.startsWith('http') || localSettings.trustBadge1Icon?.startsWith('/') || localSettings.trustBadge1Icon?.startsWith('data:') ? localSettings.trustBadge1Icon : ''}
+                            onChange={(e) => setLocalSettings({ ...localSettings, trustBadge1Icon: e.target.value.trim() || 'truck' })}
+                            placeholder="অথবা কাস্টম আইকন লিংক (https://...)"
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none font-mono"
+                          />
+                        </div>
+                        {Boolean(localSettings.trustBadge1Icon && (localSettings.trustBadge1Icon.startsWith('http') || localSettings.trustBadge1Icon.startsWith('data:') || localSettings.trustBadge1Icon.startsWith('/'))) && (
+                          <button
+                            type="button"
+                            onClick={() => setLocalSettings({ ...localSettings, trustBadge1Icon: 'truck' })}
+                            className="text-xs text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer shrink-0"
+                          >
+                            রিসেট
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trust Badge 2 */}
+                  <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-neutral-900 text-white text-[11px] font-bold flex items-center justify-center">2</span>
+                        <h5 className="text-xs font-black text-neutral-900">ফিচার বক্স ২ (Feature / Trust Box 2)</h5>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-neutral-700">
+                        <input
+                          type="checkbox"
+                          checked={localSettings.trustBadge2Enabled !== false}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge2Enabled: e.target.checked })}
+                          className="rounded text-neutral-900 focus:ring-0"
+                        />
+                        <span>সক্রিয় (Active)</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">আইকন নির্বাচন (Default Icon):</label>
+                        <select
+                          value={localSettings.trustBadge2Icon || 'shield'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge2Icon: e.target.value })}
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-bold focus:outline-none"
+                        >
+                          <option value="shield">🛡️ Shield (১০০% অরিজিনাল / নিরাপত্তা)</option>
+                          <option value="truck">🚚 Truck (ফ্রি ডেলিভারি / শিপিং)</option>
+                          <option value="rotate-ccw">🔄 Return (৭ দিন রিটার্ন / এক্সচেঞ্জ)</option>
+                          <option value="award">🎖️ Award (অথেনটিক গ্যারান্টি)</option>
+                          <option value="check-circle">✅ Check Circle (যাচাইকৃত সুবিধা)</option>
+                          <option value="zap">⚡ Zap (সুপারফাস্ট ডেলিভারি)</option>
+                          <option value="package">📦 Package (সুরক্ষিত প্যাকেজিং)</option>
+                          <option value="heart">❤️ Heart (কাস্টমার স্যাটিসফ্যাকশন)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">বোল্ড টাইটেল (Bold Title):</label>
+                        <input
+                          type="text"
+                          value={localSettings.trustBadge2Title || '১০০% অরিজিনাল'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge2Title: e.target.value })}
+                          placeholder="e.g. ১০০% অরিজিনাল"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-black focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">ছোট সাবটাইটেল (Subtitle Text):</label>
+                        <input
+                          type="text"
+                          value={localSettings.trustBadge2Subtitle || 'অথেনটিক গ্যারান্টি'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge2Subtitle: e.target.value })}
+                          placeholder="e.g. অথেনটিক গ্যারান্টি"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-neutral-600">কাস্টম আইকন (Custom Icon - ফাইল আপলোড অথবা URL):</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold rounded-lg border border-neutral-300 cursor-pointer transition-colors flex items-center gap-1.5 shrink-0">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>আইকন ছবি আপলোড করুন</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  if (event.target?.result) {
+                                    setLocalSettings({ ...localSettings, trustBadge2Icon: event.target.result as string });
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <div className="flex-1 min-w-[200px]">
+                          <input
+                            type="text"
+                            value={localSettings.trustBadge2Icon?.startsWith('http') || localSettings.trustBadge2Icon?.startsWith('/') || localSettings.trustBadge2Icon?.startsWith('data:') ? localSettings.trustBadge2Icon : ''}
+                            onChange={(e) => setLocalSettings({ ...localSettings, trustBadge2Icon: e.target.value.trim() || 'shield' })}
+                            placeholder="অথবা কাস্টম আইকন লিংক (https://...)"
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none font-mono"
+                          />
+                        </div>
+                        {Boolean(localSettings.trustBadge2Icon && (localSettings.trustBadge2Icon.startsWith('http') || localSettings.trustBadge2Icon.startsWith('data:') || localSettings.trustBadge2Icon.startsWith('/'))) && (
+                          <button
+                            type="button"
+                            onClick={() => setLocalSettings({ ...localSettings, trustBadge2Icon: 'shield' })}
+                            className="text-xs text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer shrink-0"
+                          >
+                            রিসেট
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trust Badge 3 */}
+                  <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-neutral-900 text-white text-[11px] font-bold flex items-center justify-center">3</span>
+                        <h5 className="text-xs font-black text-neutral-900">ফিচার বক্স ৩ (Feature / Trust Box 3)</h5>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-neutral-700">
+                        <input
+                          type="checkbox"
+                          checked={localSettings.trustBadge3Enabled !== false}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge3Enabled: e.target.checked })}
+                          className="rounded text-neutral-900 focus:ring-0"
+                        />
+                        <span>সক্রিয় (Active)</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">আইকন নির্বাচন (Default Icon):</label>
+                        <select
+                          value={localSettings.trustBadge3Icon || 'rotate-ccw'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge3Icon: e.target.value })}
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-bold focus:outline-none"
+                        >
+                          <option value="rotate-ccw">🔄 Return (৭ দিন রিটার্ন / এক্সচেঞ্জ)</option>
+                          <option value="truck">🚚 Truck (ফ্রি ডেলিভারি / শিপিং)</option>
+                          <option value="shield">🛡️ Shield (১০০% অরিজিনাল / নিরাপত্তা)</option>
+                          <option value="award">🎖️ Award (অথেনটিক গ্যারান্টি)</option>
+                          <option value="check-circle">✅ Check Circle (যাচাইকৃত সুবিধা)</option>
+                          <option value="zap">⚡ Zap (সুপারফাস্ট ডেলিভারি)</option>
+                          <option value="package">📦 Package (সুরক্ষিত প্যাকেজিং)</option>
+                          <option value="heart">❤️ Heart (কাস্টমার স্যাটিসফ্যাকশন)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">বোল্ড টাইটেল (Bold Title):</label>
+                        <input
+                          type="text"
+                          value={localSettings.trustBadge3Title || '৭ দিন রিটার্ন'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge3Title: e.target.value })}
+                          placeholder="e.g. ৭ দিন রিটার্ন"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-black focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">ছোট সাবটাইটেল (Subtitle Text):</label>
+                        <input
+                          type="text"
+                          value={localSettings.trustBadge3Subtitle || 'সহজ পলিসি'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, trustBadge3Subtitle: e.target.value })}
+                          placeholder="e.g. সহজ পলিসি"
+                          className="w-full px-3 py-2 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-neutral-600">কাস্টম আইকন (Custom Icon - ফাইল আপলোড অথবা URL):</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold rounded-lg border border-neutral-300 cursor-pointer transition-colors flex items-center gap-1.5 shrink-0">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>আইকন ছবি আপলোড করুন</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  if (event.target?.result) {
+                                    setLocalSettings({ ...localSettings, trustBadge3Icon: event.target.result as string });
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <div className="flex-1 min-w-[200px]">
+                          <input
+                            type="text"
+                            value={localSettings.trustBadge3Icon?.startsWith('http') || localSettings.trustBadge3Icon?.startsWith('/') || localSettings.trustBadge3Icon?.startsWith('data:') ? localSettings.trustBadge3Icon : ''}
+                            onChange={(e) => setLocalSettings({ ...localSettings, trustBadge3Icon: e.target.value.trim() || 'rotate-ccw' })}
+                            placeholder="অথবা কাস্টম আইকন লিংক (https://...)"
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none font-mono"
+                          />
+                        </div>
+                        {Boolean(localSettings.trustBadge3Icon && (localSettings.trustBadge3Icon.startsWith('http') || localSettings.trustBadge3Icon.startsWith('data:') || localSettings.trustBadge3Icon.startsWith('/'))) && (
+                          <button
+                            type="button"
+                            onClick={() => setLocalSettings({ ...localSettings, trustBadge3Icon: 'rotate-ccw' })}
+                            className="text-xs text-rose-600 hover:text-rose-800 font-bold underline cursor-pointer shrink-0"
+                          >
+                            রিসেট
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Real-Time Live Preview of the 3 Badges */}
+                  <div className="pt-2">
+                    <label className="block text-xs font-bold text-neutral-600 mb-2">
+                      লাইভ প্রিভিউ (চেকআউট ও প্রোডাক্ট পেজে যেমন দেখাবে):
+                    </label>
+                    <div className="grid grid-cols-3 gap-2 p-3 bg-neutral-100 rounded-2xl border border-neutral-200">
+                      {localSettings.trustBadge1Enabled !== false && (
+                        <div className="p-3 rounded-xl border border-neutral-200 bg-white text-center space-y-1 shadow-2xs">
+                          <div className="flex justify-center">
+                            <TrustBadgeIcon icon={localSettings.trustBadge1Icon || 'truck'} defaultIcon="truck" className="w-4 h-4 text-neutral-700" />
+                          </div>
+                          <div className="text-[11px] font-black text-neutral-900 leading-tight">
+                            {localSettings.trustBadge1Title || 'ফ্রি ডেলিভারি'}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 leading-tight">
+                            {localSettings.trustBadge1Subtitle || '৳২০০০+ অর্ডারে'}
+                          </div>
+                        </div>
+                      )}
+
+                      {localSettings.trustBadge2Enabled !== false && (
+                        <div className="p-3 rounded-xl border border-neutral-200 bg-white text-center space-y-1 shadow-2xs">
+                          <div className="flex justify-center">
+                            <TrustBadgeIcon icon={localSettings.trustBadge2Icon || 'shield'} defaultIcon="shield" className="w-4 h-4 text-neutral-700" />
+                          </div>
+                          <div className="text-[11px] font-black text-neutral-900 leading-tight">
+                            {localSettings.trustBadge2Title || '১০০% অরিজিনাল'}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 leading-tight">
+                            {localSettings.trustBadge2Subtitle || 'অথেনটিক গ্যারান্টি'}
+                          </div>
+                        </div>
+                      )}
+
+                      {localSettings.trustBadge3Enabled !== false && (
+                        <div className="p-3 rounded-xl border border-neutral-200 bg-white text-center space-y-1 shadow-2xs">
+                          <div className="flex justify-center">
+                            <TrustBadgeIcon icon={localSettings.trustBadge3Icon || 'rotate-ccw'} defaultIcon="rotate-ccw" className="w-4 h-4 text-neutral-700" />
+                          </div>
+                          <div className="text-[11px] font-black text-neutral-900 leading-tight">
+                            {localSettings.trustBadge3Title || '৭ দিন রিটার্ন'}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 leading-tight">
+                            {localSettings.trustBadge3Subtitle || 'সহজ পলিসি'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* 5. DYNAMIC PRODUCT SIZE GUIDE CONTROL (ADMIN ON/OFF & MEASUREMENTS EDITOR) */}
                 <div className="p-4 sm:p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-4">
                   <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-neutral-100">
@@ -2184,17 +2628,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </button>
                         </div>
 
+                        {/* Column Header Labels */}
+                        <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-neutral-600">
+                          <div className="w-16 text-center">সাইজ (Size)</div>
+                          <div className="flex-1">প্রস্থ / বুকে (WIDTH - ইঞ্চি)</div>
+                          <div className="flex-1">দৈর্ঘ্য / লেংথ (LENGTH - ইঞ্চি)</div>
+                          <div className="w-6"></div>
+                        </div>
+
                         {/* Editable Measurements Grid */}
                         <div className="space-y-1.5">
                           {(localSettings.sizeGuideMeasurements && localSettings.sizeGuideMeasurements.length > 0 
                             ? localSettings.sizeGuideMeasurements 
                             : [
-                                { size: 'S', chest: '36 - 38"', length: '27"' },
-                                { size: 'M', chest: '38 - 40"', length: '28"' },
-                                { size: 'L', chest: '40 - 42"', length: '29"' },
-                                { size: 'XL', chest: '42 - 44"', length: '30"' },
-                                { size: 'XXL', chest: '44 - 46"', length: '31"' },
-                                { size: '3XL', chest: '46 - 48"', length: '32"' },
+                                { size: 'S', chest: '36"', length: '26"' },
+                                { size: 'M', chest: '38"', length: '27"' },
+                                { size: 'L', chest: '40"', length: '28"' },
+                                { size: 'XL', chest: '42"', length: '29"' },
+                                { size: 'XXL', chest: '44"', length: '30"' },
+                                { size: 'XXXL', chest: '46"', length: '31"' },
                               ]
                           ).map((item, index, arr) => (
                             <div key={index} className="flex items-center gap-2 p-1.5 rounded-xl bg-neutral-50 border border-neutral-200">
@@ -2205,36 +2657,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   placeholder="Size"
                                   onChange={(e) => {
                                     const updated = [...arr];
-                                    updated[index] = { ...updated[index], size: e.target.value };
+                                    updated[index] = { ...updated[index], size: e.target.value.toUpperCase() };
                                     setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
                                   }}
-                                  className="w-full px-2 py-1 text-xs font-bold text-center bg-white border border-neutral-200 rounded-lg text-amber-600 focus:outline-none"
+                                  className="w-full px-2 py-1 text-xs font-bold text-center bg-white border border-neutral-200 rounded-lg text-neutral-900 font-mono focus:outline-none focus:border-neutral-900"
                                 />
                               </div>
                               <div className="flex-1">
                                 <input
                                   type="text"
                                   value={item.chest}
-                                  placeholder="Chest (e.g. 40 - 42&quot;)"
+                                  placeholder='Width (e.g. 38" or 38 - 40")'
                                   onChange={(e) => {
                                     const updated = [...arr];
                                     updated[index] = { ...updated[index], chest: e.target.value };
                                     setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
                                   }}
-                                  className="w-full px-2.5 py-1 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none"
+                                  className="w-full px-2.5 py-1 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 font-mono focus:outline-none focus:border-neutral-900"
                                 />
                               </div>
                               <div className="flex-1">
                                 <input
                                   type="text"
                                   value={item.length}
-                                  placeholder="Length (e.g. 29&quot;)"
+                                  placeholder='Length (e.g. 28")'
                                   onChange={(e) => {
                                     const updated = [...arr];
                                     updated[index] = { ...updated[index], length: e.target.value };
                                     setLocalSettings({ ...localSettings, sizeGuideMeasurements: updated });
                                   }}
-                                  className="w-full px-2.5 py-1 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 focus:outline-none"
+                                  className="w-full px-2.5 py-1 text-xs bg-white border border-neutral-200 rounded-lg text-neutral-800 font-mono focus:outline-none focus:border-neutral-900"
                                 />
                               </div>
                               {arr.length > 1 && (
@@ -2252,6 +2704,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               )}
                             </div>
                           ))}
+                        </div>
+
+                        {/* Live Preview of Size Chart Table (Image 2 Style) */}
+                        <div className="pt-2">
+                          <label className="block text-[11px] font-bold text-neutral-600 mb-1.5">
+                            লাইভ প্রিভিউ (প্রোডাক্ট পেইজের সাইজ চার্ট যেমন দেখাবে):
+                          </label>
+                          <div className="overflow-hidden border border-black rounded-sm shadow-2xs max-w-lg">
+                            <div className="bg-black text-white text-center py-1.5 px-3 text-xs font-black tracking-widest uppercase">
+                              SIZE CHART
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-center border-collapse text-xs font-mono">
+                                <thead>
+                                  <tr className="border-b border-black bg-neutral-50/50">
+                                    <th className="py-2 px-2.5 border-r border-black font-black text-neutral-900 text-[10px] w-16 text-center uppercase tracking-wider font-sans">
+                                      SIZE
+                                    </th>
+                                    {(localSettings.sizeGuideMeasurements || []).map((m) => (
+                                      <th key={m.size} className="py-2 px-2.5 border-r last:border-r-0 border-black font-black text-xs text-neutral-900">
+                                        {m.size}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr className="border-b border-black bg-white">
+                                    <td className="py-2 px-2.5 border-r border-black font-black text-neutral-950 text-[10px] font-sans tracking-wide uppercase bg-neutral-50/80">
+                                      WIDTH
+                                    </td>
+                                    {(localSettings.sizeGuideMeasurements || []).map((m) => (
+                                      <td key={m.size} className="py-2 px-2 border-r last:border-r-0 border-black font-bold text-xs text-neutral-900">
+                                        {m.chest}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                  <tr className="bg-white">
+                                    <td className="py-2 px-2.5 border-r border-black font-black text-neutral-950 text-[10px] font-sans tracking-wide uppercase bg-neutral-50/80">
+                                      LENGTH
+                                    </td>
+                                    {(localSettings.sizeGuideMeasurements || []).map((m) => (
+                                      <td key={m.size} className="py-2 px-2 border-r last:border-r-0 border-black font-bold text-xs text-neutral-800">
+                                        {m.length}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2272,6 +2774,466 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* TAB: TELEGRAM ORDER NOTIFICATION (Requirement 1) */}
+          {activeMenu === 'telegram' && (
+            <div className="space-y-6">
+              <div className="p-6 sm:p-8 rounded-3xl bg-[#f8f9fa] border border-neutral-200/80 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-sky-500 text-white shadow-md shadow-sky-500/20">
+                      <Send className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-neutral-900">
+                        টেলিগ্রাম অর্ডার নোটিফিকেশন (Telegram Order Integration)
+                      </h3>
+                      <p className="text-xs text-neutral-500">
+                        কাস্টমার ওয়েবসাইট থেকে অর্ডার প্লেস করার সাথে সাথে অর্ডারের সম্পূর্ণ কপি স্বয়ংক্রিয়ভাবে আপনার টেলিগ্রাম গ্রুপে চলে যাবে।
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="px-3 py-1 rounded-full text-xs font-mono bg-sky-50 text-sky-700 border border-sky-200 font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
+                    {localSettings.telegramNotificationsEnabled !== false ? 'Active & Auto-Dispatching' : 'Disabled'}
+                  </span>
+                </div>
+
+                <form onSubmit={handleSaveAllSettings} className="space-y-5">
+                  <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-4">
+                    {/* Enable Toggle */}
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={localSettings.telegramNotificationsEnabled !== false}
+                        onChange={(e) => setLocalSettings({ ...localSettings, telegramNotificationsEnabled: e.target.checked })}
+                        className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-neutral-300"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-neutral-900 block">
+                          টেলিগ্রাম স্বয়ংক্রিয় নোটিফিকেশন সক্রিয় রাখুন (Enable Telegram Notifications)
+                        </span>
+                        <span className="text-[11px] text-neutral-500 block">
+                          অন থাকলে যেকোনো নতুন চেকআউট অর্ডারের যাবতীয় তথ্য তাত্ক্ষণিকভাবে নির্দিষ্ট টেলিগ্রাম গ্রুপে পোস্ট হবে।
+                        </span>
+                      </div>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-neutral-100">
+                      {/* Bot Token */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-800 mb-1">
+                          Bot Token *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={localSettings.telegramBotToken || ''}
+                          onChange={(e) => setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })}
+                          placeholder="e.g. 8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw"
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono font-bold focus:outline-none focus:bg-white"
+                        />
+                        <span className="text-[10px] text-neutral-400 mt-1 block">
+                          BotFather থেকে প্রাপ্ত অফিশিয়াল বট টোকেন
+                        </span>
+                      </div>
+
+                      {/* Chat ID */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-800 mb-1">
+                          Group / Channel Chat ID *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={localSettings.telegramChatId || ''}
+                          onChange={(e) => setLocalSettings({ ...localSettings, telegramChatId: e.target.value })}
+                          placeholder="e.g. 1003901747514"
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono font-bold focus:outline-none focus:bg-white"
+                        />
+                        <span className="text-[10px] text-neutral-400 mt-1 block">
+                          সুপারগ্রুপ বা চ্যানেলের আইডি (সিস্টেম অটোমেটিক -100 প্রিফিক্স হ্যান্ডেল করে)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Test Connection Button & Status */}
+                  <div className="p-4 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h4 className="text-xs font-bold text-neutral-900">
+                          টেলিগ্রাম বট টেস্ট (Instant Connection Test)
+                        </h4>
+                        <p className="text-[11px] text-neutral-500">
+                          একটি ডামি টেস্ট অর্ডার নোটিফিকেশন পাঠিয়ে চেক করুন আপনার টেলিগ্রাম গ্রুপে মেসেজ ঠিকমতো যাচ্ছে কি না।
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsTestingTelegram(true);
+                          setTelegramTestStatus(null);
+                          try {
+                            const res = await fetch('/api/telegram/test', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ settings: localSettings })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setTelegramTestStatus({
+                                success: true,
+                                message: `✓ টেস্ট সফল হয়েছে! টেলিগ্রাম গ্রুপে মেসেজ পাঠানো হয়েছে (Chat ID: ${data.chatId})`
+                              });
+                            } else {
+                              setTelegramTestStatus({
+                                success: false,
+                                message: `✕ এরর: ${data.message || 'মেসেজ পাঠানো যায়নি। বটকে গ্রুপে অ্যাড করে অ্যাডমিন পারমিশন দিন।'}`
+                              });
+                            }
+                          } catch (err: any) {
+                            setTelegramTestStatus({
+                              success: false,
+                              message: `✕ নেটওয়ার্ক এরর: ${err.message}`
+                            });
+                          } finally {
+                            setIsTestingTelegram(false);
+                          }
+                        }}
+                        disabled={isTestingTelegram}
+                        className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{isTestingTelegram ? 'টেস্ট মেসেজ পাঠানো হচ্ছে...' : 'Send Test Notification'}</span>
+                      </button>
+                    </div>
+
+                    {telegramTestStatus && (
+                      <div className={`p-3 rounded-xl text-xs font-bold ${
+                        telegramTestStatus.success 
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                          : 'bg-rose-50 text-rose-800 border border-rose-200'
+                      }`}>
+                        {telegramTestStatus.message}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 rounded-full bg-[#0d0f12] hover:bg-neutral-800 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                    >
+                      Save Telegram Settings
+                    </button>
+                    {settingsSavedToast && (
+                      <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                        <Check className="w-4 h-4" /> টেলিগ্রাম সেটিংস সেভ হয়েছে!
+                      </span>
+                    )}
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: CHECKOUT & COUPONS (Requirements 4, 5, 6) */}
+          {activeMenu === 'checkout_coupons' && (
+            <div className="space-y-6">
+              <div className="p-6 sm:p-8 rounded-3xl bg-[#f8f9fa] border border-neutral-200/80 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-md shadow-amber-500/20">
+                      <Gift className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-neutral-900">
+                        চেকআউট ডেলিভারি চার্জ ও কুপন সেটিংস (Delivery Charges & Coupons)
+                      </h3>
+                      <p className="text-xs text-neutral-500">
+                        ৩ স্তরের ডেলিভারি চার্জ, ১০-সেকেন্ডের কুপন পপআপ এবং ডিফল্ট কাস্টমাইজেশন প্রাইসিং কনফিগার করুন।
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveAllSettings} className="space-y-5">
+                  
+                  {/* 1. 3-Tier Delivery Charges */}
+                  <div className="p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                        <Truck className="w-4 h-4 text-neutral-700" />
+                        <span>১. লোকেশন অনুযায়ী ডেলিভারি চার্জ (৩ ভাগে বিভক্ত):</span>
+                      </h4>
+                      <p className="text-[11px] text-neutral-500 mt-0.5">
+                        চেকআউট পেজে কাস্টমার তার এরিয়া সিলেক্ট করলে এই চার্জটি সরাসরি যুক্ত হবে।
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                      {/* Inside Dhaka */}
+                      <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-2">
+                        <div>
+                          <label className="block text-xs font-bold text-neutral-800 mb-1">
+                            জোন ১ নাম (Zone Title):
+                          </label>
+                          <input
+                            type="text"
+                            value={localSettings.deliveryZoneInsideDhakaTitle || 'ঢাকার ভেতরে'}
+                            onChange={(e) => setLocalSettings({ ...localSettings, deliveryZoneInsideDhakaTitle: e.target.value })}
+                            placeholder="ঢাকার ভেতরে"
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-lg text-neutral-900 font-bold focus:outline-none focus:border-neutral-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-neutral-600 mb-1">
+                            ডেলিভারি চার্জ (৳):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="5"
+                            value={localSettings.deliveryChargeInsideDhaka !== undefined ? localSettings.deliveryChargeInsideDhaka : 70}
+                            onChange={(e) => setLocalSettings({ ...localSettings, deliveryChargeInsideDhaka: Number(e.target.value) || 0 })}
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-lg text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-900"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sub-Dhaka */}
+                      <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-2">
+                        <div>
+                          <label className="block text-xs font-bold text-neutral-800 mb-1">
+                            জোন ২ নাম (Zone Title):
+                          </label>
+                          <input
+                            type="text"
+                            value={localSettings.deliveryZoneSubDhakaTitle || 'ঢাকার সাব-এরিয়া'}
+                            onChange={(e) => setLocalSettings({ ...localSettings, deliveryZoneSubDhakaTitle: e.target.value })}
+                            placeholder="ঢাকার সাব-এরিয়া"
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-lg text-neutral-900 font-bold focus:outline-none focus:border-neutral-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-neutral-600 mb-1">
+                            ডেলিভারি চার্জ (৳):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="5"
+                            value={localSettings.deliveryChargeSubDhaka !== undefined ? localSettings.deliveryChargeSubDhaka : 100}
+                            onChange={(e) => setLocalSettings({ ...localSettings, deliveryChargeSubDhaka: Number(e.target.value) || 0 })}
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-lg text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-900"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Outside Dhaka */}
+                      <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-2">
+                        <div>
+                          <label className="block text-xs font-bold text-neutral-800 mb-1">
+                            জোন ৩ নাম (Zone Title):
+                          </label>
+                          <input
+                            type="text"
+                            value={localSettings.deliveryZoneOutsideDhakaTitle || 'ঢাকার বাইরে'}
+                            onChange={(e) => setLocalSettings({ ...localSettings, deliveryZoneOutsideDhakaTitle: e.target.value })}
+                            placeholder="ঢাকার বাইরে"
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-lg text-neutral-900 font-bold focus:outline-none focus:border-neutral-900"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-neutral-600 mb-1">
+                            ডেলিভারি চার্জ (৳):
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="5"
+                            value={localSettings.deliveryChargeOutsideDhaka !== undefined ? localSettings.deliveryChargeOutsideDhaka : 130}
+                            onChange={(e) => setLocalSettings({ ...localSettings, deliveryChargeOutsideDhaka: Number(e.target.value) || 0 })}
+                            className="w-full px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-lg text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-900"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. 10-Second Popup Coupon System */}
+                  <div className="p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                          <Tag className="w-4 h-4 text-rose-600" />
+                          <span>২. পপআপ কুপন সিস্টেম (Popup Coupon System):</span>
+                        </h4>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          কাস্টমার ওয়েবসাইট ভিজিট করার নির্দিষ্ট সময় পর একটি আকর্ষণীয় কুপন পপআপ ওপেন হবে।
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={localSettings.enableCouponPopup !== false}
+                          onChange={(e) => setLocalSettings({ ...localSettings, enableCouponPopup: e.target.checked })}
+                          className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-neutral-300"
+                        />
+                        <span className="text-xs font-bold text-neutral-800">সক্রিয় রাখুন</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">
+                          পপআপ টাইমার ডিলে (সেকেন্ড):
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="120"
+                          value={localSettings.couponPopupDelaySeconds !== undefined ? localSettings.couponPopupDelaySeconds : 10}
+                          onChange={(e) => setLocalSettings({ ...localSettings, couponPopupDelaySeconds: Number(e.target.value) || 10 })}
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono font-bold focus:outline-none focus:bg-white"
+                        />
+                        <span className="text-[10px] text-neutral-400 mt-0.5 block">ডিফল্ট: ১০ সেকেন্ড</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">
+                          কুপন কোড (Coupon Code):
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettings.couponPopupCode || 'SPIDEY50'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, couponPopupCode: e.target.value.toUpperCase() })}
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono uppercase font-black focus:outline-none focus:bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">
+                          ডিসকাউন্ট অ্যামাউন্ট (৳ BDT):
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="5"
+                          value={localSettings.couponPopupDiscountAmount !== undefined ? localSettings.couponPopupDiscountAmount : 50}
+                          onChange={(e) => setLocalSettings({ ...localSettings, couponPopupDiscountAmount: Number(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 font-mono font-bold focus:outline-none focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">
+                          পপআপ শিরোনাম (Offer Title):
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettings.couponPopupTitle || ''}
+                          onChange={(e) => setLocalSettings({ ...localSettings, couponPopupTitle: e.target.value })}
+                          placeholder="স্পেশাল ডিসকাউন্ট অফার!"
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none focus:bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-700 mb-1">
+                          পপআপ সাবটাইটেল (Subtitle / বর্ণনা):
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettings.couponPopupSubtitle || ''}
+                          onChange={(e) => setLocalSettings({ ...localSettings, couponPopupSubtitle: e.target.value })}
+                          placeholder="আজকের অর্ডারে উপভোগ করুন ৫০৳ বিশেষ ছাড়!"
+                          className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none focus:bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Global Customization Defaults */}
+                  <div className="p-5 rounded-2xl bg-white border border-neutral-200 shadow-sm space-y-3">
+                    <h4 className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                      <span>৩. ডিফল্ট কাস্টমাইজেশন প্রাইসিং (Default Printing Price):</span>
+                    </h4>
+                    <p className="text-[11px] text-neutral-500">
+                      নতুন কোনো প্রোডাক্ট অ্যাড করার সময় নাম ও নাম্বার প্রিন্টিংয়ের ডিফল্ট চার্জ কত থাকবে তা ঠিক করুন।
+                    </p>
+
+                    <div className="flex items-center gap-4 flex-wrap pt-1">
+                      <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setLocalSettings({ ...localSettings, defaultCustomizationChargeType: 'free', defaultCustomizationCharge: 0 })}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            localSettings.defaultCustomizationChargeType !== 'paid'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-neutral-600 hover:text-neutral-900'
+                          }`}
+                        >
+                          ডিফল্ট: ফ্রি (Free)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLocalSettings({ ...localSettings, defaultCustomizationChargeType: 'paid', defaultCustomizationCharge: localSettings.defaultCustomizationCharge || 100 })}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            localSettings.defaultCustomizationChargeType === 'paid'
+                              ? 'bg-neutral-900 text-white shadow-xs'
+                              : 'text-neutral-600 hover:text-neutral-900'
+                          }`}
+                        >
+                          ডিফল্ট: পেইড (Paid)
+                        </button>
+                      </div>
+
+                      {localSettings.defaultCustomizationChargeType === 'paid' && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-bold text-neutral-700">চার্জ (৳):</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10"
+                            value={localSettings.defaultCustomizationCharge || 100}
+                            onChange={(e) => setLocalSettings({ ...localSettings, defaultCustomizationCharge: Number(e.target.value) || 0 })}
+                            className="w-24 px-3 py-1.5 text-xs bg-neutral-50 border border-neutral-300 rounded-xl text-neutral-900 font-mono font-bold"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 rounded-full bg-[#0d0f12] hover:bg-neutral-800 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                    >
+                      Save Checkout & Coupon Settings
+                    </button>
+                    {settingsSavedToast && (
+                      <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                        <Check className="w-4 h-4" /> সেটিংস সফলভাবে সেভ হয়েছে!
+                      </span>
+                    )}
+                  </div>
+                </form>
+              </div>
             </div>
           )}
 
@@ -2650,6 +3612,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Customization (নাম ও নাম্বার প্রিন্টিং) Pricing Options (Requirement 2) */}
+              <div className="bg-neutral-50 p-3.5 rounded-2xl border border-neutral-200/80 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-neutral-800 block">
+                      Customization Pricing (নাম ও নাম্বার প্রিন্টিং চার্জ):
+                    </label>
+                    <p className="text-[10px] text-neutral-500">
+                      কাস্টমার জার্সিতে নাম ও নাম্বার প্রিন্ট চাইলে চার্জ কত হবে তা নির্ধারণ করুন
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-neutral-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormCustomizationChargeType('free');
+                        setFormCustomizationCharge('0');
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        formCustomizationChargeType === 'free'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-neutral-600 hover:text-neutral-900'
+                      }`}
+                    >
+                      Free (ফ্রি)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormCustomizationChargeType('paid');
+                        if (formCustomizationCharge === '0') setFormCustomizationCharge('100');
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        formCustomizationChargeType === 'paid'
+                          ? 'bg-neutral-900 text-white shadow-xs'
+                          : 'text-neutral-600 hover:text-neutral-900'
+                      }`}
+                    >
+                      Paid (নির্দিষ্ট টাকা)
+                    </button>
+                  </div>
+                </div>
+
+                {formCustomizationChargeType === 'paid' && (
+                  <div className="flex items-center gap-2 pt-1 animate-in fade-in duration-150">
+                    <label className="text-xs font-semibold text-neutral-700 shrink-0">
+                      প্রিন্টিং চার্জ (৳ BDT):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="10"
+                      value={formCustomizationCharge}
+                      onChange={(e) => setFormCustomizationCharge(e.target.value)}
+                      placeholder="e.g. 100"
+                      className="w-32 px-3 py-1.5 text-xs bg-white border border-neutral-300 rounded-xl text-neutral-900 font-mono font-bold focus:outline-none focus:border-neutral-900"
+                    />
+                    <span className="text-[11px] text-neutral-500">৳ জার্সির মূল্যের সাথে যুক্ত হবে</span>
+                  </div>
+                )}
               </div>
 
               <div>

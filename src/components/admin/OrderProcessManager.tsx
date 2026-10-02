@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, 
   Upload, 
@@ -202,6 +202,16 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     // Filter out tombstone deleted orders
     serverOrders = serverOrders.filter(o => !deletedIds.has(o.id));
 
+    // Read persistent scanned order IDs so done/scanned orders never revert to pending
+    let scannedIds = new Set<string>();
+    try {
+      const rawScanned = localStorage.getItem('spidey_scanned_order_ids');
+      if (rawScanned) {
+        const parsed = JSON.parse(rawScanned);
+        if (Array.isArray(parsed)) scannedIds = new Set(parsed);
+      }
+    } catch {}
+
     let localOrders: Order[] = [];
     try {
       const cached = localStorage.getItem('spidey_master_orders');
@@ -214,16 +224,37 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     } catch {}
 
     // Two-way intelligent merge between server database and local cache
-    if (serverOrders.length > 0 && localOrders.length > 0) {
+    if (serverOrders.length > 0 || localOrders.length > 0) {
       const serverMap = new Map(serverOrders.map(o => [o.id, o]));
       const merged: Order[] = [];
 
       for (const s of serverOrders) {
         const l = localOrders.find(o => o.id === s.id);
-        if (l && (l.trackingCode || l.consignmentId || l.courierStatus === 'sent_to_courier') && !s.trackingCode) {
-          merged.push({ ...s, ...l });
-        } else {
-          merged.push(s);
+        const isDone = scannedIds.has(s.id) || 
+          Boolean(l && (l.barcodeScanned || l.status === 'shipped' || l.status === 'dispatched')) || 
+          Boolean(s.barcodeScanned || s.status === 'shipped' || s.status === 'dispatched');
+
+        merged.push({
+          ...s,
+          ...(l || {}),
+          barcodeScanned: isDone ? true : (l?.barcodeScanned || s.barcodeScanned),
+          status: isDone ? 'shipped' : (l?.status || s.status),
+          outboundStockDeducted: isDone ? true : (l?.outboundStockDeducted || s.outboundStockDeducted),
+          courierStatus: (l?.courierStatus === 'delivered' || s.courierStatus === 'delivered') 
+            ? 'delivered' 
+            : (l?.courierStatus || s.courierStatus || (isDone ? 'sent_to_courier' : undefined))
+        });
+      }
+
+      for (const l of localOrders) {
+        if (!serverMap.has(l.id)) {
+          const isDone = scannedIds.has(l.id) || l.barcodeScanned || l.status === 'shipped' || l.status === 'dispatched';
+          merged.push({
+            ...l,
+            barcodeScanned: isDone ? true : l.barcodeScanned,
+            status: isDone ? 'shipped' : l.status,
+            outboundStockDeducted: isDone ? true : l.outboundStockDeducted
+          });
         }
       }
 
@@ -440,15 +471,46 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
     showToast(`🎉 Successfully saved ${convertedOrders.length} orders! Master total is now ${nextSavedOrders.length} orders.`);
   };
 
+  // Filtered orders list for display
+  const filteredSavedOrders = useMemo(() => {
+    return savedOrders.filter(order => {
+      const isSentToCourier = !!order.trackingCode || order.courierStatus === 'sent_to_courier';
+      if (statusFilter === 'courier_sent' && !isSentToCourier) return false;
+      if (statusFilter === 'pending' && isSentToCourier) return false;
+      if (statusFilter === 'exchange' && !order.isExchange) return false;
+
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        order.customerName.toLowerCase().includes(q) ||
+        (order.phoneNumber && order.phoneNumber.includes(q)) ||
+        order.shippingAddress.toLowerCase().includes(q) ||
+        (order.trackingCode && order.trackingCode.includes(q)) ||
+        order.id.toLowerCase().includes(q) ||
+        order.items.some(it => it.product?.title.toLowerCase().includes(q) || it.product?.code?.toLowerCase().includes(q))
+      );
+    });
+  }, [savedOrders, statusFilter, searchQuery]);
+
   // Select / Deselect All checkbox toggle
-  const allCurrentOrders = savedOrders;
-  const isAllSelected = allCurrentOrders.length > 0 && selectedOrderIds.size === allCurrentOrders.length;
+  // Requirement 9: When orders are filtered (e.g., filtered by "Steadfast এন্ট্রি ছাড়া"), clicking the
+  // master select-all checkbox in the corner should ONLY select the orders currently visible under that
+  // specific active filter, rather than selecting all total orders in the database.
+  const isAllSelected = filteredSavedOrders.length > 0 && filteredSavedOrders.every(o => selectedOrderIds.has(o.id));
 
   const handleToggleSelectAll = () => {
     if (isAllSelected) {
-      setSelectedOrderIds(new Set());
+      setSelectedOrderIds(prev => {
+        const next = new Set(prev);
+        filteredSavedOrders.forEach(o => next.delete(o.id));
+        return next;
+      });
     } else {
-      setSelectedOrderIds(new Set(allCurrentOrders.map(o => o.id)));
+      setSelectedOrderIds(prev => {
+        const next = new Set(prev);
+        filteredSavedOrders.forEach(o => next.add(o.id));
+        return next;
+      });
     }
   };
 
@@ -815,25 +877,6 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
 
     showToast(`✓ All ${count} orders permanently deleted. Database & storage is clean.`);
   };
-
-  // Filtered orders list for display
-  const filteredSavedOrders = savedOrders.filter(order => {
-    const isSentToCourier = !!order.trackingCode || order.courierStatus === 'sent_to_courier';
-    if (statusFilter === 'courier_sent' && !isSentToCourier) return false;
-    if (statusFilter === 'pending' && isSentToCourier) return false;
-    if (statusFilter === 'exchange' && !order.isExchange) return false;
-
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      order.customerName.toLowerCase().includes(q) ||
-      (order.phoneNumber && order.phoneNumber.includes(q)) ||
-      order.shippingAddress.toLowerCase().includes(q) ||
-      (order.trackingCode && order.trackingCode.includes(q)) ||
-      order.id.toLowerCase().includes(q) ||
-      order.items.some(it => it.product?.title.toLowerCase().includes(q) || it.product?.code?.toLowerCase().includes(q))
-    );
-  });
 
   // Calculate totals
   const totalCodAmount = savedOrders.reduce((sum, o) => sum + (o.codAmount !== undefined ? o.codAmount : o.totalAmount), 0);

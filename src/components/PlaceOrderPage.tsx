@@ -41,7 +41,7 @@ interface PlaceOrderPageProps {
   isStandalone?: boolean;
 }
 
-const AVAILABLE_SIZES = ['S', 'M', 'L', 'XL', 'XXL', '3XL'];
+const AVAILABLE_SIZES = ['M', 'L', 'XL', 'XXL', 'XXXL'];
 
 export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   products = [],
@@ -311,24 +311,21 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
         createdAt: new Date().toISOString()
       };
 
-      // Send to server
+      // Requirement 7: Employee Order Copy Feature
+      // DO NOT call /api/orders or register this in the main database
+      // to avoid conflicting with customer live store orders.
+      const formattedText = generateReceiptText(newOrder, codAmount.trim());
       try {
-        await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newOrder)
-        });
-      } catch (postErr) {
-        console.warn('API POST notice:', postErr);
+        await navigator.clipboard.writeText(formattedText);
+        setIsCopied(true);
+      } catch (clipErr) {
+        console.warn('Auto copy failed, user can click copy button:', clipErr);
       }
 
       setConfirmedCodAmount(codAmount.trim());
       setConfirmedOrder(newOrder);
-      if (onOrderPlaced) {
-        onOrderPlaced(newOrder);
-      }
     } catch (err) {
-      console.error('Order placement error:', err);
+      console.error('Order format generation error:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -339,10 +336,11 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
     const orderItems = Array.isArray(order.items) ? order.items : [];
     const itemsFormatted = orderItems.map((it, idx) => {
       const codePart = it?.product?.code ? `[${it.product.code}] ` : '';
-      const customPart = it?.customName ? `-  "${it.customName}"` : '';
+      const customPieces = [it?.customName, it?.customNumber].filter(Boolean);
+      const customPart = customPieces.length > 0 ? ` -  "${customPieces.join(' ')}"` : '';
       const prodTitle = it?.product?.title || 'Jersey';
       const sizeStr = it?.selectedSize || 'L';
-      return `${idx + 1}. ${codePart}${prodTitle} (Size: ${sizeStr}) ${customPart}`.trim();
+      return `${idx + 1}. ${codePart}${prodTitle} (Size: ${sizeStr})${customPart}`.trim();
     }).join('\n');
 
     const amountDisplay = codValue ? `${codValue}৳` : '0৳';
@@ -353,9 +351,20 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
       ? `\nGift Box: YES (${order.giftBoxType || 'Premium Gift Box'})`
       : '';
 
+    const rawAddress = (order.shippingAddress || '').trim();
+    let zoneTitle = '';
+    if (order.deliveryZone === 'inside_dhaka') zoneTitle = 'ঢাকার ভেতরে';
+    else if (order.deliveryZone === 'sub_dhaka') zoneTitle = 'ঢাকার সাব-এরিয়া';
+    else if (order.deliveryZone === 'outside_dhaka') zoneTitle = 'ঢাকার বাইরে';
+    else if (order.deliveryZone) zoneTitle = order.deliveryZone;
+
+    const finalAddress = zoneTitle && !rawAddress.includes(`[ ${zoneTitle} ]`) && !rawAddress.includes(`[${zoneTitle}]`)
+      ? `${rawAddress} [ ${zoneTitle} ]`
+      : rawAddress;
+
     return `Name: ${order.customerName}
 Mobile: ${order.phoneNumber}
-Address: ${order.shippingAddress}
+Address: ${finalAddress}
 
 ITEMS:
 ${itemsFormatted}
@@ -435,10 +444,10 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <h1 className="text-lg font-bold text-neutral-900 tracking-tight">
-                Order Placed Successfully
+                অর্ডার ফরম্যাট তৈরি সম্পন্ন (Ready to Copy)
               </h1>
-              <p className="text-xs text-neutral-500 font-mono">
-                ID: <span className="font-semibold text-neutral-800">{confirmedOrder.id}</span>
+              <p className="text-xs text-neutral-500">
+                এই ফরম্যাটটি ক্লিপবোর্ডে কপি করা হয়েছে। এটি সরাসরি মেইন সিস্টেমে কোনো অর্ডার জমা করে না।
               </p>
             </div>
 
@@ -446,7 +455,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-700 uppercase tracking-wider">
-                  Order Summary
+                  Formatted Order Text
                 </span>
                 
                 {/* Copy Button on Top of the Box */}
@@ -989,20 +998,20 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
 
           </div>
 
-          {/* SUBMIT BUTTON */}
-          <div className="pt-3">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3.5 rounded-full bg-neutral-900 hover:bg-black text-white text-xs font-bold shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <span>Processing Order...</span>
-              ) : (
-                <span>Confirm Order</span>
-              )}
-            </button>
-          </div>
+            {/* SUBMIT BUTTON */}
+            <div className="pt-3">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-3.5 rounded-full bg-neutral-900 hover:bg-black text-white text-xs font-bold shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <span>Generating Formatted Order...</span>
+                ) : (
+                  <span>Generate Formatted Order & Copy (ফরম্যাট তৈরি ও কপি করুন)</span>
+                )}
+              </button>
+            </div>
 
         </form>
       </main>
