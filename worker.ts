@@ -119,65 +119,77 @@ function escapeTelegramWorkerHtml(str: string | number | undefined | null): stri
     .replace(/>/g, '&gt;');
 }
 
+function normalizeTelegramWorkerChatIds(rawChatId: string): string[] {
+  const clean = (rawChatId || '').trim();
+  if (!clean) return [];
+  const candidates = new Set<string>();
+
+  if (clean.startsWith('-100')) {
+    candidates.add(clean);
+  } else if (clean.startsWith('100')) {
+    candidates.add(`-${clean}`);
+    candidates.add(clean);
+  } else if (clean.startsWith('-')) {
+    candidates.add(clean);
+    candidates.add(`-100${clean.slice(1)}`);
+  } else {
+    candidates.add(`-100${clean}`);
+    candidates.add(clean);
+    candidates.add(`-${clean}`);
+  }
+
+  return Array.from(candidates);
+}
+
 async function sendWorkerTelegramOrderNotification(order: Order, settings: SiteSettings): Promise<{ success: boolean; message?: string; chatId?: string }> {
   const token = (settings.telegramBotToken || '8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw').trim();
-  const rawChatId = (settings.telegramChatId || '1003901747514').trim();
+  const rawChatId = (settings.telegramChatId || '-1003901747514').trim();
 
   if (!token || !rawChatId || settings.telegramNotificationsEnabled === false) {
     return { success: false, message: 'Telegram notification is disabled or not configured.' };
   }
 
-  const itemsList = (order.items || []).map((it, idx) => {
-    const code = it.product?.code ? `[${escapeTelegramWorkerHtml(it.product.code)}] ` : '';
-    const title = escapeTelegramWorkerHtml(it.product?.title || 'Jersey Item');
-    const size = escapeTelegramWorkerHtml(it.selectedSize || 'N/A');
-    const custom = (it.customName || it.customNumber)
-      ? `\n   ↳ <i>কাস্টমাইজেশন:</i> <b>${escapeTelegramWorkerHtml([it.customName, it.customNumber].filter(Boolean).join(' - '))}</b>${it.customizationFee ? ` (+৳${it.customizationFee})` : ''}`
-      : '';
-    const itemPrice = it.product?.price ? ` • ৳${it.product.price}` : '';
-    const qty = (it.quantity && it.quantity > 1) ? ` x${it.quantity}` : '';
-    return `${idx + 1}. <b>${code}${title}</b> (Size: <b>${size}</b>${qty})${itemPrice}${custom}`;
-  }).join('\n');
+  const customerName = (order.customerName || 'N/A').trim();
+  const phoneNumber = (order.phoneNumber || 'N/A').trim();
+  const rawAddress = (order.shippingAddress || 'N/A').trim();
+  
+  let zoneLabel = '';
+  if (order.deliveryZone === 'inside_dhaka') zoneLabel = ' (ঢাকার ভেতরে)';
+  else if (order.deliveryZone === 'sub_dhaka') zoneLabel = ' (ঢাকার সাব-এরিয়া)';
+  else if (order.deliveryZone === 'outside_dhaka') zoneLabel = ' (ঢাকার বাইরে)';
+  const finalAddress = `${rawAddress}${zoneLabel}`;
 
-  let zoneLabel = 'ঢাকার বাইরে';
-  if (order.deliveryZone === 'inside_dhaka') zoneLabel = 'ঢাকার ভেতরে';
-  else if (order.deliveryZone === 'sub_dhaka') zoneLabel = 'ঢাকার সাব-এরিয়া / আশেপাশের এলাকা';
-  else if (order.deliveryZone === 'outside_dhaka') zoneLabel = 'ঢাকার জেলার বাইরে';
-  else if (order.deliveryZone) zoneLabel = String(order.deliveryZone);
+  const orderItems = Array.isArray(order.items) ? order.items : [];
+  const itemsList: string[] = [];
+  let itemIndex = 1;
 
-  const formattedDate = new Date().toLocaleString('en-GB', { 
-    timeZone: 'Asia/Dhaka',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
+  for (const it of orderItems) {
+    const qty = it.quantity && it.quantity > 0 ? it.quantity : 1;
+    const codePart = it.product?.code ? `[${it.product.code}] ` : '';
+    const titlePart = it.product?.title || 'Jersey';
+    const sizePart = it.selectedSize || 'L';
+    const customParts = [it.customName, it.customNumber].filter(Boolean);
+    const customText = customParts.length > 0 ? ` -  "${customParts.join(' ')}"` : '';
+    const singleLine = `${codePart}${titlePart} (Size: ${sizePart})${customText}`;
 
-  const text = `🛒 <b>নতুন ওয়েবসাইট অর্ডার গ্রহণ করা হয়েছে!</b>
-━━━━━━━━━━━━━━━━━━
-🆔 <b>Order ID:</b> <code>#${escapeTelegramWorkerHtml(order.id)}</code>
-👤 <b>কাস্টমার:</b> <b>${escapeTelegramWorkerHtml(order.customerName || 'N/A')}</b>
-📞 <b>মোবাইল:</b> <code>${escapeTelegramWorkerHtml(order.phoneNumber || 'N/A')}</code>
-📍 <b>ঠিকানা:</b> ${escapeTelegramWorkerHtml(order.shippingAddress || 'N/A')}
-🚚 <b>ডেলিভারি জোন:</b> ${escapeTelegramWorkerHtml(zoneLabel)} (৳${order.shippingFee || 0})
-
-📦 <b>অর্ডারকৃত আইটেমস:</b>
-${itemsList || 'No items listed'}
-
-━━━━━━━━━━━━━━━━━━
-💰 <b>সাবটোটাল:</b> ৳${order.subtotal || 0}
-${order.discount ? `🏷️ <b>কুপন ডিসকাউন্ট:</b> -৳${order.discount}${order.couponCode ? ` (${escapeTelegramWorkerHtml(order.couponCode)})` : ''}\n` : ''}🚚 <b>ডেলিভারি চার্জ:</b> ৳${order.shippingFee || 0}
-💵 <b>সর্বমোট ক্যাশ অন ডেলিভারি (COD):</b> ৳${order.totalAmount || order.codAmount || 0}
-━━━━━━━━━━━━━━━━━━
-⏰ <b>অর্ডারের সময়:</b> ${formattedDate}`;
-
-  const candidateIds = [rawChatId];
-  if (!rawChatId.startsWith('-')) {
-    candidateIds.push(`-100${rawChatId}`);
-    candidateIds.push(`-${rawChatId}`);
+    for (let q = 0; q < qty; q++) {
+      itemsList.push(`${itemIndex}. ${singleLine}`);
+      itemIndex++;
+    }
   }
+
+  const itemsFormatted = itemsList.length > 0 ? itemsList.join('\n') : '1. Jersey (Size: L)';
+  const amountVal = order.totalAmount || order.codAmount || 0;
+
+  const plainText = `Name: ${customerName}
+Mobile: ${phoneNumber}
+Address: ${finalAddress}
+
+ITEMS:
+${itemsFormatted}
+Amount: ${amountVal}৳`;
+
+  const candidateIds = normalizeTelegramWorkerChatIds(rawChatId);
 
   let lastError = '';
   for (const cid of candidateIds) {
@@ -187,8 +199,7 @@ ${order.discount ? `🏷️ <b>কুপন ডিসকাউন্ট:</b> -�
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: cid,
-          text,
-          parse_mode: 'HTML'
+          text: plainText
         })
       });
       const data = await resp.json() as any;
@@ -282,8 +293,6 @@ async function callSteadfastWorkerApi(
 
 // Helper: Load Products from R2 or fallback to initial (multi-key fail-safe)
 async function getStoredProducts(env: Env): Promise<JerseyProduct[]> {
-  if (cachedProducts && cachedProducts.length > 0) return cachedProducts;
-
   if (env.MY_BUCKET) {
     const candidateKeys = [
       R2_PRODUCTS_KEY,
@@ -301,12 +310,8 @@ async function getStoredProducts(env: Env): Promise<JerseyProduct[]> {
           const text = await new Response(obj.body).text();
           const parsed = JSON.parse(text);
           const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.products) ? parsed.products : null);
-          if (Array.isArray(list) && list.length > 0) {
+          if (Array.isArray(list)) {
             cachedProducts = list;
-            // Re-seed canonical R2 key if it was found in an alternate or backup key
-            if (key !== R2_PRODUCTS_KEY) {
-              await saveStoredProducts(env, list);
-            }
             return cachedProducts;
           }
         }
@@ -315,6 +320,8 @@ async function getStoredProducts(env: Env): Promise<JerseyProduct[]> {
       }
     }
   }
+
+  if (cachedProducts && cachedProducts.length > 0) return cachedProducts;
 
   cachedProducts = [...INITIAL_JERSEYS];
   // Persist initial products to R2 so future reads succeed immediately
@@ -592,7 +599,7 @@ export default {
                 const headers = new Headers(corsHeaders);
                 object.writeHttpMetadata(headers);
                 headers.set('etag', object.httpEtag);
-                headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+                headers.set('Cache-Control', 'no-cache, must-revalidate');
                 if (!headers.get('Content-Type')) {
                   const ext = cand.split('.').pop()?.toLowerCase();
                   if (ext === 'png') headers.set('Content-Type', 'image/png');
@@ -1109,7 +1116,13 @@ export default {
         }
 
         return new Response(JSON.stringify({ success: true, count: list.length, products: list }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            ...corsHeaders 
+          }
         });
       }
 
@@ -1449,8 +1462,9 @@ export default {
       }
 
       // 12. Update Product (PUT)
+      // 12. Update Product (PUT)
       if (pathname.startsWith('/api/products/') && request.method === 'PUT') {
-        const id = pathname.replace('/api/products/', '');
+        const id = decodeURIComponent(pathname.replace('/api/products/', ''));
         const updateData: any = await request.json();
         const allProducts = await getStoredProducts(env);
         const index = allProducts.findIndex((p) => p.id === id);
@@ -1477,14 +1491,18 @@ export default {
         allProducts[index] = updated;
         await saveStoredProducts(env, allProducts);
 
-        return new Response(JSON.stringify({ success: true, product: updated }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        return new Response(JSON.stringify({ success: true, product: updated, products: allProducts }), {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            ...corsHeaders 
+          }
         });
       }
 
       // 13. Delete Product (DELETE)
       if (pathname.startsWith('/api/products/') && request.method === 'DELETE') {
-        const id = pathname.replace('/api/products/', '');
+        const id = decodeURIComponent(pathname.replace('/api/products/', ''));
         const allProducts = await getStoredProducts(env);
         const index = allProducts.findIndex((p) => p.id === id);
 
@@ -1495,11 +1513,21 @@ export default {
           });
         }
 
+        // Delete ONLY the exact single product target ID
         const deleted = allProducts.splice(index, 1)[0];
         await saveStoredProducts(env, allProducts);
 
-        return new Response(JSON.stringify({ success: true, message: 'Product deleted', product: deleted }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Product deleted', 
+          product: deleted, 
+          products: allProducts 
+        }), {
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            ...corsHeaders 
+          }
         });
       }
 
@@ -1594,9 +1622,13 @@ export default {
             createdAt: new Date().toISOString()
           };
 
-          const allOrders = await getStoredOrders(env);
-          allOrders.unshift(newOrder);
-          await saveStoredOrders(env, allOrders);
+          // Customer orders from storefront must NOT be saved in Admin Panel
+          // Only dispatch directly to Telegram without creating order in admin panel
+          if (Boolean((newOrder as any)?.saveToDatabase)) {
+            const allOrders = await getStoredOrders(env);
+            allOrders.unshift(newOrder);
+            await saveStoredOrders(env, allOrders);
+          }
 
           // Deduct product stock
           const allProducts = await getStoredProducts(env);
@@ -1613,13 +1645,24 @@ export default {
             await saveStoredProducts(env, allProducts);
           }
 
-          // Asynchronously dispatch Telegram order notification
+          // Directly dispatch Telegram order notification to group and await delivery
           const currentSettings = await getStoredSettings(env);
-          sendWorkerTelegramOrderNotification(newOrder, currentSettings).catch((err) => {
+          let telegramResult: { success: boolean; message?: string; chatId?: string } = { success: false, message: '' };
+          try {
+            telegramResult = await sendWorkerTelegramOrderNotification(newOrder, currentSettings);
+            console.log('Worker Telegram dispatch result:', telegramResult);
+          } catch (err: any) {
             console.warn('Worker Telegram send error:', err);
-          });
+            telegramResult = { success: false, message: err?.message || 'Telegram network error' };
+          }
 
-          return new Response(JSON.stringify({ success: true, order: newOrder, message: 'Order confirmed' }), {
+          return new Response(JSON.stringify({ 
+            success: true, 
+            order: newOrder, 
+            telegramSent: telegramResult.success,
+            telegramError: telegramResult.success ? undefined : telegramResult.message,
+            message: 'Order confirmed and notification sent directly to Telegram' 
+          }), {
             status: 201,
             headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });

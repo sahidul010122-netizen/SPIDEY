@@ -35,34 +35,26 @@ const IMAGES_FILE = path.join(DATA_DIR, 'images.json');
 
 // Helper to safely load JSON with backup recovery to prevent data loss across deployments
 function loadJsonFile<T>(filePath: string, defaultValue: T): T {
-  const backupPath = `${filePath}.bak`;
   try {
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, 'utf-8');
       if (data && data.trim()) {
         const parsed = JSON.parse(data);
-        // If parsed is empty array but defaultValue has items, prioritize backup
-        if (Array.isArray(parsed) && parsed.length === 0 && Array.isArray(defaultValue) && defaultValue.length > 0) {
-          console.warn(`File ${filePath} is an empty array, attempting backup recovery...`);
-        } else {
-          return parsed;
-        }
+        return parsed as T;
       }
     }
   } catch (e) {
-    console.warn(`Error reading ${filePath}, attempting backup recovery:`, e);
+    console.warn(`Error reading ${filePath}:`, e);
   }
 
   // Backup recovery fallback
+  const backupPath = `${filePath}.bak`;
   try {
     if (fs.existsSync(backupPath)) {
       const backupData = fs.readFileSync(backupPath, 'utf-8');
       if (backupData && backupData.trim()) {
         const parsed = JSON.parse(backupData);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          console.log(`✓ Recovered non-empty data for ${path.basename(filePath)} from backup file`);
-          return parsed as T;
-        }
+        return parsed as T;
       }
     }
   } catch (backupErr) {
@@ -72,41 +64,21 @@ function loadJsonFile<T>(filePath: string, defaultValue: T): T {
   return defaultValue;
 }
 
-// Helper to atomically save JSON with automatic backup rotation
+// Helper to reliably save JSON with synchronous backup copy
 function saveJsonFile(filePath: string, data: any) {
-  // Strict Safeguard: Block saving empty products or categories over existing files
-  if (filePath === PRODUCTS_FILE || filePath === CATEGORIES_FILE) {
-    if (!Array.isArray(data) || data.length === 0) {
-      console.warn(`Blocked attempt to write empty array to ${filePath}`);
-      return;
-    }
-  }
-
   const backupPath = `${filePath}.bak`;
-  const tempPath = `${filePath}.tmp.${Date.now()}`;
   try {
     const jsonString = JSON.stringify(data, null, 2);
-    // 1. Write to temp file first
-    fs.writeFileSync(tempPath, jsonString, 'utf-8');
-    // 2. Rotate current file to backup ONLY if it has meaningful content
-    if (fs.existsSync(filePath)) {
-      try {
-        const stat = fs.statSync(filePath);
-        if (stat.size > 10) {
-          fs.copyFileSync(filePath, backupPath);
-        }
-      } catch {}
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    // 3. Atomically replace target file
-    fs.renameSync(tempPath, filePath);
-  } catch (e) {
-    console.warn(`Atomic save failed for ${filePath}, falling back to direct write:`, e);
+    fs.writeFileSync(filePath, jsonString, 'utf-8');
     try {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (writeErr) {
-      console.error(`Fatal: Could not save ${filePath}:`, writeErr);
-    }
+      fs.writeFileSync(backupPath, jsonString, 'utf-8');
+    } catch {}
+  } catch (e) {
+    console.error(`Fatal: Could not save ${filePath}:`, e);
   }
 }
 
@@ -119,19 +91,9 @@ interface StoredImage {
   uploadedAt: string;
 }
 
-// Initialize persistent state - Protects existing data against overwrite on deployment
+// Initialize persistent state - Protects existing user data
 let deletedProductIds: string[] = loadJsonFile<string[]>(DELETED_PRODUCTS_FILE, []);
-let products: JerseyProduct[] = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, [...INITIAL_JERSEYS]);
-
-// Purge any products that were permanently deleted
-if (deletedProductIds.length > 0) {
-  const delSet = new Set(deletedProductIds);
-  const beforeLen = products.length;
-  products = products.filter((p) => !delSet.has(p.id) && !delSet.has(p.code));
-  if (products.length !== beforeLen) {
-    saveJsonFile(PRODUCTS_FILE, products);
-  }
-}
+let products: JerseyProduct[] = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
 
 // Ensure every product has sortOrder and position stamped
 products.forEach((p, idx) => {
@@ -142,24 +104,9 @@ products.forEach((p, idx) => {
 
 let orders: Order[] = loadJsonFile<Order[]>(ORDERS_FILE, []);
 let siteSettings: SiteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
-let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
-if (!Array.isArray(categoryItems) || categoryItems.length === 0) {
-  categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
-  saveJsonFile(CATEGORIES_FILE, categoryItems);
-}
-if (!Array.isArray(products) || products.length === 0) {
-  products = [...INITIAL_JERSEYS];
-  saveJsonFile(PRODUCTS_FILE, products);
-}
+let categoryItems: CategoryItem[] = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+
 let deletedCategoryIds: string[] = loadJsonFile<string[]>(DELETED_CATEGORIES_FILE, []);
-if (deletedCategoryIds.length > 0) {
-  const delSet = new Set(deletedCategoryIds);
-  const beforeLen = categoryItems.length;
-  categoryItems = categoryItems.filter((c) => !delSet.has(c.id) && !delSet.has(c.name));
-  if (categoryItems.length !== beforeLen) {
-    saveJsonFile(CATEGORIES_FILE, categoryItems);
-  }
-}
 
 // Ensure every category has sortOrder and position stamped
 categoryItems.forEach((c, idx) => {
@@ -323,35 +270,72 @@ async function startServer() {
   });
 
   // --- Site Settings (Hero Banner, Slogans, Logos) ---
-  app.get('/api/settings', (req: Request, res: Response) => {
+  app.get('/api/settings', (_req: Request, res: Response) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const loaded = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
+      if (loaded && typeof loaded === 'object') {
+        siteSettings = { ...DEFAULT_SITE_SETTINGS, ...loaded };
+      }
+    }
     res.json({ success: true, settings: siteSettings });
   });
 
   app.post('/api/settings', (req: Request, res: Response) => {
+    const body = req.body || {};
+    let finalHeroBg = body.heroBgImage !== undefined ? body.heroBgImage : siteSettings.heroBgImage;
+    if (typeof finalHeroBg === 'string' && finalHeroBg.startsWith('data:image/')) {
+      finalHeroBg = sanitizeCategoryImage(finalHeroBg, 'hero_banner');
+    }
+
+    let finalLogo = body.headerLogoImage !== undefined ? body.headerLogoImage : siteSettings.headerLogoImage;
+    if (typeof finalLogo === 'string' && finalLogo.startsWith('data:image/')) {
+      finalLogo = sanitizeCategoryImage(finalLogo, 'header_logo');
+    }
+
     siteSettings = {
       ...siteSettings,
-      ...req.body
+      ...body,
+      heroBgImage: finalHeroBg,
+      headerLogoImage: finalLogo
     };
     saveJsonFile(SETTINGS_FILE, siteSettings);
     res.json({ success: true, settings: siteSettings });
   });
 
   app.put('/api/settings', (req: Request, res: Response) => {
+    const body = req.body || {};
+    let finalHeroBg = body.heroBgImage !== undefined ? body.heroBgImage : siteSettings.heroBgImage;
+    if (typeof finalHeroBg === 'string' && finalHeroBg.startsWith('data:image/')) {
+      finalHeroBg = sanitizeCategoryImage(finalHeroBg, 'hero_banner');
+    }
+
+    let finalLogo = body.headerLogoImage !== undefined ? body.headerLogoImage : siteSettings.headerLogoImage;
+    if (typeof finalLogo === 'string' && finalLogo.startsWith('data:image/')) {
+      finalLogo = sanitizeCategoryImage(finalLogo, 'header_logo');
+    }
+
     siteSettings = {
       ...siteSettings,
-      ...req.body
+      ...body,
+      heroBgImage: finalHeroBg,
+      headerLogoImage: finalLogo
     };
     saveJsonFile(SETTINGS_FILE, siteSettings);
     res.json({ success: true, settings: siteSettings });
   });
 
-  // Helper to sanitize and persist category images safely
+  // Helper to sanitize and persist category images safely & permanently
   function sanitizeCategoryImage(rawImage: any, name: string): string {
     let img = typeof rawImage === 'string' ? rawImage.trim() : '';
-    if (!img || img.startsWith('blob:')) {
+    if (!img) return '';
+    if (img.startsWith('blob:')) {
       return '';
     }
-    // If base64, save to static uploads disk automatically so categories.json stays small & fast
+    // If base64, save to static uploads disk AND register in imageStore + persistImages()
+    // Exactly matching how product image upload permanently stores images!
     if (img.startsWith('data:image/')) {
       try {
         const parts = img.split(',');
@@ -359,12 +343,35 @@ async function startServer() {
         const mime = match ? match[1] : 'image/jpeg';
         const cleanData = parts[1] || '';
         const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
-        const cleanName = (name || 'cat').toLowerCase().replace(/[^a-z0-9]/g, '_');
-        const filename = `cat_${Date.now()}_${cleanName}.${ext}`;
+        const cleanName = (name || 'cat').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+        const uniqueBaseName = `${Date.now()}-${cleanName}.${ext}`;
+        const key = `uploads/${uniqueBaseName}`;
         const buffer = Buffer.from(cleanData, 'base64');
-        fs.writeFileSync(path.join(PUBLIC_UPLOADS_DIR, filename), buffer);
-        try { fs.writeFileSync(path.join(UPLOADS_DIR, filename), buffer); } catch {}
-        return `/uploads/${filename}`;
+
+        // Write directly to both upload targets
+        const targetPaths = [
+          path.join(UPLOADS_DIR, uniqueBaseName),
+          path.join(PUBLIC_UPLOADS_DIR, uniqueBaseName)
+        ];
+        for (const diskPath of targetPaths) {
+          try {
+            fs.writeFileSync(diskPath, buffer);
+          } catch (writeErr) {
+            console.warn(`Could not write category image to ${diskPath}:`, writeErr);
+          }
+        }
+
+        // Store in imageStore & persistImages so it is backed up in images.json & restored on any restart!
+        imageStore.set(key, {
+          data: cleanData,
+          mime,
+          size: buffer.length,
+          filename: uniqueBaseName,
+          uploadedAt: new Date().toISOString()
+        });
+        persistImages();
+
+        return `/uploads/${uniqueBaseName}`;
       } catch (e) {
         console.warn('Failed to convert base64 category image:', e);
         return '';
@@ -382,15 +389,9 @@ async function startServer() {
     // Always ensure in-memory state matches disk state
     if (fs.existsSync(CATEGORIES_FILE)) {
       const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
-      if (Array.isArray(loaded) && loaded.length > 0) {
+      if (Array.isArray(loaded)) {
         categoryItems = loaded;
       }
-    }
-
-    // Fail-safe: If categories is empty, recover from initial catalog
-    if (!Array.isArray(categoryItems) || categoryItems.length === 0) {
-      categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
-      saveJsonFile(CATEGORIES_FILE, categoryItems);
     }
 
     // Stamp sortOrder and position if missing
@@ -560,6 +561,14 @@ async function startServer() {
   });
 
   app.post('/api/categories', (req: Request, res: Response) => {
+    // 1. Reload from disk first to ensure we have the absolute latest state
+    if (fs.existsSync(CATEGORIES_FILE)) {
+      const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        categoryItems = loaded;
+      }
+    }
+
     const body = req.body;
     if (Array.isArray(body)) {
       const seenIds = new Set<string>();
@@ -584,7 +593,10 @@ async function startServer() {
             name: rawName,
             subtitle: String(c?.subtitle || '').trim(),
             image: sanitizeCategoryImage(c?.image, rawName),
-            tag: String(c?.tag || 'Drop').trim()
+            tag: String(c?.tag || 'Drop').trim(),
+            sortOrder: typeof c?.sortOrder === 'number' ? c.sortOrder : categoryItems.length,
+            position: typeof c?.position === 'number' ? c.position : categoryItems.length,
+            priority: typeof c?.priority === 'number' ? c.priority : categoryItems.length
           };
         })
         .filter((c): c is any => Boolean(c)) as CategoryItem[];
@@ -602,7 +614,10 @@ async function startServer() {
         name,
         subtitle: body.subtitle !== undefined ? String(body.subtitle).trim() : '',
         image: sanitizeCategoryImage(body.image, name),
-        tag: body.tag !== undefined ? String(body.tag).trim() : 'Drop'
+        tag: body.tag !== undefined ? String(body.tag).trim() : 'Drop',
+        sortOrder: typeof body.sortOrder === 'number' ? body.sortOrder : categoryItems.length,
+        position: typeof body.position === 'number' ? body.position : categoryItems.length,
+        priority: typeof body.priority === 'number' ? body.priority : categoryItems.length
       };
 
       const idLower = newCategory.id.toLowerCase();
@@ -625,32 +640,83 @@ async function startServer() {
   });
 
   app.put('/api/categories/:id', (req: Request, res: Response) => {
-    const rawId = decodeURIComponent(String(req.params.id || '').trim());
+    // 1. Reload latest state from disk first!
+    if (fs.existsSync(CATEGORIES_FILE)) {
+      const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        categoryItems = loaded;
+      }
+    }
+
+    let rawId = String(req.params.id || '').trim();
+    try {
+      rawId = decodeURIComponent(rawId).trim();
+    } catch {}
     const rawIdLower = rawId.toLowerCase();
-    const idx = categoryItems.findIndex(
-      c => c.id === rawId || c.id.toLowerCase() === rawIdLower || c.name.toLowerCase() === rawIdLower
-    );
+
+    const bodyId = req.body.id ? String(req.body.id).trim().toLowerCase() : '';
+    const bodyOldName = req.body.oldName ? String(req.body.oldName).trim().toLowerCase() : '';
+    const bodyName = req.body.name ? String(req.body.name).trim().toLowerCase() : '';
+
+    let idx = categoryItems.findIndex(c => {
+      const cId = (c.id || '').trim().toLowerCase();
+      const cName = (c.name || '').trim().toLowerCase();
+      return (
+        cId === rawIdLower ||
+        cName === rawIdLower ||
+        (bodyId && cId === bodyId) ||
+        (bodyOldName && cName === bodyOldName) ||
+        (bodyName && cName === bodyName) ||
+        (rawIdLower.length > 1 && cId.replace(/[^a-z0-9]/g, '') === rawIdLower.replace(/[^a-z0-9]/g, '') && cId.replace(/[^a-z0-9]/g, '').length > 0) ||
+        (rawIdLower.length > 1 && cName.replace(/[^a-z0-9]/g, '') === rawIdLower.replace(/[^a-z0-9]/g, '') && cName.replace(/[^a-z0-9]/g, '').length > 0)
+      );
+    });
+
+    const updatedName = req.body.name ? String(req.body.name).trim() : rawId;
+    const finalImage = req.body.image !== undefined 
+      ? sanitizeCategoryImage(req.body.image, updatedName) 
+      : '';
+
+    // If category not found, UPSERT it so user edits are NEVER lost on refresh!
     if (idx === -1) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      const newCategory: CategoryItem = {
+        id: req.body.id || rawId || `cat-${Date.now().toString(36)}`,
+        name: updatedName,
+        subtitle: req.body.subtitle !== undefined ? String(req.body.subtitle).trim() : '',
+        image: finalImage,
+        tag: req.body.tag !== undefined ? String(req.body.tag).trim() : 'Drop',
+        sortOrder: categoryItems.length,
+        position: categoryItems.length,
+        priority: categoryItems.length
+      };
+      categoryItems.push(newCategory);
+      saveJsonFile(CATEGORIES_FILE, categoryItems);
+      return res.json({ success: true, category: newCategory, categories: categoryItems });
     }
 
     const oldCategory = categoryItems[idx];
-    const updatedName = req.body.name ? String(req.body.name).trim() : oldCategory.name;
+    const categoryFinalImage = req.body.image !== undefined
+      ? sanitizeCategoryImage(req.body.image, updatedName)
+      : oldCategory.image;
+
     const updatedCategory: CategoryItem = {
       ...oldCategory,
       ...req.body,
       id: req.body.id ? String(req.body.id).trim() : oldCategory.id,
-      name: updatedName,
+      name: updatedName || oldCategory.name,
       subtitle: req.body.subtitle !== undefined ? String(req.body.subtitle).trim() : oldCategory.subtitle,
-      image: req.body.image ? sanitizeCategoryImage(req.body.image, updatedName) : oldCategory.image,
+      image: categoryFinalImage || oldCategory.image,
       tag: req.body.tag !== undefined ? String(req.body.tag).trim() : oldCategory.tag,
+      sortOrder: oldCategory.sortOrder !== undefined ? oldCategory.sortOrder : idx,
+      position: oldCategory.position !== undefined ? oldCategory.position : idx,
+      priority: oldCategory.priority !== undefined ? oldCategory.priority : idx,
     };
 
     categoryItems[idx] = updatedCategory;
     saveJsonFile(CATEGORIES_FILE, categoryItems);
 
     // If category name changed, update products that belong to this category
-    if (req.body.name && req.body.name !== oldCategory.name) {
+    if (updatedName && updatedName !== oldCategory.name) {
       let prodsUpdated = false;
       products = products.map((p) => {
         if (p.category.toLowerCase() === oldCategory.name.toLowerCase() || p.category.toLowerCase() === oldCategory.id.toLowerCase()) {
@@ -668,7 +734,18 @@ async function startServer() {
   });
 
   app.delete('/api/categories/:id', (req: Request, res: Response) => {
-    const rawId = decodeURIComponent(String(req.params.id || '').trim());
+    // 1. Reload from disk first
+    if (fs.existsSync(CATEGORIES_FILE)) {
+      const loaded = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        categoryItems = loaded;
+      }
+    }
+
+    let rawId = String(req.params.id || '').trim();
+    try {
+      rawId = decodeURIComponent(rawId).trim();
+    } catch {}
     const rawIdLower = rawId.toLowerCase();
     const target = categoryItems.find(
       c => c.id === rawId || c.id.toLowerCase() === rawIdLower || c.name.toLowerCase() === rawIdLower
@@ -684,6 +761,9 @@ async function startServer() {
       return true;
     });
 
+    // Track deletion tombstone
+    deletedCategoryIds = Array.from(new Set([...deletedCategoryIds, targetId, rawId]));
+    saveJsonFile(DELETED_CATEGORIES_FILE, deletedCategoryIds);
     saveJsonFile(CATEGORIES_FILE, categoryItems);
 
     res.json({ success: true, message: `Category '${targetId}' permanently deleted from store disk`, categories: categoryItems });
@@ -700,15 +780,9 @@ async function startServer() {
     // Always ensure in-memory state matches disk state
     if (fs.existsSync(PRODUCTS_FILE)) {
       const loaded = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
-      if (Array.isArray(loaded) && loaded.length > 0) {
+      if (Array.isArray(loaded)) {
         products = loaded;
       }
-    }
-
-    // Fail-safe: If products is empty, recover from initial catalog
-    if (!Array.isArray(products) || products.length === 0) {
-      products = [...INITIAL_JERSEYS];
-      saveJsonFile(PRODUCTS_FILE, products);
     }
 
     // Ensure sortOrder and position are stamped
@@ -772,13 +846,7 @@ async function startServer() {
       });
     }
 
-    // Ensure deleted products are never returned
-    if (deletedProductIds.length > 0) {
-      const delSet = new Set(deletedProductIds);
-      list = list.filter((p) => !delSet.has(p.id) && !delSet.has(p.code));
-    }
-
-    res.json({ success: true, count: list.length, products: list, deletedProductIds });
+    res.json({ success: true, count: list.length, products: list });
   });
 
   // Get Single Product
@@ -786,7 +854,8 @@ async function startServer() {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
-    const product = products.find((p) => p.id === req.params.id);
+    const targetId = decodeURIComponent(String(req.params.id || '').trim());
+    const product = products.find((p) => p.id === targetId || (p.code && p.code === targetId));
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -795,37 +864,50 @@ async function startServer() {
 
   // Create Product (Admin)
   app.post('/api/products', (req: Request, res: Response) => {
+    // Reload from disk first
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      const loaded = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
+      if (Array.isArray(loaded)) {
+        products = loaded;
+      }
+    }
+
     const data = req.body;
     if (!data.title || !data.category || data.price === undefined) {
       return res.status(400).json({ success: false, message: 'Title, category, and price are required' });
     }
 
-    const autoCode = data.code || `SJ-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const autoCode = (data.code && String(data.code).trim())
+      ? String(data.code).trim()
+      : `SJ-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+    const sanitizedImages = (Array.isArray(data.images) ? data.images : [])
+      .map((img: any) => {
+        if (typeof img === 'string' && img.startsWith('data:image/')) {
+          return sanitizeCategoryImage(img, data.title || 'prod');
+        }
+        return typeof img === 'string' ? img.trim() : '';
+      })
+      .filter((img: string) => Boolean(img) && !img.startsWith('blob:'));
 
     const newProduct: JerseyProduct = {
       id: `spidey-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       code: autoCode,
-      title: data.title,
-      category: data.category,
+      title: String(data.title).trim(),
+      category: String(data.category).trim(),
       price: Number(data.price),
       originalPrice: data.originalPrice ? Number(data.originalPrice) : undefined,
       season: data.season || '2024/25',
       edition: data.edition || 'Player Issue / Authentic',
       badge: data.badge || undefined,
-      images: Array.isArray(data.images) && data.images.length > 0 ? data.images : [
-        'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=1000&q=80'
-      ],
-      description: data.description || 'Premium engineered sports jersey crafted with breathable fabric matrix.',
-      features: Array.isArray(data.features) && data.features.length > 0 ? data.features : [
-        'Advanced aerodynamic breathability weave',
-        'High-definition thermal-bonded team emblem',
-        'Tailored athletic performance fit'
-      ],
+      images: sanitizedImages,
+      description: data.description || '',
+      features: Array.isArray(data.features) ? data.features : [],
       sizes: Array.isArray(data.sizes) && data.sizes.length > 0 ? data.sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
       inStock: data.inStock !== false,
       stockCount: data.stockCount !== undefined ? Number(data.stockCount) : 15,
       rating: 5.0,
-      reviewCount: 1,
+      reviewCount: 0,
       customizable: data.customizable !== false,
       colorTheme: data.colorTheme || {
         primary: '#111827',
@@ -847,14 +929,12 @@ async function startServer() {
       p.priority = idx;
     });
 
-    // If this id or code was previously deleted, remove it from tombstone
-    deletedProductIds = deletedProductIds.filter(id => id !== newProduct.id && id !== newProduct.code);
-    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
     saveJsonFile(PRODUCTS_FILE, products);
+
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
-    res.status(201).json({ success: true, product: newProduct });
+    res.status(201).json({ success: true, product: newProduct, products });
   });
 
   // Reorder Products endpoint (Admin drag-and-drop sync)
@@ -915,6 +995,14 @@ async function startServer() {
 
   // Update Product (Admin)
   app.put('/api/products/:id', (req: Request, res: Response) => {
+    // Reload from disk first
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      const loaded = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
+      if (Array.isArray(loaded)) {
+        products = loaded;
+      }
+    }
+
     const targetId = decodeURIComponent(String(req.params.id || '').trim());
     const index = products.findIndex((p) => p.id === targetId || p.code === targetId);
     if (index === -1) {
@@ -924,11 +1012,26 @@ async function startServer() {
     const current = products[index];
     const updateData = req.body;
 
+    let sanitizedImages = current.images;
+    if (Array.isArray(updateData.images)) {
+      sanitizedImages = updateData.images
+        .map((img: any) => {
+          if (typeof img === 'string' && img.startsWith('data:image/')) {
+            return sanitizeCategoryImage(img, updateData.title || current.title || 'prod');
+          }
+          return typeof img === 'string' ? img.trim() : '';
+        })
+        .filter((img: string) => Boolean(img) && !img.startsWith('blob:'));
+    }
+
     const updated: JerseyProduct = {
       ...current,
       ...updateData,
       id: current.id,
-      code: updateData.code !== undefined ? updateData.code : current.code,
+      code: updateData.code !== undefined ? String(updateData.code).trim() : current.code,
+      title: updateData.title !== undefined ? String(updateData.title).trim() : current.title,
+      category: updateData.category !== undefined ? String(updateData.category).trim() : current.category,
+      images: sanitizedImages,
       price: updateData.price !== undefined ? Number(updateData.price) : current.price,
       originalPrice: updateData.originalPrice !== undefined ? (updateData.originalPrice ? Number(updateData.originalPrice) : undefined) : current.originalPrice,
       stockCount: updateData.stockCount !== undefined ? Number(updateData.stockCount) : current.stockCount,
@@ -937,43 +1040,54 @@ async function startServer() {
 
     products[index] = updated;
     saveJsonFile(PRODUCTS_FILE, products);
-    res.json({ success: true, product: updated });
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.json({ success: true, product: updated, products });
   });
 
   // Delete Product Permanently (Admin)
   app.delete('/api/products/:id', (req: Request, res: Response) => {
+    // 1. Reload latest products from disk first!
+    if (fs.existsSync(PRODUCTS_FILE)) {
+      const loaded = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
+      if (Array.isArray(loaded)) {
+        products = loaded;
+      }
+    }
+
     const targetId = decodeURIComponent(String(req.params.id || '').trim());
-    const index = products.findIndex((p) => p.id === targetId || p.code === targetId);
-    
+    if (!targetId) {
+      return res.status(400).json({ success: false, message: 'Product ID is required' });
+    }
+
+    // Delete ONLY the exact matching product by ID
+    const index = products.findIndex((p) => p.id === targetId);
     let deleted: JerseyProduct | null = null;
     if (index !== -1) {
       deleted = products.splice(index, 1)[0];
     }
 
-    // Always tombstone the targetId so it never resurrects
-    if (targetId && !deletedProductIds.includes(targetId)) {
-      deletedProductIds.push(targetId);
-    }
-    if (deleted) {
-      if (deleted.id && !deletedProductIds.includes(deleted.id)) {
-        deletedProductIds.push(deleted.id);
-      }
-      if (deleted.code && !deletedProductIds.includes(deleted.code)) {
-        deletedProductIds.push(deleted.code);
-      }
-    }
-
-    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
+    // Save updated products directly to disk
     saveJsonFile(PRODUCTS_FILE, products);
 
-    // Return the clean live product catalog directly
-    const cleanProducts = products.filter(p => !deletedProductIds.includes(p.id) && !deletedProductIds.includes(p.code));
+    // Keep deletedProductIds in sync
+    deletedProductIds = deletedProductIds.filter(id => id !== targetId);
+    if (deleted?.code) {
+      deletedProductIds = deletedProductIds.filter(id => id !== deleted.code);
+    }
+    saveJsonFile(DELETED_PRODUCTS_FILE, deletedProductIds);
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     res.json({
       success: true,
       message: 'Product permanently deleted',
       product: deleted,
-      products: cleanProducts,
-      deletedProductIds
+      products
     });
   });
 
@@ -1300,7 +1414,7 @@ async function startServer() {
       const buffer = Buffer.from(item.data, 'base64');
       res.setHeader('Content-Type', item.mime || 'image/jpeg');
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       return res.send(buffer);
     }
 
@@ -1316,7 +1430,7 @@ async function startServer() {
       const buffer = Buffer.from(item.data, 'base64');
       res.setHeader('Content-Type', item.mime || 'image/jpeg');
       res.setHeader('Content-Length', buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       return res.send(buffer);
     }
 
@@ -1332,7 +1446,7 @@ async function startServer() {
       if (fs.existsSync(diskPath)) {
         const mimeType = baseName.endsWith('.png') ? 'image/png' : baseName.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
         res.setHeader('Content-Type', mimeType);
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
         return res.sendFile(diskPath);
       }
     }
@@ -1697,21 +1811,11 @@ async function startServer() {
   // Reconnect & Force Re-Index Store Data: POST /api/sync/reconnect or /api/sync/resync
   const handleResync = (_req: Request, res: Response) => {
     // 1. Re-read master files
-    const loadedProducts = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, [...INITIAL_JERSEYS]);
-    if (Array.isArray(loadedProducts) && loadedProducts.length > 0) {
-      products = loadedProducts;
-    } else {
-      products = [...INITIAL_JERSEYS];
-      saveJsonFile(PRODUCTS_FILE, products);
-    }
+    const loadedProducts = loadJsonFile<JerseyProduct[]>(PRODUCTS_FILE, []);
+    products = Array.isArray(loadedProducts) ? loadedProducts : [];
 
-    const loadedCategories = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, [...CATEGORY_CAROUSEL_ITEMS]);
-    if (Array.isArray(loadedCategories) && loadedCategories.length > 0) {
-      categoryItems = loadedCategories;
-    } else {
-      categoryItems = [...CATEGORY_CAROUSEL_ITEMS];
-      saveJsonFile(CATEGORIES_FILE, categoryItems);
-    }
+    const loadedCategories = loadJsonFile<CategoryItem[]>(CATEGORIES_FILE, []);
+    categoryItems = Array.isArray(loadedCategories) ? loadedCategories : [];
 
     siteSettings = loadJsonFile<SiteSettings>(SETTINGS_FILE, { ...DEFAULT_SITE_SETTINGS });
     orders = loadJsonFile<Order[]>(ORDERS_FILE, []);
@@ -1834,15 +1938,26 @@ Amount: ${amountVal}৳`;
     return Array.from(candidates);
   }
 
-  async function sendTelegramOrderNotification(order: Order, settings: SiteSettings): Promise<{ success: boolean; message?: string; chatId?: string }> {
-    const token = (settings.telegramBotToken || '8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw').trim();
-    const rawChatId = (settings.telegramChatId || '-1003901747514').trim();
+  async function sendTelegramOrderNotification(order: Order, settings?: SiteSettings): Promise<{ success: boolean; message?: string; chatId?: string }> {
+    let effectiveSettings = settings || siteSettings;
+    if (fs.existsSync(SETTINGS_FILE)) {
+      try {
+        const loaded = loadJsonFile<SiteSettings>(SETTINGS_FILE, DEFAULT_SITE_SETTINGS);
+        if (loaded && typeof loaded === 'object') {
+          effectiveSettings = { ...DEFAULT_SITE_SETTINGS, ...loaded, ...(settings || {}) };
+          siteSettings = effectiveSettings;
+        }
+      } catch {}
+    }
 
-    if (!token || !rawChatId || settings.telegramNotificationsEnabled === false) {
+    const token = (effectiveSettings.telegramBotToken || '8972453715:AAEHlxk5XLQgsozL1yTwpuCAgT0RSHOzwIw').trim();
+    const rawChatId = (effectiveSettings.telegramChatId || '-1003901747514').trim();
+
+    if (!token || !rawChatId || effectiveSettings.telegramNotificationsEnabled === false) {
       return { success: false, message: 'Telegram notification is disabled or not configured.' };
     }
 
-    const text = formatTelegramOrderText(order, settings);
+    const text = formatTelegramOrderText(order, effectiveSettings);
     const candidateIds = normalizeTelegramChatIds(rawChatId);
 
     let lastError = '';
@@ -1873,7 +1988,7 @@ Amount: ${amountVal}৳`;
   }
 
   // Orders / Checkout Simulation
-  app.post('/api/orders', (req: Request, res: Response) => {
+  app.post('/api/orders', async (req: Request, res: Response) => {
     const { 
       items, 
       customerName, 
@@ -1972,14 +2087,21 @@ Amount: ${amountVal}৳`;
     }
     saveJsonFile(PRODUCTS_FILE, products);
 
-    // Asynchronously dispatch Telegram order notification to group
-    sendTelegramOrderNotification(newOrder, siteSettings).catch((err) => {
-      console.warn('Telegram notification async dispatch error:', err);
-    });
+    // Directly dispatch Telegram order notification to group and await delivery
+    let telegramResult: { success: boolean; message?: string; chatId?: string } = { success: false, message: '' };
+    try {
+      telegramResult = await sendTelegramOrderNotification(newOrder, siteSettings);
+      console.log(`✓ Telegram order dispatch result:`, telegramResult);
+    } catch (err: any) {
+      console.warn('Telegram notification dispatch error:', err);
+      telegramResult = { success: false, message: err?.message || 'Telegram network error' };
+    }
 
     res.status(201).json({
       success: true,
       order: newOrder,
+      telegramSent: telegramResult.success,
+      telegramError: telegramResult.success ? undefined : telegramResult.message,
       message: 'Order confirmed and notification sent directly to Telegram'
     });
   });
@@ -2928,7 +3050,14 @@ Amount: ${amountVal}৳`;
   // --- Vite & Static Asset Handling ---
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        allowedHosts: true,
+        hmr: false,
+        watch: {
+          ignored: ['**/store_data/**', '**/uploads/**', '**/*.json']
+        }
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);

@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #ffffff;
+    --card-bg: #f6f7f9;
+    --brand-red: #e11d48;
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+  }
+
+  body {
+    background-color: #ffffff;
+    color: #111827;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Monospace font for typewriter slogans */
+.font-typewriter {
+  font-family: "Courier New", Courier, monospace, ui-monospace, SFMono-Regular;
+  letter-spacing: 0.05em;
+}
+
+/* Category Card Styling */
+.category-card {
+  background-color: #f6f7f9;
+  border-radius: 1.25rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.category-card:hover {
+  background-color: #ededf2;
+  transform: translateY(-2px);
+}
+
+/* Product Card Styling */
+.product-card-container {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.product-card-container:hover {
+  transform: translateY(-3px);
+}
+
+.product-image-box {
+  background-color: #f6f7f9;
+  border-radius: 1.25rem;
+  transition: background-color 0.25s ease;
+}
+
+.product-card-container:hover .product-image-box {
+  background-color: #ededf2;
+}
+
+/* Glass Modal Overlay */
+.clean-modal-backdrop {
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.clean-modal-content {
+  background-color: #ffffff;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Custom Scrollbar for Smooth Category Carousel */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth Image Transition */
+.img-smooth-zoom {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.img-smooth-zoom:hover {
+  transform: scale(1.04);
+}
+
+/* Thermal & A4 Batch Invoice Print Media Queries */
+@media print {
+  @page {
+    margin: 5mm;
+    size: auto;
+  }
+
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* CRITICAL: Completely hide all default React app/admin background pages */
+  #root,
+  .print-hide-all {
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Exclusively reveal and position the invoice portal */
+  #invoice-print-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  nav, header, aside, .print\:hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .a4-print-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+    display: block !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  .a4-print-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+    margin-bottom: 0 !important;
+  }
+
+  .a4-grid-columns {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    column-gap: 10px !important;
+    row-gap: 8px !important;
+    width: 100% !important;
+    align-items: start !important;
+  }
+
+  .compact-thermal-slip {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border: 1px solid #171717 !important;
+    background-color: #ffffff !important;
+    width: 100% !important;
+    max-width: 96mm !important;
+    box-sizing: border-box !important;
+  }
+}
+
+
