@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   Plus, 
@@ -17,7 +17,8 @@ import { CurrencyCode } from '../utils/currency';
 import { 
   convertBengaliToEnglishDigits, 
   cleanAndFormatPhoneNumber, 
-  parseCombinedAddressBox 
+  parseCombinedAddressBox,
+  shouldAutoCleanAddressInput
 } from '../utils/phoneUtils';
 
 interface OrderItemForm {
@@ -79,6 +80,9 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   // Box 1: Full Address Multiline Single-Box
   // Line 1: Name, Line 2: Phone, Line 3+: Address
   const [combinedDetailsText, setCombinedDetailsText] = useState('');
+  const isComposingRef = useRef(false);
+  const compositionBaseTextRef = useRef('');
+  const pendingMobileCleanTimerRef = useRef<number | null>(null);
   
   // Parsed values
   const [customerName, setCustomerName] = useState('');
@@ -147,21 +151,78 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
     setDeliveryAddress(parsed.address);
   };
 
-  const handleCombinedDetailsChange = (text: string, isPasteInput?: boolean) => {
-    const parsed = parseCombinedAddressBox(text);
-    if (isPasteInput) {
-      const cleanedText = [parsed.name, parsed.phone, parsed.address].filter(Boolean).join('\n');
-      setCombinedDetailsText(cleanedText);
+  const clearPendingMobileCleanTimer = () => {
+    if (pendingMobileCleanTimerRef.current !== null) {
+      window.clearTimeout(pendingMobileCleanTimerRef.current);
+      pendingMobileCleanTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => clearPendingMobileCleanTimer();
+  }, []);
+
+  const applyFormattedCombinedText = (rawText: string) => {
+    const parsed = parseCombinedAddressBox(rawText);
+    const cleanedLines = [parsed.name, parsed.phone, parsed.address].filter(Boolean);
+    const cleanedText = cleanedLines.join('\n');
+    setCombinedDetailsText(cleanedText);
+    syncParsedDetailsState(parsed);
+  };
+
+  const handleCombinedDetailsChange = (text: string, inputType?: string, isComposing?: boolean) => {
+    clearPendingMobileCleanTimer();
+
+    const baseText = isComposing ? compositionBaseTextRef.current : combinedDetailsText;
+    const shouldAutoClean = shouldAutoCleanAddressInput(baseText, text, inputType);
+
+    if (isComposing) {
+      setCombinedDetailsText(text);
+      syncParsedDetailsState(parseCombinedAddressBox(text));
+
+      // Fallback for Android keyboards (e.g. Gboard/Samsung clipboard bar) that keep IME composition active
+      if (shouldAutoClean) {
+        pendingMobileCleanTimerRef.current = window.setTimeout(() => {
+          pendingMobileCleanTimerRef.current = null;
+          isComposingRef.current = false;
+          applyFormattedCombinedText(text);
+        }, 60);
+      }
+      return;
+    }
+
+    if (shouldAutoClean) {
+      applyFormattedCombinedText(text);
     } else {
       setCombinedDetailsText(text);
+      syncParsedDetailsState(parseCombinedAddressBox(text));
     }
-    syncParsedDetailsState(parsed);
+  };
+
+  const handleCombinedDetailsCompositionStart = () => {
+    clearPendingMobileCleanTimer();
+    isComposingRef.current = true;
+    compositionBaseTextRef.current = combinedDetailsText;
+  };
+
+  const handleCombinedDetailsCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>) => {
+    clearPendingMobileCleanTimer();
+    isComposingRef.current = false;
+    const finalText = e.currentTarget.value;
+    if (shouldAutoCleanAddressInput(compositionBaseTextRef.current, finalText, 'compositionEnd')) {
+      applyFormattedCombinedText(finalText);
+    } else {
+      setCombinedDetailsText(finalText);
+      syncParsedDetailsState(parseCombinedAddressBox(finalText));
+    }
   };
 
   const handleCombinedDetailsPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const pastedText = e.clipboardData?.getData('text');
     if (!pastedText) return;
     e.preventDefault();
+    clearPendingMobileCleanTimer();
+    isComposingRef.current = false;
 
     const currentEl = e.currentTarget;
     const start = currentEl.selectionStart ?? 0;
@@ -173,10 +234,7 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
         ? `${combinedDetailsText.slice(0, start)}${pastedText}${combinedDetailsText.slice(end)}`
         : pastedText;
 
-    const parsed = parseCombinedAddressBox(nextRaw);
-    const cleanedLines = [parsed.name, parsed.phone, parsed.address].filter(Boolean);
-    setCombinedDetailsText(cleanedLines.join('\n'));
-    syncParsedDetailsState(parsed);
+    applyFormattedCombinedText(nextRaw);
   };
 
   // Add more jersey row
@@ -927,10 +985,16 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 required
                 value={combinedDetailsText}
                 onPaste={handleCombinedDetailsPaste}
+                onCompositionStart={handleCombinedDetailsCompositionStart}
+                onCompositionEnd={handleCombinedDetailsCompositionEnd}
                 onChange={(e) => {
                   const nativeEvt = e.nativeEvent as InputEvent | undefined;
-                  const isPaste = nativeEvt?.inputType === 'insertFromPaste';
-                  handleCombinedDetailsChange(e.target.value, isPaste);
+                  const inputType = nativeEvt?.inputType;
+                  if (nativeEvt && typeof nativeEvt.isComposing === 'boolean') {
+                    isComposingRef.current = nativeEvt.isComposing;
+                  }
+                  const isComposing = nativeEvt?.isComposing ?? isComposingRef.current;
+                  handleCombinedDetailsChange(e.target.value, inputType, isComposing);
                 }}
                 placeholder={`Line 1: Customer Name\nLine 2: Mobile Number (e.g. 01715123766)\nLine 3: Delivery Address (District, Area, Road, House No)`}
                 className={`w-full p-3 text-xs bg-slate-50/70 border rounded-2xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white transition-all font-sans leading-relaxed ${

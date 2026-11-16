@@ -88,8 +88,8 @@
   transform: scale(1.04);
 }
 
-/* Soft Ambient Gradation & Gentle Micro-Animations for Place Order Workspace */
-@keyframes placeOrderGradientShift {
+/* Place Order: Fresh Ice-Blue & Mint-Teal Soft Gradation + Smooth Micro-Animations */
+@keyframes placeOrderSurfaceDrift {
   0% {
     background-position: 0% 50%;
   }
@@ -112,37 +112,55 @@
   }
 }
 
-@keyframes placeOrderOrbFloat {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
+@keyframes placeOrderSatinSheen {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
   }
-  50% {
-    transform: translate3d(12px, -14px, 0) scale(1.05);
+  100% {
+    transform: translateX(240%) skewX(-18deg);
   }
 }
 
-.place-order-aurora-bg {
-  background: linear-gradient(135deg, #f5f7ff 0%, #f4f0ff 30%, #fff4f8 65%, #effcf9 100%);
+.place-order-studio-bg {
+  background: linear-gradient(135deg, #fff9f9 0%, #fff1f2 35%, #fef2f2 70%, #fff8f7 100%);
   background-size: 220% 220%;
-  animation: placeOrderGradientShift 18s ease infinite;
+  animation: placeOrderSurfaceDrift 16s ease infinite;
 }
 
-.place-order-cta-gradient {
-  background: linear-gradient(110deg, #4338ca 0%, #6d28d9 48%, #db2777 100%);
+.place-order-cta-satin {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(110deg, #b91c1c 0%, #dc2626 48%, #e11d48 100%);
   background-size: 200% 200%;
-  animation: placeOrderGradientShift 8s ease infinite;
+  animation: placeOrderSurfaceDrift 7s ease infinite;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.place-order-cta-satin::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.24), transparent);
+  transform: translateX(-140%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.place-order-cta-satin:hover::after {
+  animation: placeOrderSatinSheen 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .place-order-card-enter {
-  animation: placeOrderCardEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: placeOrderCardEnter 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.place-order-orb-1 {
-  animation: placeOrderOrbFloat 12s ease-in-out infinite;
-}
-
-.place-order-orb-2 {
-  animation: placeOrderOrbFloat 15s ease-in-out infinite reverse;
+@media (prefers-reduced-motion: reduce) {
+  .place-order-studio-bg,
+  .place-order-cta-satin,
+  .place-order-card-enter,
+  .place-order-cta-satin::after {
+    animation: none !important;
+  }
 }
 
 /* Thermal & A4 Batch Invoice Print Media Queries */

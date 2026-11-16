@@ -121,13 +121,13 @@ function isJunkOrNonAddressLine(line: string): boolean {
   if (/^\d+\.\s*\[?[A-Z]{2,5}-[A-Z0-9]+/i.test(trimmed)) return true;
 
   // Explicit price / jersey / size / payment / order metadata lines
-  if (/^(?:price|total(?:\s*amount)?|cod(?:\s*amount)?|amount|delivery\s*charge|charge|tk|taka|bdt|subtotal|discount|jersey(?:\s*name)?|product|kit|size|qty|quantity|custom(?:\s*name)?|edition|season|code|exchange(?:\s*parcel)?|gift\s*box|payment(?:\s*method)?|bkash|nagad|rocket|note|order(?:\s*id|\s*no|\s*date)?|টাকা|দাম|মূল্য|চার্জ|ডেলিভারি\s*চার্জ|সাইজ|জার্সি|পেমেন্ট|বিকাশ|নগদ)\s*[:\-=]/i.test(trimmed)) {
+  if (/^(?:price|total(?:\s*amount)?|cod(?:\s*amount)?|amount|delivery\s*charge|charge|tk|taka|bdt|subtotal|discount|jersey(?:\s*name)?|product|kit|size|qty|quantity|custom(?:\s*name)?|edition|season|code|exchange(?:\s*parcel)?|gift\s*box|payment(?:\s*method)?|bkash|nagad|rocket|note|order(?:\s*id|\s*no|\s*date)?|টাকা|দাম|মূল্য|চার্জ|ডেলিভারি\s*চার্জ|সাইজ|জার্সি|পেমেন্ট|বিকাশ|নগদ)\s*[:\-=ঃ：]/i.test(trimmed)) {
     return true;
   }
 
   // Standalone price or size lines
   if (/^(?:৳\s*)?\d+(?:\.\d+)?\s*(?:tk|taka|৳|\/-|টাকা)\.?$/i.test(trimmed)) return true;
-  if (/^(?:size\s*[:\-=]?\s*)?(?:xs|s|m|l|xl|xxl|xxxl|2xl|3xl)$/i.test(trimmed)) return true;
+  if (/^(?:size\s*[:\-=ঃ：]?\s*)?(?:xs|s|m|l|xl|xxl|xxxl|2xl|3xl)$/i.test(trimmed)) return true;
 
   // Common messenger greetings / filler sentences with no real detail
   if (/^(?:assalamu\s*alaikum|salam|walikum\s*assalam|hello|hi|hey|bhai|vai|vaiya|bro|thanks|thank\s*you|dhonnobad|please|pls|plz|urgent|আসসালামু\s*আলাইকুম|সালাম|ভাই|ভাইয়া|ধন্যবাদ|প্লিজ)\.?$/i.test(trimmed)) {
@@ -171,7 +171,7 @@ export function parseCombinedAddressBox(text: string): {
 
     // 1. Check explicit Phone / Mobile label
     const phoneLabelMatch = rawLine.match(
-      /^(?:mobile(?:\s*(?:no|number))?|phone(?:\s*(?:no|number))?|contact(?:\s*(?:no|number))?|cell|mob|ph|tel|whatsapp|মোবাইল(?:\s*(?:নাম্বার|নং))?|ফোন(?:\s*(?:নাম্বার|নং))?|নাম্বার|নম্বর)\s*[:\-=.\s]+(.+)$/i
+      /^(?:mobile(?:\s*(?:no|number))?|phone(?:\s*(?:no|number))?|contact(?:\s*(?:no|number))?|cell|mob|ph|tel|whatsapp|মোবাইল(?:\s*(?:নাম্বার|নং))?|ফোন(?:\s*(?:নাম্বার|নং))?|নাম্বার|নম্বর)\s*[:\-=.ঃ：\s]+(.+)$/i
     );
     if (phoneLabelMatch && phoneLabelMatch[1]) {
       const cleanedPhone = cleanAndFormatPhoneNumber(phoneLabelMatch[1]);
@@ -183,7 +183,7 @@ export function parseCombinedAddressBox(text: string): {
 
     // 2. Check explicit Name label
     const nameLabelMatch = rawLine.match(
-      /^(?:customer\s*name|full\s*name|receiver\s*name|recipient|your\s*name|name|নাম|কাস্টমারের\s*নাম|গ্রাহকের\s*নাম)\s*[:\-=.]+\s*(.+)$/i
+      /^(?:customer\s*name|full\s*name|receiver\s*name|recipient|your\s*name|name|নাম|কাস্টমারের\s*নাম|গ্রাহকের\s*নাম)\s*[:\-=.ঃ：]+\s*(.+)$/i
     );
     if (nameLabelMatch && nameLabelMatch[1]) {
       let candidateName = nameLabelMatch[1].trim();
@@ -205,7 +205,7 @@ export function parseCombinedAddressBox(text: string): {
 
     // 3. Check explicit Address label
     const addrLabelMatch = rawLine.match(
-      /^(?:delivery\s*address|shipping\s*address|full\s*address|home\s*address|present\s*address|address|location|ঠিকানা|ডেলিভারি\s*ঠিকানা|বাসার\s*ঠিকানা)\s*[:\-=.]+\s*(.+)$/i
+      /^(?:delivery\s*address|shipping\s*address|full\s*address|home\s*address|present\s*address|address|location|ঠিকানা|ডেলিভারি\s*ঠিকানা|বাসার\s*ঠিকানা)\s*[:\-=.ঃ：]+\s*(.+)$/i
     );
     if (addrLabelMatch && addrLabelMatch[1]) {
       let candidateAddr = addrLabelMatch[1].trim();
@@ -319,3 +319,74 @@ export function parseCombinedAddressBox(text: string): {
   };
 }
 
+function extractAddedSlice(prevText: string, nextText: string): string {
+  if (!prevText) return nextText;
+  let prefixLen = 0;
+  const minLen = Math.min(prevText.length, nextText.length);
+  while (prefixLen < minLen && prevText[prefixLen] === nextText[prefixLen]) {
+    prefixLen++;
+  }
+  let suffixLen = 0;
+  while (
+    suffixLen < minLen - prefixLen &&
+    prevText[prevText.length - 1 - suffixLen] === nextText[nextText.length - 1 - suffixLen]
+  ) {
+    suffixLen++;
+  }
+  return nextText.slice(prefixLen, nextText.length - suffixLen);
+}
+
+/**
+ * Detects both standard pastes (Ctrl+V / long-press Paste -> insertFromPaste)
+ * AND mobile keyboard clipboard selections (Gboard / Samsung Keyboard / SwiftKey,
+ * which typically fire insertText / insertCompositionText / insertReplacementText
+ * without firing a DOM paste event).
+ */
+export function shouldAutoCleanAddressInput(
+  prevText: string,
+  nextText: string,
+  inputType?: string
+): boolean {
+  if (!nextText || !nextText.trim()) return false;
+
+  if (
+    inputType === 'insertFromPaste' ||
+    inputType === 'insertFromPasteAsQuotation' ||
+    inputType === 'insertFromDrop'
+  ) {
+    return true;
+  }
+
+  const addedSlice = extractAddedSlice(prevText, nextText);
+  if (!addedSlice) return false;
+
+  const trimmedAdded = addedSlice.trim();
+  if (!trimmedAdded) return false;
+
+  // Multi-line clipboard insertion (pressing Enter alone leaves trimmedAdded empty)
+  if (/[\r\n]/.test(addedSlice) && trimmedAdded.length >= 5) {
+    return true;
+  }
+
+  // Clipboard insertion containing a phone number or >= 6 digits at once
+  const digitCount = convertBengaliToEnglishDigits(addedSlice).replace(/\D/g, '').length;
+  if (digitCount >= 6 && addedSlice.length >= 6) {
+    return true;
+  }
+
+  // Clipboard insertion containing explicit field labels (e.g. "Name:", "ঠিকানা:")
+  if (/(?:name|mobile|phone|address|contact|cell|cod|price|amount|নাম|মোবাইল|ফোন|ঠিকানা)\s*[:\-=ঃ：]/i.test(addedSlice)) {
+    return true;
+  }
+
+  // Multi-word phrase (>= 2 words, 12+ chars) or very long chunk inserted in a single event
+  if (trimmedAdded.length >= 12 && /\s/.test(trimmedAdded)) {
+    return true;
+  }
+
+  if (addedSlice.length >= 22) {
+    return true;
+  }
+
+  return false;
+}
