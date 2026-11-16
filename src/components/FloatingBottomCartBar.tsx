@@ -25,7 +25,7 @@ export const FloatingBottomCartBar: React.FC<FloatingBottomCartBarProps> = ({
     return acc + (price + custom) * (it.quantity || 1);
   }, 0);
 
-  const thumbnail = latestItem?.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80';
+  const thumbnail = latestItem?.product?.images?.[0] || '';
   const customInfo = [latestItem?.customName, latestItem?.customNumber].filter(Boolean).join(' ');
 
   return (
@@ -46,12 +46,18 @@ export const FloatingBottomCartBar: React.FC<FloatingBottomCartBarProps> = ({
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
           {/* Small Product Image */}
           <div className="relative shrink-0">
-            <img
-              src={thumbnail}
-              alt={latestItem?.product?.title || 'Jersey'}
-              referrerPolicy="no-referrer"
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain bg-white/10 p-0.5 border border-white/15"
-            />
+            {thumbnail ? (
+              <img
+                src={thumbnail}
+                alt={latestItem?.product?.title || 'Product'}
+                referrerPolicy="no-referrer"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain bg-white/10 p-0.5 border border-white/15"
+              />
+            ) : (
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/10 flex items-center justify-center border border-white/15 text-[9px] text-white/50">
+                Item
+              </div>
+            )}
             {totalQuantity > 1 && (
               <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#e50914] text-white text-[10px] font-black flex items-center justify-center shadow-xs">
                 {totalQuantity}

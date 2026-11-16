@@ -10,6 +10,7 @@ import { CartItem, Order } from '../types';
 import { CurrencyCode, formatPrice } from '../utils/currency';
 import { SiteSettings } from '../types/settings';
 import { cleanAndFormatPhoneNumber } from '../utils/phoneUtils';
+import { sendDirectTelegramOrderNotification } from '../utils/telegramNotification';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -169,28 +170,74 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         status: 'confirmed'
       };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload)
-      });
+      let confirmedOrder: Order | null = null;
+      let telegramDelivered = false;
 
-      const data = await res.json();
-      if (data.success && data.order) {
-        setCompletedOrder(data.order);
-        onClearCart();
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload)
+        });
 
-        // Celebration confetti
-        try {
-          confetti({
-            particleCount: 120,
-            spread: 70,
-            origin: { y: 0.6 }
-          });
-        } catch {}
-      } else {
-        setFormError(data.message || 'অর্ডার সাবমিট করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.success && data.order) {
+            confirmedOrder = data.order;
+            telegramDelivered = !!data.telegramSent;
+          }
+        }
+      } catch (backendErr) {
+        console.warn('Backend /api/orders request failed (possibly static deployment):', backendErr);
       }
+
+      // If backend did not deliver to Telegram (e.g. static hosting or worker cutoff),
+      // dispatch directly from customer browser to Telegram!
+      if (!telegramDelivered) {
+        console.log('CartDrawer: Dispatching direct browser Telegram order notification fallback...');
+        const directResult = await sendDirectTelegramOrderNotification(
+          confirmedOrder || {
+            ...orderPayload,
+            id: `SPIDEY-${Date.now().toString(36).toUpperCase()}`
+          },
+          siteSettings
+        );
+        if (directResult.success) {
+          telegramDelivered = true;
+        }
+      }
+
+      const finalOrder: Order = confirmedOrder || {
+        id: `SPIDEY-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
+        items: safeItems,
+        customerName: customerName.trim(),
+        customerEmail: `${cleanPhone}@spideyorder.com`,
+        phoneNumber: cleanPhone,
+        shippingAddress: shippingAddress.trim(),
+        paymentMethod: 'Cash On Delivery (COD)',
+        deliveryZone,
+        couponCode: couponAppliedCode || undefined,
+        subtotal,
+        discount: discountAmount,
+        shippingFee: currentDeliveryFee,
+        totalAmount,
+        codAmount: totalAmount,
+        orderType: 'standard',
+        status: 'confirmed',
+        createdAt: new Date().toISOString()
+      };
+
+      setCompletedOrder(finalOrder);
+      onClearCart();
+
+      // Celebration confetti
+      try {
+        confetti({
+          particleCount: 120,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      } catch {}
     } catch (err: any) {
       setFormError(err.message || 'নেটওয়ার্ক এরর। দয়া করে আবার চেষ্টা করুন।');
     } finally {
@@ -343,12 +390,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       className="p-3 rounded-2xl bg-neutral-50 border border-neutral-200 text-xs space-y-2"
                     >
                       <div className="flex items-start gap-2.5">
-                        <img
-                          src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80'}
-                          alt={item.product?.title}
-                          referrerPolicy="no-referrer"
-                          className="w-11 h-11 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
-                        />
+                        {item.product?.images && item.product.images[0] ? (
+                          <img
+                            src={item.product.images[0]}
+                            alt={item.product?.title}
+                            referrerPolicy="no-referrer"
+                            className="w-11 h-11 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-xl bg-white border border-neutral-200 shrink-0 flex items-center justify-center text-[9px] text-neutral-400 font-bold">
+                            ITEM
+                          </div>
+                        )}
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-1">
@@ -706,12 +759,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       >
                         {/* Top row: Thumbnail, Title, Price & Delete */}
                         <div className="flex items-start gap-3">
-                          <img
-                            src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80'}
-                            alt={item.product?.title}
-                            referrerPolicy="no-referrer"
-                            className="w-14 h-14 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-1"
-                          />
+                          {item.product?.images && item.product.images[0] ? (
+                            <img
+                              src={item.product.images[0]}
+                              alt={item.product?.title}
+                              referrerPolicy="no-referrer"
+                              className="w-14 h-14 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-1"
+                            />
+                          ) : (
+                            <div className="w-14 h-14 rounded-xl bg-white border border-neutral-200 shrink-0 flex items-center justify-center text-[9px] text-neutral-400 font-bold">
+                              ITEM
+                            </div>
+                          )}
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-1">

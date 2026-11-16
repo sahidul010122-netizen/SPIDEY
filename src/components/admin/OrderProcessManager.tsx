@@ -61,6 +61,9 @@ interface OrderProcessManagerProps {
   onRefreshStats?: () => void;
   onNavigateToSteadfastApi?: () => void;
   onNavigateToBarcodeScanner?: () => void;
+  onNavigateToDtfPrint?: () => void;
+  selectedOrderIdsProp?: Set<string>;
+  onSelectedOrderIdsChange?: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
 const SAMPLE_BULK_TEXT = `Name: YASIN
@@ -98,7 +101,10 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   siteSettings,
   onRefreshStats,
   onNavigateToSteadfastApi,
-  onNavigateToBarcodeScanner
+  onNavigateToBarcodeScanner,
+  onNavigateToDtfPrint,
+  selectedOrderIdsProp,
+  onSelectedOrderIdsChange
 }) => {
   // Master persistent saved orders list
   const [savedOrders, setSavedOrders] = useState<Order[]>([]);
@@ -113,8 +119,10 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
   // Staging / Parsed orders waiting to be saved
   const [stagedOrders, setStagedOrders] = useState<ParsedOrder[]>([]);
   
-  // Selection State for Bulk Operations (Steadfast, Print, Delete)
-  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  // Selection State for Bulk Operations (Steadfast, Print, Delete, DTF Print)
+  const [internalSelectedOrderIds, setInternalSelectedOrderIds] = useState<Set<string>>(new Set());
+  const selectedOrderIds = selectedOrderIdsProp ?? internalSelectedOrderIds;
+  const setSelectedOrderIds = onSelectedOrderIdsChange ?? setInternalSelectedOrderIds;
 
   // Active View Tab: 'workspace' (Staging + Master table) or 'master_only'
   const [activeTab, setActiveTab] = useState<'all' | 'staged' | 'saved'>('all');
@@ -714,9 +722,9 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
           title: it.title || 'Official Club Jersey',
           price: 650,
           category: 'Retro Club',
-          images: [it.imageUrl || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'],
+          images: it.imageUrl ? [it.imageUrl] : [],
           sizes: ['M', 'L', 'XL', 'XXL'],
-          description: 'Official kit',
+          description: '',
           inStock: true,
           rating: 4.9,
           code: it.code || 'SJ-PRO'
@@ -1036,7 +1044,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                 {stagedOrders.map((order, orderIdx) => {
                   const hasPhoneError = !order.phoneNumber || order.phoneNumber.length !== 11;
                   const firstItem = order.items?.[0];
-                  const thumbnailImg = firstItem?.matchedProduct?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80';
+                  const thumbnailImg = firstItem?.matchedProduct?.images?.[0] || '';
 
                   return (
                     <tr key={order.tempId} className="hover:bg-amber-50/30 transition-colors">
@@ -1048,12 +1056,16 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       {/* Image Thumbnail Detection */}
                       <td className="py-2.5 px-3">
                         <div className="w-12 h-12 rounded-xl border border-neutral-200 bg-neutral-50 p-1 shrink-0 overflow-hidden flex items-center justify-center shadow-2xs">
-                          <img
-                            src={thumbnailImg}
-                            alt="Jersey"
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-contain"
-                          />
+                          {thumbnailImg ? (
+                            <img
+                              src={thumbnailImg}
+                              alt="Product"
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[9px] text-neutral-400 font-bold">ITEM</span>
+                          )}
                         </div>
                       </td>
 
@@ -1297,6 +1309,22 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
               </span>
             </button>
 
+            {/* DTF Print Generator Button */}
+            {onNavigateToDtfPrint && (
+              <button
+                type="button"
+                disabled={savedOrders.length === 0}
+                onClick={onNavigateToDtfPrint}
+                className="px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                title="Generate clean DTF Print list (Name & Number only) from selected orders"
+              >
+                <FileText className="w-4 h-4" />
+                <span>
+                  DTF Print{selectedOrderIds.size > 0 ? ` (${selectedOrderIds.size})` : ''}
+                </span>
+              </button>
+            )}
+
             {/* Delete Selected Orders Permanently Button */}
             {selectedOrderIds.size > 0 && (
               <button
@@ -1488,7 +1516,7 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                 filteredSavedOrders.map((order, idx) => {
                   const isSelected = selectedOrderIds.has(order.id);
                   const firstItem = order.items?.[0];
-                  const thumbnailImg = firstItem?.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80';
+                  const thumbnailImg = firstItem?.product?.images?.[0] || '';
                   const codAmt = order.codAmount !== undefined ? order.codAmount : order.totalAmount;
 
                   return (
@@ -1521,12 +1549,16 @@ export const OrderProcessManager: React.FC<OrderProcessManagerProps> = ({
                       {/* Thumbnail Image */}
                       <td className="py-3 px-3">
                         <div className="w-11 h-11 rounded-xl border border-neutral-200 bg-neutral-50 p-1 shrink-0 overflow-hidden flex items-center justify-center">
-                          <img
-                            src={thumbnailImg}
-                            alt="Jersey"
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-contain"
-                          />
+                          {thumbnailImg ? (
+                            <img
+                              src={thumbnailImg}
+                              alt="Product"
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-[9px] text-neutral-400 font-bold">ITEM</span>
+                          )}
                         </div>
                       </td>
 

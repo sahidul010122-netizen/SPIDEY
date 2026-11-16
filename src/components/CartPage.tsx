@@ -126,12 +126,18 @@ export const CartPage: React.FC<CartPageProps> = ({
                   >
                     {/* Top Row: Thumbnail, Title, Price, Delete */}
                     <div className="flex items-start gap-4">
-                      <img
-                        src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
-                        alt={item.product?.title}
-                        referrerPolicy="no-referrer"
-                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-contain bg-neutral-50 border border-neutral-200 shrink-0 p-1"
-                      />
+                      {item.product?.images && item.product.images[0] ? (
+                        <img
+                          src={item.product.images[0]}
+                          alt={item.product?.title}
+                          referrerPolicy="no-referrer"
+                          className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-contain bg-neutral-50 border border-neutral-200 shrink-0 p-1"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-neutral-50 border border-neutral-200 shrink-0 flex items-center justify-center text-[10px] text-neutral-400 font-bold">
+                          ITEM
+                        </div>
+                      )}
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">

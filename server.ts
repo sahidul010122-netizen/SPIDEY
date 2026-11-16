@@ -1253,7 +1253,27 @@ async function startServer() {
           finalTitle = `${titlePrefix.trim()} ${cleanName}`;
         }
 
-        const uniqueCode = generateUniqueCode();
+        // Automatic product code derived from the uploaded image's file name
+        const rawFilename = imgItem.filename || (typeof imgItem.url === 'string' ? path.basename(imgItem.url) : '');
+        const fileCodeCandidate = ((imgItem as any).code && String((imgItem as any).code).trim())
+          ? String((imgItem as any).code).trim()
+          : (rawFilename ? rawFilename.replace(/\.[^/.]+$/, '').trim() : '');
+
+        let uniqueCode = '';
+        if (fileCodeCandidate) {
+          uniqueCode = fileCodeCandidate;
+          if (existingCodes.has(uniqueCode.toUpperCase())) {
+            let counter = 2;
+            while (existingCodes.has(`${uniqueCode}-${counter}`.toUpperCase())) {
+              counter++;
+            }
+            uniqueCode = `${uniqueCode}-${counter}`;
+          }
+          existingCodes.add(uniqueCode.toUpperCase());
+        } else {
+          uniqueCode = generateUniqueCode();
+        }
+
         const rawCaption = (imgItem && (imgItem as any).caption) ? (imgItem as any).caption.trim() : sharedCaption;
         const resolvedCaption = rawCaption
           .replace(/{title}/gi, finalTitle)

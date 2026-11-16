@@ -95,7 +95,7 @@ export const SingleProductPage: React.FC<SingleProductPageProps> = ({
   // Image list
   const safeImages = Array.isArray(jersey.images) && jersey.images.length > 0
     ? jersey.images
-    : ['https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80'];
+    : [];
 
   // Total unit price calculation
   const itemCustomFee = hasCustomization ? customFeeAmount : 0;
@@ -191,14 +191,19 @@ export const SingleProductPage: React.FC<SingleProductPageProps> = ({
               LEFT COLUMN: PRODUCT IMAGE GALLERY
              ======================================================== */}
           <div className="space-y-3 sticky md:top-24">
-            {/* Main Featured Photo */}
             <div className="relative aspect-[1/1] w-full rounded-2xl overflow-hidden bg-[#f7f8fa] border border-neutral-200 flex items-center justify-center shadow-xs">
-              <img
-                src={safeImages[activeImageIndex]}
-                alt={jersey.title}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-contain p-4 transition-transform duration-300 hover:scale-105"
-              />
+              {safeImages[activeImageIndex] ? (
+                <img
+                  src={safeImages[activeImageIndex]}
+                  alt={jersey.title}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-contain p-4 transition-transform duration-300 hover:scale-105"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-neutral-400">
+                  <span className="text-xs font-medium">No Image</span>
+                </div>
+              )}
 
               {jersey.code && (
                 <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-neutral-900 text-amber-300 font-mono text-[11px] font-bold shadow-xs">

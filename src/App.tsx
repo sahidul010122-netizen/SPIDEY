@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Heart, ShieldCheck, Check, ArrowUp, Key, Download, Lock, KeyRound, Smartphone, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle, X } from 'lucide-react';
+import { Search, Heart, ShieldCheck, Check, ArrowUp, Key, Download, Lock, KeyRound, Smartphone, Eye, EyeOff, Sparkles, ArrowRight, AlertCircle, X, Package } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -231,7 +231,7 @@ export default function App() {
       const saved = localStorage.getItem('spidey_categories');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.sort((a: any, b: any) => {
             const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (typeof a.position === 'number' ? a.position : 0);
             const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (typeof b.position === 'number' ? b.position : 0);
@@ -239,9 +239,9 @@ export default function App() {
           });
         }
       }
-      return [...CATEGORY_CAROUSEL_ITEMS];
+      return [];
     } catch {
-      return [...CATEGORY_CAROUSEL_ITEMS];
+      return [];
     }
   });
 
@@ -268,31 +268,9 @@ export default function App() {
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Product Data with LocalStorage Persistence and Deleted Tombstones
-  const [products, setProducts] = useState<JerseyProduct[]>(() => {
-    try {
-      const deletedRaw = localStorage.getItem('spidey_deleted_product_ids');
-      const deletedIds: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
-      const delSet = new Set(deletedIds.filter(id => Boolean(id && String(id).trim())));
-
-      const saved = localStorage.getItem('spidey_products') || localStorage.getItem('orifake_products');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((p: any) => !(p.id && delSet.has(p.id)) && !(p.code && delSet.has(p.code)));
-          if (valid.length > 0) {
-            return sortProductsWithPinned(valid);
-          }
-        }
-      }
-      const initialClean = INITIAL_JERSEYS
-        .filter((p) => !(p.id && delSet.has(p.id)) && !(p.code && delSet.has(p.code)))
-        .map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
-      return sortProductsWithPinned(initialClean.length > 0 ? initialClean : INITIAL_JERSEYS);
-    } catch {
-      return INITIAL_JERSEYS.map((p, idx) => ({ ...p, sortOrder: idx, position: idx }));
-    }
-  });
+  // Product Data (Server authoritative with anti-stale initial load)
+  const [products, setProducts] = useState<JerseyProduct[]>([]);
+  const [isProductsLoading, setIsProductsLoading] = useState<boolean>(true);
 
   // Sync browser back/forward buttons (Popstate navigation)
   useEffect(() => {
@@ -515,36 +493,20 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-          // Sync server-side deleted tombstones with localStorage
-          let delSet = new Set<string>();
-          try {
-            const currentDeleted: string[] = JSON.parse(localStorage.getItem('spidey_deleted_product_ids') || '[]');
-            const serverDeleted: string[] = Array.isArray(data.deletedProductIds) ? data.deletedProductIds : [];
-            const merged = Array.from(new Set([...currentDeleted, ...serverDeleted])).filter(id => Boolean(id && String(id).trim()));
-            localStorage.setItem('spidey_deleted_product_ids', JSON.stringify(merged));
-            delSet = new Set(merged);
-          } catch {}
-
-          // Filter against tombstone set and sort strictly: Pinned items float to Top, then drag-and-drop sortOrder
-          const validProducts = data.products.filter((p: JerseyProduct) => !(p.id && delSet.has(p.id)) && !(p.code && delSet.has(p.code)));
-          const cleanProducts: JerseyProduct[] = sortProductsWithPinned(
-            validProducts.length > 0 ? validProducts : data.products
-          );
-
+        if (data.products && Array.isArray(data.products)) {
+          const cleanProducts: JerseyProduct[] = sortProductsWithPinned(data.products);
           setProducts(cleanProducts);
           try {
             localStorage.setItem('spidey_products', JSON.stringify(cleanProducts));
+            localStorage.removeItem('spidey_deleted_product_ids');
             localStorage.removeItem('orifake_products');
           } catch {}
-        } else {
-          // If server products came back empty, ensure we never show blank store
-          setProducts((prev) => (prev && prev.length > 0 ? prev : sortProductsWithPinned(INITIAL_JERSEYS)));
         }
       }
     } catch (err) {
-      console.warn('Using local/cached dataset:', err);
-      setProducts((prev) => (prev && prev.length > 0 ? prev : sortProductsWithPinned(INITIAL_JERSEYS)));
+      console.warn('Products fetch error:', err);
+    } finally {
+      setIsProductsLoading(false);
     }
   };
 
@@ -599,13 +561,14 @@ export default function App() {
             localStorage.removeItem('spidey_deleted_category_ids');
           } catch {}
         } else {
-          // If server categories was empty, fall back to default carousel items
-          setCategoryItems((prev) => (prev && prev.length > 0 ? prev : CATEGORY_CAROUSEL_ITEMS));
+          setCategoryItems([]);
+          try {
+            localStorage.setItem('spidey_categories', JSON.stringify([]));
+          } catch {}
         }
       }
     } catch (err) {
       console.warn('Categories fetch error:', err);
-      setCategoryItems((prev) => (prev && prev.length > 0 ? prev : CATEGORY_CAROUSEL_ITEMS));
     }
   };
 
@@ -720,78 +683,86 @@ export default function App() {
     try {
       const res = await fetch('/api/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         body: JSON.stringify(productData)
       });
       const data = await res.json();
       if (data.success && data.product) {
-        setProducts((prev) => [data.product, ...prev]);
-        showToast('New drop published!');
+        setProducts((prev) => {
+          const next = [data.product, ...prev.filter((p) => p.id !== data.product.id)];
+          try {
+            localStorage.setItem('spidey_products', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        showToast('নতুন প্রোডাক্ট সফলভাবে যুক্ত হয়েছে!');
         fetchStats();
         return true;
       }
     } catch (err) {
-      console.error(err);
+      console.error('Product add error:', err);
     }
     return false;
   };
 
   const handleBulkAddProducts = (newProducts: JerseyProduct[]) => {
     if (!Array.isArray(newProducts) || newProducts.length === 0) return;
-    setProducts((prev) => [...newProducts, ...prev]);
+    setProducts((prev) => {
+      const newIds = new Set(newProducts.map((p) => p.id));
+      const next = [...newProducts, ...prev.filter((p) => !newIds.has(p.id))];
+      try {
+        localStorage.setItem('spidey_products', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     showToast(`Successfully imported ${newProducts.length} products!`);
     fetchStats();
+    window.dispatchEvent(new Event('spidey_catalog_updated'));
   };
 
   const handleUpdateProduct = async (id: string, updateData: Partial<JerseyProduct>): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/products/${id}`, {
+      const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         body: JSON.stringify(updateData)
       });
       const data = await res.json();
       if (data.success && data.product) {
-        setProducts((prev) => prev.map((p) => (p.id === id ? data.product : p)));
-        showToast('Product updated!');
+        setProducts((prev) => {
+          const next = prev.map((p) => (p.id === id ? data.product : p));
+          try {
+            localStorage.setItem('spidey_products', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        showToast('প্রোডাক্ট সফলভাবে আপডেট হয়েছে!');
         fetchStats();
+        window.dispatchEvent(new Event('spidey_catalog_updated'));
         return true;
       }
     } catch (err) {
-      console.error(err);
+      console.error('Product update error:', err);
     }
     return false;
   };
 
   const handleDeleteProduct = async (id: string): Promise<boolean> => {
-    // 1. Identify product target id & code
-    const target = products.find((p) => p.id === id || p.code === id);
+    // 1. Identify product target id strictly by unique ID
+    const target = products.find((p) => p.id === id);
     const targetId = target?.id || id;
-    const targetCode = target?.code;
 
-    // 2. Immediate optimistic state update
-    const updatedProducts = products.filter(
-      (p) => p.id !== targetId && (!targetCode || p.code !== targetCode)
-    );
+    // 2. Immediate optimistic state update ONLY for this exact product ID
+    const updatedProducts = products.filter((p) => p.id !== targetId);
     setProducts(updatedProducts);
 
-    const updatedWishlist = wishlist.filter(
-      (p) => p.id !== targetId && (!targetCode || p.code !== targetCode)
-    );
+    const updatedWishlist = wishlist.filter((p) => p.id !== targetId);
     setWishlist(updatedWishlist);
 
-    // 3. Immediately update LocalStorage tombstones and datasets
+    // 3. Update localStorage
     try {
-      const currentDeleted: string[] = JSON.parse(
-        localStorage.getItem('spidey_deleted_product_ids') || '[]'
-      );
-      const newDeleted = Array.from(
-        new Set([...currentDeleted, targetId, ...(targetCode ? [targetCode] : [])])
-      );
-      localStorage.setItem('spidey_deleted_product_ids', JSON.stringify(newDeleted));
       localStorage.setItem('spidey_products', JSON.stringify(updatedProducts));
       localStorage.setItem('spidey_wishlist', JSON.stringify(updatedWishlist));
-      localStorage.removeItem('orifake_products');
     } catch (e) {
       console.warn('LocalStorage deletion sync error:', e);
     }
@@ -799,35 +770,27 @@ export default function App() {
     // 4. Send permanent delete request to backend
     try {
       const res = await fetch(`/api/products/${encodeURIComponent(targetId)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Cache-Control': 'no-cache' }
       });
       const data = await res.json();
       if (data.success) {
         if (Array.isArray(data.products)) {
           setProducts(data.products);
-          localStorage.setItem('spidey_products', JSON.stringify(data.products));
+          try {
+            localStorage.setItem('spidey_products', JSON.stringify(data.products));
+          } catch {}
         }
         showToast('প্রোডাক্টটি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে ডিলিট করা হয়েছে');
         fetchStats();
+        window.dispatchEvent(new Event('spidey_catalog_updated'));
         return true;
-      } else if (targetCode && targetCode !== targetId) {
-        // Fallback: try deleting by code if id differed
-        const res2 = await fetch(`/api/products/${encodeURIComponent(targetCode)}`, {
-          method: 'DELETE'
-        });
-        const data2 = await res2.json();
-        if (data2.success && Array.isArray(data2.products)) {
-          setProducts(data2.products);
-          localStorage.setItem('spidey_products', JSON.stringify(data2.products));
-          showToast('প্রোডাক্টটি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে ডিলিট করা হয়েছে');
-          fetchStats();
-          return true;
-        }
       }
     } catch (err) {
       console.error('API product deletion error:', err);
     }
     showToast('প্রোডাক্টটি ডাটাবেস ও স্টোর থেকে স্থায়ীভাবে ডিলিট করা হয়েছে');
+    window.dispatchEvent(new Event('spidey_catalog_updated'));
     return true;
   };
 
@@ -1019,14 +982,19 @@ export default function App() {
   };
 
   const handleAddCategory = async (cat: CategoryItem) => {
-    // 1. Functional update to prevent stale closures when adding multiple categories quickly
+    // 1. Functional update to prevent stale closures and synchronize localStorage immediately
     setCategoryItems((prev) => {
       const filtered = prev.filter(
         (c) =>
           String(c.id).toLowerCase() !== String(cat.id).toLowerCase() &&
           String(c.name).toLowerCase() !== String(cat.name).toLowerCase()
       );
-      return [...filtered, cat];
+      const next = [...filtered, cat];
+      try {
+        localStorage.setItem('spidey_categories', JSON.stringify(next));
+        localStorage.removeItem('orifake_categories');
+      } catch {}
+      return next;
     });
 
     // 2. Persist to server
@@ -1038,9 +1006,15 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
-        setCategoryItems(data.categories);
+        const sortedFromServer = data.categories.map((c: any, idx: number) => ({
+          ...c,
+          sortOrder: typeof c.sortOrder === 'number' ? c.sortOrder : idx,
+          position: typeof c.position === 'number' ? c.position : idx,
+          priority: typeof c.priority === 'number' ? c.priority : idx
+        }));
+        setCategoryItems(sortedFromServer);
         try {
-          localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+          localStorage.setItem('spidey_categories', JSON.stringify(sortedFromServer));
           localStorage.removeItem('orifake_categories');
         } catch {}
       }
@@ -1053,27 +1027,39 @@ export default function App() {
 
   const handleUpdateCategory = async (id: string, updated: Partial<CategoryItem>) => {
     const rawId = String(id || '').trim();
-    // 1. Functional state update
-    setCategoryItems((prev) =>
-      prev.map((c) =>
+    // 1. Functional state update and immediate localStorage sync
+    setCategoryItems((prev) => {
+      const next = prev.map((c) =>
         c.id === rawId || c.id.toLowerCase() === rawId.toLowerCase() || c.name.toLowerCase() === rawId.toLowerCase()
           ? { ...c, ...updated }
           : c
-      )
-    );
+      );
+      try {
+        localStorage.setItem('spidey_categories', JSON.stringify(next));
+        localStorage.removeItem('orifake_categories');
+      } catch {}
+      return next;
+    });
 
     // 2. Persist to server
     try {
       const res = await fetch(`/api/categories/${encodeURIComponent(rawId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
+        body: JSON.stringify({ ...updated, id: rawId })
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
-        setCategoryItems(data.categories);
+        const sortedFromServer = data.categories.map((c: any, idx: number) => ({
+          ...c,
+          sortOrder: typeof c.sortOrder === 'number' ? c.sortOrder : idx,
+          position: typeof c.position === 'number' ? c.position : idx,
+          priority: typeof c.priority === 'number' ? c.priority : idx
+        }));
+        setCategoryItems(sortedFromServer);
         try {
-          localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+          localStorage.setItem('spidey_categories', JSON.stringify(sortedFromServer));
+          localStorage.removeItem('orifake_categories');
         } catch {}
       }
       fetchProducts();
@@ -1086,7 +1072,7 @@ export default function App() {
   const handleDeleteCategory = async (id: string) => {
     const rawId = String(id || '').trim();
     
-    // 1. Functional state removal immediately from UI
+    // 1. Functional state removal immediately from UI and localStorage
     setCategoryItems((prev) => {
       const target = prev.find(
         (c) =>
@@ -1104,11 +1090,15 @@ export default function App() {
         setSelectedCategory('all');
       }
 
-      return prev.filter(
+      const next = prev.filter(
         (c) =>
           c.id.toLowerCase() !== targetId.toLowerCase() &&
           (!targetName || c.name.toLowerCase() !== targetName.toLowerCase())
       );
+      try {
+        localStorage.setItem('spidey_categories', JSON.stringify(next));
+      } catch {}
+      return next;
     });
 
     // 2. Persist deletion on backend server
@@ -1118,9 +1108,15 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
-        setCategoryItems(data.categories);
+        const sortedFromServer = data.categories.map((c: any, idx: number) => ({
+          ...c,
+          sortOrder: typeof c.sortOrder === 'number' ? c.sortOrder : idx,
+          position: typeof c.position === 'number' ? c.position : idx,
+          priority: typeof c.priority === 'number' ? c.priority : idx
+        }));
+        setCategoryItems(sortedFromServer);
         try {
-          localStorage.setItem('spidey_categories', JSON.stringify(data.categories));
+          localStorage.setItem('spidey_categories', JSON.stringify(sortedFromServer));
           localStorage.removeItem('orifake_categories');
           localStorage.removeItem('spidey_deleted_category_ids');
         } catch {}
@@ -1372,12 +1368,12 @@ export default function App() {
               headingTitle={siteSettings.categoryHeading || 'Shop by Category'}
             />
 
-            {/* Bestsellers Section matching screenshot */}
+            {/* All Jerseys Section */}
             <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pt-4 sm:pt-6">
               <div className="flex items-baseline justify-between mb-4">
                 <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
                   {selectedCategory === 'all' 
-                    ? (siteSettings.bestsellerHeading || 'Bestsellers') 
+                    ? (siteSettings.bestsellerHeading || 'All Jerseys') 
                     : `${categoryItems.find((c) => c.id === selectedCategory)?.name || selectedCategory} Collection`}
                 </h2>
                 {selectedCategory !== 'all' && (
@@ -1391,7 +1387,30 @@ export default function App() {
               </div>
 
               {/* Strict 2-Column Grid on Mobile, 3-4 on Desktop */}
-              {displayedProducts.length === 0 ? (
+              {isProductsLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="rounded-2xl sm:rounded-3xl bg-neutral-100 animate-pulse aspect-3/4 border border-neutral-200/60" />
+                  ))}
+                </div>
+              ) : safeProductsList.length === 0 ? (
+                <div className="bg-[#f6f7f9] rounded-3xl p-10 text-center space-y-4 max-w-md mx-auto my-8">
+                  <Package className="w-10 h-10 text-neutral-400 mx-auto" />
+                  <h3 className="text-base font-bold text-neutral-900">ক্যাটালগ পরিষ্কার রয়েছে</h3>
+                  <p className="text-xs text-neutral-500">
+                    এখনও কোনো প্রোডাক্ট যোগ করা হয়নি। আপনি অ্যাডমিন প্যানেল থেকে আপনার নিজস্ব প্রোডাক্ট ও ছবি আপলোড করতে পারেন।
+                  </p>
+                  <button
+                    onClick={() => {
+                      setCurrentView('admin');
+                      window.history.pushState({}, '', '/admin');
+                    }}
+                    className="px-5 py-2.5 rounded-full bg-neutral-900 text-white font-bold text-xs shadow-md hover:bg-neutral-800 transition-all cursor-pointer"
+                  >
+                    অ্যাডমিন প্যানেলে যান
+                  </button>
+                </div>
+              ) : displayedProducts.length === 0 ? (
                 <div className="bg-[#f6f7f9] rounded-3xl p-10 text-center space-y-4 max-w-md mx-auto my-8">
                   <Search className="w-8 h-8 text-neutral-400 mx-auto" />
                   <h3 className="text-base font-bold text-neutral-900">No Matching Items</h3>

@@ -402,9 +402,7 @@ export function convertParsedOrderToMasterOrder(parsed: ParsedOrder, index: numb
       price: itemShare,
       season: '2025/26',
       edition: 'Pro Issue',
-      images: [
-        'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=600&q=80'
-      ],
+      images: [],
       description: it.title,
       features: ['Dri-FIT Breathable matrix'],
       sizes: ['S', 'M', 'L', 'XL', 'XXL'],

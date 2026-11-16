@@ -48,6 +48,10 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
     }
   };
 
+  if (!items || items.length === 0) {
+    return null;
+  }
+
   return (
     <section className="w-full px-4 sm:px-6 lg:px-8 py-5 max-w-7xl mx-auto">
       {/* Centered Heading matching screenshot */}
@@ -100,15 +104,21 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
 
               {/* Product Preview Image on Right */}
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-white/80 shrink-0 flex items-center justify-center shadow-inner">
-                <img
-                  src={cat.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
-                  alt={cat.name}
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
-                  }}
-                  className="w-full h-full object-cover"
-                />
+                {cat.image ? (
+                  <img
+                    src={cat.image}
+                    alt={cat.name}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-neutral-400 bg-neutral-100">
+                    {cat.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
               </div>
             </div>
           );

@@ -89,7 +89,7 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
   const [localUploadProgress, setLocalUploadProgress] = useState({ current: 0, total: 0 });
 
   // Batch Configuration form
-  const [batchCategory, setBatchCategory] = useState<string>(() => categories[0]?.id || 'EDC');
+  const [batchCategory, setBatchCategory] = useState<string>(() => categories[0]?.id || categories[0]?.name || '');
   const [customCategory, setCustomCategory] = useState<string>('');
   // Product Title / Name Configuration (User requested: product title/name that displays under each jersey)
   const [commonTitle, setCommonTitle] = useState<string>('');
@@ -98,9 +98,7 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
   const [titlePrefix, setTitlePrefix] = useState<string>('');
 
   // Optional Product Description / Details state
-  const [sharedCaption, setSharedCaption] = useState<string>(
-    '2025/26 Premium Authentic Player Edition Jersey crafted with ultralight aeroready moisture-wicking matrix, heat-bonded silicone crest, and laser-cut ventilation zones.'
-  );
+  const [sharedCaption, setSharedCaption] = useState<string>('');
   const [captionMode, setCaptionMode] = useState<'common' | 'individual'>('common');
   const [showCaptionPreview, setShowCaptionPreview] = useState<boolean>(false);
   const [showDescriptionSection, setShowDescriptionSection] = useState<boolean>(false);
@@ -400,11 +398,18 @@ Sizes: ${selectedSizes.join(', ')}`
     );
   };
 
+  // Sample auto-codes preview based on uploaded image filenames
+  const sampleUniqueCodes = selectedImagesList.length > 0
+    ? selectedImagesList.slice(0, 3).map((img) => (img.filename ? img.filename.replace(/\.[^/.]+$/, '').trim() : 'CODE'))
+    : ['ARG-01', 'RM-HOME', 'BRAZIL-2025'];
+
   const previewResolvedCaption = () => {
     const sampleTitle = selectedImagesList[0]
       ? getResolvedTitle(0, selectedImagesList[0])
       : (commonTitle.trim() || `${batchCategory} Player Edition Kit`);
-    const sampleCode = sampleUniqueCodes[0] || 'SJ-M8K2P';
+    const sampleCode = selectedImagesList[0]?.filename
+      ? selectedImagesList[0].filename.replace(/\.[^/.]+$/, '').trim()
+      : (sampleUniqueCodes[0] || 'ARG-01');
     const finalCategory = batchCategory === 'custom' && customCategory.trim() ? customCategory.trim() : batchCategory;
     return sharedCaption
       .replace(/{title}/gi, sampleTitle)
@@ -414,9 +419,6 @@ Sizes: ${selectedSizes.join(', ')}`
       .replace(/{sizes}/gi, selectedSizes.join(', '))
       .replace(/{edition}/gi, batchEdition || 'Player Issue Authentic');
   };
-
-  // Sample auto-codes preview
-  const sampleUniqueCodes = ['SJ-M8K2P', 'SJ-W4L9X', 'SJ-R7Q1Z'].slice(0, Math.min(3, selectedCount || 3));
 
   // Perform Bulk Product Creation
   const handleExecuteBulkImport = async () => {
@@ -454,6 +456,7 @@ Sizes: ${selectedSizes.join(', ')}`
         customizable: true,
         selectedImages: selectedImagesList.map((item, idx) => ({
           filename: item.filename,
+          code: item.filename ? item.filename.replace(/\.[^/.]+$/, '').trim() : '',
           url: item.url,
           title: getResolvedTitle(idx, item),
           caption:
@@ -504,11 +507,11 @@ Sizes: ${selectedSizes.join(', ')}`
                   Bulk Product Upload from R2 / Storage Folder
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Auto-SKU & Batch
+                  Filename = Product Code
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Scan an R2 or storage folder to convert all images into draft products with unique SKU codes and a shared caption.
+                Scan or upload a folder of jerseys: each image's file name is automatically set as the product's SKU / Code.
               </p>
             </div>
           </div>
@@ -535,7 +538,7 @@ Sizes: ${selectedSizes.join(', ')}`
                   Successfully Generated {successSummary.count} Products!
                 </h4>
                 <p className="text-xs text-neutral-500 mt-1.5 leading-relaxed">
-                  Every product has been assigned to <strong className="text-neutral-800">"{successSummary.category}"</strong>, given a unique <strong className="font-mono text-neutral-800">SJ-XXXXX</strong> code, and synchronized with your live catalog.
+                  Every product has been assigned to <strong className="text-neutral-800">"{successSummary.category}"</strong>, given its filename as the jersey code, and synchronized with your live catalog.
                 </p>
               </div>
 
@@ -823,8 +826,16 @@ Sizes: ${selectedSizes.join(', ')}`
                           <div className="font-bold text-neutral-900 truncate" title={img.filename}>
                             {img.cleanTitle}
                           </div>
-                          <div className="text-[9px] text-neutral-400 font-mono">
-                            {(img.size / 1024).toFixed(0)} KB
+                          <div className="flex items-center justify-between text-[9px] mt-0.5 gap-1">
+                            <span
+                              className="font-mono font-bold text-rose-700 bg-rose-50 border border-rose-200/60 px-1 py-0.5 rounded truncate max-w-[90px]"
+                              title={`Product Code: ${img.filename ? img.filename.replace(/\.[^/.]+$/, '').trim() : ''}`}
+                            >
+                              Code: {img.filename ? img.filename.replace(/\.[^/.]+$/, '').trim() : 'AUTO'}
+                            </span>
+                            <span className="text-neutral-400 font-mono shrink-0">
+                              {(img.size / 1024).toFixed(0)} KB
+                            </span>
                           </div>
                         </div>
                       </div>

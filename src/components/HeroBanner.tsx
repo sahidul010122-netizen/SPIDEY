@@ -7,7 +7,7 @@ interface HeroBannerProps {
 }
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({ onExplore, siteSettings }) => {
-  const bgImage = siteSettings?.heroBgImage || '/images/fragment_hero_banner_1787668127629.jpg';
+  const bgImage = siteSettings?.heroBgImage ? siteSettings.heroBgImage.trim() : '';
   const headline = siteSettings?.heroHeadline || 'FRAGMENT';
   const tag = siteSettings?.heroTag || 'FRAGMENT / 2025';
   const urlText = siteSettings?.heroUrlText || 'WWW.SPIDEY.COM';
@@ -18,16 +18,18 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onExplore, siteSettings 
     <section className="w-full px-3 sm:px-6 lg:px-8 py-2 sm:py-4 max-w-7xl mx-auto">
       <div 
         onClick={onExplore}
-        className="relative w-full rounded-xl sm:rounded-2xl overflow-hidden bg-[#8b0000] cursor-pointer group shadow-lg"
+        className="relative w-full rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-neutral-950 via-[#8b0000] to-neutral-950 cursor-pointer group shadow-lg"
       >
-        {/* Main Cinematic Red Image */}
+        {/* Main Cinematic Red Image / Gradient */}
         <div className="relative aspect-[16/9] sm:aspect-[21/9] md:aspect-[2.4/1] w-full overflow-hidden">
-          <img
-            src={bgImage}
-            alt={tag}
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-700 ease-out"
-          />
+          {bgImage && (
+            <img
+              src={bgImage}
+              alt={tag}
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-700 ease-out"
+            />
+          )}
 
           {/* Red Cinematic Vignette & Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />

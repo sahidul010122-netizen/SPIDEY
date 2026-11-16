@@ -69,12 +69,18 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
                 key={jersey.id}
                 className="p-3 rounded-2xl bg-[#f6f7f9] border border-neutral-100 flex items-center justify-between gap-3"
               >
-                <img
-                  src={jersey.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="w-14 h-14 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-1"
-                />
+                {jersey.images && jersey.images[0] ? (
+                  <img
+                    src={jersey.images[0]}
+                    alt={jersey.title}
+                    referrerPolicy="no-referrer"
+                    className="w-14 h-14 rounded-xl object-contain bg-white border border-neutral-200 shrink-0 p-1"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-white border border-neutral-200 shrink-0 flex items-center justify-center text-[10px] text-neutral-400 font-bold">
+                    ITEM
+                  </div>
+                )}
 
                 <div className="flex-1 min-w-0">
                   <h4 className="text-xs sm:text-sm font-bold text-neutral-900 truncate">

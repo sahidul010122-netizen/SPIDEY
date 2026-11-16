@@ -48,7 +48,7 @@ export const PackingListPrintView: React.FC<PackingListPrintViewProps> = ({
         if (rawSize === 'XXXL') normSize = '3XL';
 
         const qty = Number(item.quantity) || 1;
-        const img = item.product?.images?.[0] || (item.product as any)?.image || '/images/prod_pixel_case_1787668274006.jpg';
+        const img = item.product?.images?.[0] || (item.product as any)?.image || '';
 
         if (!map.has(groupKey)) {
           map.set(groupKey, {

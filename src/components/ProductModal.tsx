@@ -70,7 +70,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   // Image Array and Touch Swipe Handling
   const safeImages = Array.isArray(jersey?.images) && jersey.images.length > 0
     ? jersey.images
-    : ['https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=800&q=80'];
+    : [];
 
   const nextImage = () => {
     if (safeImages.length > 1) {
@@ -333,12 +333,18 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               onTouchEnd={handleTouchEnd}
               className="relative aspect-[1/1] w-full max-h-[340px] sm:max-h-[360px] mx-auto rounded-2xl overflow-hidden bg-[#f7f8fa] border border-neutral-200/80 flex items-center justify-center select-none shadow-xs group"
             >
-              <img
-                src={safeImages[activeImageIndex]}
-                alt={jersey.title}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-contain p-2 transition-all duration-200"
-              />
+              {safeImages[activeImageIndex] ? (
+                <img
+                  src={safeImages[activeImageIndex]}
+                  alt={jersey.title}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-contain p-2 transition-all duration-200"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-neutral-400">
+                  <span className="text-xs font-medium">No Image</span>
+                </div>
+              )}
 
               {/* Prev / Next Arrows */}
               {safeImages.length > 1 && (

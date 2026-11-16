@@ -88,6 +88,63 @@
   transform: scale(1.04);
 }
 
+/* Soft Ambient Gradation & Gentle Micro-Animations for Place Order Workspace */
+@keyframes placeOrderGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes placeOrderCardEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes placeOrderOrbFloat {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(12px, -14px, 0) scale(1.05);
+  }
+}
+
+.place-order-aurora-bg {
+  background: linear-gradient(135deg, #f5f7ff 0%, #f4f0ff 30%, #fff4f8 65%, #effcf9 100%);
+  background-size: 220% 220%;
+  animation: placeOrderGradientShift 18s ease infinite;
+}
+
+.place-order-cta-gradient {
+  background: linear-gradient(110deg, #4338ca 0%, #6d28d9 48%, #db2777 100%);
+  background-size: 200% 200%;
+  animation: placeOrderGradientShift 8s ease infinite;
+}
+
+.place-order-card-enter {
+  animation: placeOrderCardEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.place-order-orb-1 {
+  animation: placeOrderOrbFloat 12s ease-in-out infinite;
+}
+
+.place-order-orb-2 {
+  animation: placeOrderOrbFloat 15s ease-in-out infinite reverse;
+}
+
 /* Thermal & A4 Batch Invoice Print Media Queries */
 @media print {
   @page {

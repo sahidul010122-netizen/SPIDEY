@@ -9,6 +9,7 @@ import { CurrencyCode, formatPrice } from '../utils/currency';
 import { SiteSettings } from '../types/settings';
 import { convertBengaliToEnglishDigits, cleanAndFormatPhoneNumber } from '../utils/phoneUtils';
 import { TrustBadgeIcon } from './TrustBadgeIcon';
+import { sendDirectTelegramOrderNotification } from '../utils/telegramNotification';
 
 interface CheckoutPageProps {
   items: CartItem[];
@@ -195,28 +196,74 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
         status: 'confirmed'
       };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload)
-      });
+      let confirmedOrder: Order | null = null;
+      let telegramDelivered = false;
 
-      const data = await res.json();
-      if (data.success && data.order) {
-        setPlacedOrder(data.order);
-        onClearCart();
-        onOrderSuccess(data.order);
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload)
+        });
 
-        try {
-          confetti({
-            particleCount: 140,
-            spread: 80,
-            origin: { y: 0.5 }
-          });
-        } catch {}
-      } else {
-        setGeneralError(data.message || 'অর্ডার সাবমিট করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.success && data.order) {
+            confirmedOrder = data.order;
+            telegramDelivered = !!data.telegramSent;
+          }
+        }
+      } catch (backendErr) {
+        console.warn('Backend /api/orders request failed (possibly static deployment):', backendErr);
       }
+
+      // If backend did not deliver to Telegram (e.g. static hosting or worker cutoff),
+      // dispatch directly from customer browser to Telegram!
+      if (!telegramDelivered) {
+        console.log('Dispatching direct browser Telegram order notification fallback...');
+        const directResult = await sendDirectTelegramOrderNotification(
+          confirmedOrder || {
+            ...orderPayload,
+            id: `SPIDEY-${Date.now().toString(36).toUpperCase()}`
+          },
+          siteSettings
+        );
+        if (directResult.success) {
+          telegramDelivered = true;
+        }
+      }
+
+      const finalOrder: Order = confirmedOrder || {
+        id: `SPIDEY-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
+        items: safeItems,
+        customerName: customerName.trim(),
+        customerEmail: `${cleanPhone}@spideyorder.com`,
+        phoneNumber: cleanPhone,
+        shippingAddress: shippingAddress.trim(),
+        paymentMethod: 'Cash On Delivery (COD)',
+        deliveryZone,
+        couponCode: couponAppliedCode || undefined,
+        subtotal,
+        discount: discountAmount,
+        shippingFee: currentDeliveryFee,
+        totalAmount,
+        codAmount: totalAmount,
+        orderType: 'standard',
+        status: 'confirmed',
+        createdAt: new Date().toISOString()
+      };
+
+      setPlacedOrder(finalOrder);
+      onClearCart();
+      onOrderSuccess(finalOrder);
+
+      try {
+        confetti({
+          particleCount: 140,
+          spread: 80,
+          origin: { y: 0.5 }
+        });
+      } catch {}
     } catch (err: any) {
       setGeneralError(err.message || 'নেটওয়ার্ক এরর। দয়া করে আবার চেষ্টা করুন।');
     } finally {
@@ -592,12 +639,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           className="p-3 rounded-2xl bg-neutral-50 border border-neutral-200/80 text-xs space-y-2.5 transition-all"
                         >
                           <div className="flex items-start gap-3">
-                            <img
-                              src={item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=150&q=80'}
-                              alt={item.product?.title}
-                              referrerPolicy="no-referrer"
-                              className="w-14 h-14 rounded-lg object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
-                            />
+                            {item.product?.images && item.product.images[0] ? (
+                              <img
+                                src={item.product.images[0]}
+                                alt={item.product?.title}
+                                referrerPolicy="no-referrer"
+                                className="w-14 h-14 rounded-lg object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-lg bg-white border border-neutral-200 shrink-0 flex items-center justify-center text-[9px] text-neutral-400 font-bold">
+                                ITEM
+                              </div>
+                            )}
 
                             <div className="flex-1 min-w-0">
                               <h4 className="font-extrabold text-neutral-900 truncate">

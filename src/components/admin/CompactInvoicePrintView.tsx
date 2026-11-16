@@ -146,9 +146,9 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
       quantity: 1,
       product: {
         id: '1',
-        title: 'Football Jersey',
-        code: 'JERSEY-01',
-        images: ['https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80']
+        title: 'Product',
+        code: 'PROD-01',
+        images: []
       } as any
     }
   ];
@@ -231,7 +231,7 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
             /* Single Jersey Layout: Large 1:1 Square Image + Vertical Pill + Product Title */
             (() => {
               const item = items?.[0] || {};
-              const imgUrl = item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80';
+              const imgUrl = item.product?.images?.[0] || '';
               const sizeVal = item.selectedSize || 'L';
               const customText = item.customName || (item.product?.code ? `[${item.product.code}]` : item.product?.title || 'STANDARD PRO');
 
@@ -239,12 +239,16 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
                 <div className="flex items-center gap-3 h-[98px]">
                   {/* True 1:1 (5:5) Square White Image Box - Full Fit */}
                   <div className="w-[98px] h-[98px] aspect-square bg-white rounded-xl border-2 border-neutral-200 shrink-0 overflow-hidden flex items-center justify-center shadow-xs box-border p-0">
-                    <img
-                      src={imgUrl}
-                      alt={item.product?.title || 'Jersey'}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
+                    {imgUrl ? (
+                      <img
+                        src={imgUrl}
+                        alt={item.product?.title || 'Product'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-[10px] text-neutral-400 font-bold uppercase">Item</div>
+                    )}
                   </div>
 
                   {/* White Vertical Pill Beside Image */}
@@ -278,7 +282,7 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
             /* Multi-Jersey Layout (2, 3, 4, 5, 6+ jerseys): 2-Column Grid with 1:1 (5:5) Square Image Boxes */
             <div className="grid grid-cols-2 gap-2.5">
               {items.map((item, itemIdx) => {
-                const imgUrl = item.product?.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80';
+                const imgUrl = item.product?.images?.[0] || '';
                 const sizeVal = item.selectedSize || 'L';
                 const customText = item.customName || (item.product?.code ? `[${item.product.code}]` : item.product?.title || 'STANDARD PRO');
 
@@ -289,12 +293,16 @@ const CompactInvoiceSlip: React.FC<{ order: Order; index: number }> = ({ order }
                   >
                     {/* True 1:1 (5:5) Square Proportioned White Image Box - Full Fit */}
                     <div className="w-[96px] h-[96px] aspect-square bg-white rounded-xl border-2 border-neutral-200 shrink-0 overflow-hidden flex items-center justify-center shadow-xs box-border p-0">
-                      <img
-                        src={imgUrl}
-                        alt={item.product?.title || 'Jersey'}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover"
-                      />
+                      {imgUrl ? (
+                        <img
+                          src={imgUrl}
+                          alt={item.product?.title || 'Product'}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-[10px] text-neutral-400 font-bold uppercase">Item</div>
+                      )}
                     </div>
 
                     {/* White Rounded Vertical Pill (Player Name Rotated + Number + Black Size Badge at Bottom) */}

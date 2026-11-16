@@ -126,12 +126,9 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
   }, [initialProductId, initialSize, products]);
 
   // Handle Combined Text Parsing in Box 1
-  const handleCombinedDetailsChange = (text: string) => {
-    setCombinedDetailsText(text);
-    const parsed = parseCombinedAddressBox(text);
-    
+  const syncParsedDetailsState = (parsed: { name: string; phone: string; address: string }) => {
     setCustomerName(parsed.name);
-    
+
     if (parsed.phone) {
       const converted = convertBengaliToEnglishDigits(parsed.phone);
       const cleanPhone = cleanAndFormatPhoneNumber(converted);
@@ -150,6 +147,38 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
     setDeliveryAddress(parsed.address);
   };
 
+  const handleCombinedDetailsChange = (text: string, isPasteInput?: boolean) => {
+    const parsed = parseCombinedAddressBox(text);
+    if (isPasteInput) {
+      const cleanedText = [parsed.name, parsed.phone, parsed.address].filter(Boolean).join('\n');
+      setCombinedDetailsText(cleanedText);
+    } else {
+      setCombinedDetailsText(text);
+    }
+    syncParsedDetailsState(parsed);
+  };
+
+  const handleCombinedDetailsPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData?.getData('text');
+    if (!pastedText) return;
+    e.preventDefault();
+
+    const currentEl = e.currentTarget;
+    const start = currentEl.selectionStart ?? 0;
+    const end = currentEl.selectionEnd ?? combinedDetailsText.length;
+
+    // If user pasted into an empty box or replaced all/most text, parse the pasted block directly
+    const nextRaw =
+      combinedDetailsText.trim() && (start > 0 || end < combinedDetailsText.length)
+        ? `${combinedDetailsText.slice(0, start)}${pastedText}${combinedDetailsText.slice(end)}`
+        : pastedText;
+
+    const parsed = parseCombinedAddressBox(nextRaw);
+    const cleanedLines = [parsed.name, parsed.phone, parsed.address].filter(Boolean);
+    setCombinedDetailsText(cleanedLines.join('\n'));
+    syncParsedDetailsState(parsed);
+  };
+
   // Add more jersey row
   const handleAddMoreJersey = () => {
     const newItemId = `item-${Date.now()}-${items.length + 1}`;
@@ -164,6 +193,25 @@ export const PlaceOrderPage: React.FC<PlaceOrderPageProps> = ({
       }
     ]);
     setActiveDropdownIndex(items.length);
+  };
+
+  // Duplicate existing jersey card (clones selected product, size, and custom name/number)
+  const handleDuplicateJersey = (index: number) => {
+    setItems(prev => {
+      const source = prev[index];
+      if (!source) return prev;
+      const duplicated: OrderItemForm = {
+        id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        product: source.product,
+        searchQuery: source.searchQuery,
+        selectedSize: source.selectedSize,
+        customNameNumber: source.customNameNumber
+      };
+      const next = [...prev];
+      next.splice(index + 1, 0, duplicated);
+      return next;
+    });
+    setActiveDropdownIndex(null);
   };
 
   // Remove jersey row
@@ -415,35 +463,41 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
     const formattedReceipt = generateReceiptText(confirmedOrder, confirmedCodAmount);
 
     return (
-      <div className="min-h-screen bg-[#f5f5f7] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white pb-16">
+      <div className="min-h-screen place-order-aurora-bg text-neutral-900 flex flex-col font-sans selection:bg-indigo-600 selection:text-white pb-16 relative overflow-hidden">
+        {/* Soft Ambient Pastel Glow Orbs */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+          <div className="place-order-orb-1 absolute -top-24 -left-24 w-72 h-72 rounded-full bg-indigo-200/35 blur-3xl" />
+          <div className="place-order-orb-2 absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-rose-200/30 blur-3xl" />
+        </div>
+
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-neutral-200/80 px-4 py-3">
+        <header className="sticky top-0 z-30 bg-white/75 backdrop-blur-xl border-b border-indigo-100/70 px-4 py-3 shadow-[0_4px_20px_-10px_rgba(79,70,229,0.12)]">
           <div className="max-w-md mx-auto flex items-center justify-between">
             <button
               onClick={onBackToStore}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50/80 hover:bg-indigo-100 text-indigo-800 border border-indigo-100 text-xs font-semibold transition-all duration-200 hover:-translate-x-0.5"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Store</span>
             </button>
 
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-bold text-neutral-800 tracking-tight">Order Confirmed</span>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50/80 border border-emerald-200/60">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold text-emerald-800 tracking-tight">Order Confirmed</span>
             </div>
           </div>
         </header>
 
         {/* Main Card Container (Slim & Compact) */}
-        <main className="flex-1 max-w-md w-full mx-auto px-4 pt-6 pb-8">
-          <div className="bg-white border border-neutral-200/90 rounded-3xl p-5 sm:p-6 shadow-sm space-y-5">
+        <main className="relative z-10 flex-1 max-w-md w-full mx-auto px-4 pt-6 pb-8">
+          <div className="place-order-card-enter bg-white/90 backdrop-blur-xl border border-indigo-100/80 rounded-3xl p-5 sm:p-6 shadow-[0_14px_40px_-14px_rgba(79,70,229,0.16)] space-y-5">
             
             {/* Header / Success Indicator */}
             <div className="text-center space-y-1.5 pt-1">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 mx-auto flex items-center justify-center shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white mx-auto flex items-center justify-center shadow-md shadow-emerald-500/25">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h1 className="text-lg font-bold text-neutral-900 tracking-tight">
+              <h1 className="text-lg font-extrabold text-neutral-900 tracking-tight">
                 অর্ডার ফরম্যাট তৈরি সম্পন্ন (Ready to Copy)
               </h1>
               <p className="text-xs text-neutral-500">
@@ -454,17 +508,17 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
             {/* Formatted Text Box with Top "Copy This Text" Action */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-700 uppercase tracking-wider">
+                <span className="text-xs font-bold text-indigo-900/70 uppercase tracking-wider">
                   Formatted Order Text
                 </span>
                 
                 {/* Copy Button on Top of the Box */}
                 <button
                   onClick={handleCopyText}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all shadow-xs ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 shadow-xs cursor-pointer ${
                     isCopied 
-                      ? 'bg-emerald-600 text-white' 
-                      : 'bg-neutral-900 hover:bg-black text-white hover:scale-105 active:scale-95'
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-500/25' 
+                      : 'place-order-cta-gradient text-white hover:scale-105 active:scale-95'
                   }`}
                   title="Copy formatted text to clipboard"
                 >
@@ -483,7 +537,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
               </div>
 
               {/* Formatted Textarea Container */}
-              <div className="relative rounded-2xl bg-neutral-50 border border-neutral-200/80 p-4 font-mono text-xs text-neutral-800 leading-relaxed overflow-x-auto whitespace-pre-wrap select-all">
+              <div className="relative rounded-2xl bg-gradient-to-br from-slate-50/90 to-indigo-50/40 border border-indigo-100/80 p-4 font-mono text-xs text-neutral-800 leading-relaxed overflow-x-auto whitespace-pre-wrap select-all">
                 {formattedReceipt}
               </div>
             </div>
@@ -492,11 +546,15 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
             <div className="space-y-2.5 pt-2">
               <button
                 onClick={handleCopyText}
-                className="w-full py-3 rounded-full bg-neutral-900 hover:bg-black text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]"
+                className={`w-full py-3 rounded-full text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer ${
+                  isCopied
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25'
+                    : 'place-order-cta-gradient shadow-indigo-500/20 hover:shadow-lg hover:-translate-y-0.5'
+                }`}
               >
                 {isCopied ? (
                   <>
-                    <Check className="w-4 h-4 text-emerald-400" />
+                    <Check className="w-4 h-4" />
                     <span>Entire Order Text Copied!</span>
                   </>
                 ) : (
@@ -509,7 +567,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
 
               <button
                 onClick={handleOrderAnother}
-                className="w-full py-3 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                className="w-full py-3 rounded-full bg-indigo-50/80 hover:bg-indigo-100/90 text-indigo-800 border border-indigo-100 text-xs font-bold flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Place Another Order</span>
@@ -527,22 +585,28 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
   // (Slim, Compact Apple-Style Aesthetics)
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#f5f5f7] text-neutral-900 flex flex-col font-sans selection:bg-neutral-900 selection:text-white pb-20">
-      
+    <div className="min-h-screen place-order-aurora-bg text-neutral-900 flex flex-col font-sans selection:bg-indigo-600 selection:text-white pb-20 relative overflow-hidden">
+      {/* Subtle Ambient Breathing Pastel Glows */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+        <div className="place-order-orb-1 -top-20 -left-20 absolute w-72 h-72 rounded-full bg-indigo-200/35 blur-3xl" />
+        <div className="place-order-orb-2 top-1/3 -right-24 absolute w-80 h-80 rounded-full bg-rose-200/30 blur-3xl" />
+        <div className="place-order-orb-1 bottom-0 left-1/4 absolute w-72 h-72 rounded-full bg-teal-200/25 blur-3xl" />
+      </div>
+
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-neutral-200/80 px-4 py-3">
+      <header className="sticky top-0 z-40 bg-white/75 backdrop-blur-xl border-b border-indigo-100/70 px-4 py-3 shadow-[0_4px_20px_-10px_rgba(79,70,229,0.12)]">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <button
             onClick={onBackToStore}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-semibold transition-all hover:scale-105"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50/80 hover:bg-indigo-100 text-indigo-800 border border-indigo-100 text-xs font-semibold transition-all duration-200 hover:-translate-x-0.5 cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Store</span>
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-neutral-900 animate-pulse" />
-            <h1 className="text-sm font-bold text-neutral-900 tracking-tight">
+            <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-indigo-500 to-rose-500 animate-pulse shadow-xs shadow-indigo-500/40" />
+            <h1 className="text-sm font-extrabold bg-gradient-to-r from-indigo-950 via-violet-900 to-rose-900 bg-clip-text text-transparent tracking-tight">
               Place Order
             </h1>
           </div>
@@ -552,7 +616,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
               <button
                 type="button"
                 onClick={onPromptInstall}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-rose-50 to-amber-50 hover:from-rose-100 hover:to-amber-100 text-rose-700 border border-rose-200/80 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
                 title="Install Place Order Shortcut on Mobile or PC"
               >
                 <Download className="w-3 h-3 text-rose-600" />
@@ -560,7 +624,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 <span className="sm:hidden">Install</span>
               </button>
             )}
-            <span className="text-[10px] font-mono text-neutral-400 font-bold uppercase px-2 py-0.5 rounded-full bg-neutral-100">
+            <span className="text-[10px] font-mono text-indigo-700 font-bold uppercase px-2.5 py-0.5 rounded-full bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200/70">
               COD
             </span>
           </div>
@@ -568,13 +632,13 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
       </header>
 
       {/* Main Container - Compact, Slim ("চিকন-চাকন") Column */}
-      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-5 space-y-4">
+      <main className="relative z-10 flex-1 max-w-md w-full mx-auto px-4 pt-5 space-y-4">
         
         <form onSubmit={handleConfirmOrder} className="space-y-4">
           
           {/* General Error Notification */}
           {generalError && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2.5 shadow-xs">
+            <div className="place-order-card-enter p-3.5 rounded-2xl bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2.5 shadow-sm">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{generalError}</span>
             </div>
@@ -586,10 +650,11 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
               ========================================= */}
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-950/70 flex items-center gap-1.5">
+                <span className="w-1.5 h-3.5 rounded-full bg-gradient-to-b from-indigo-500 to-violet-500 inline-block" />
                 Selected Jerseys ({items.length})
               </span>
-              <span className="text-[11px] text-neutral-400 font-medium">
+              <span className="text-[11px] text-indigo-500/80 font-semibold">
                 * Size is required
               </span>
             </div>
@@ -604,16 +669,16 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 return (
                   <div 
                     key={item.id}
-                    className="p-4 rounded-3xl bg-white border border-neutral-200/90 shadow-sm space-y-3.5 transition-all"
+                    className="place-order-card-enter p-4 rounded-3xl bg-white/90 backdrop-blur-md border border-indigo-100/90 hover:border-indigo-200 focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-100/50 shadow-[0_8px_28px_-12px_rgba(79,70,229,0.14)] space-y-3.5 transition-all duration-300"
                   >
                     {/* Item Row Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-neutral-800">
+                        <span className="px-2 py-0.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[11px] font-bold shadow-xs shadow-indigo-500/20">
                           Jersey #{index + 1}
                         </span>
                         {item.product?.code && (
-                          <span className="px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-800 font-mono font-bold text-[10px] border border-neutral-200">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-800 font-mono font-bold text-[10px] border border-indigo-200/70">
                             {item.product.code}
                           </span>
                         )}
@@ -623,11 +688,11 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                         <button
                           type="button"
                           onClick={() => handleRemoveJersey(index)}
-                          className="text-xs text-neutral-400 hover:text-rose-600 flex items-center gap-1 transition-colors p-1"
+                          className="text-xs text-neutral-400 hover:text-rose-600 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 cursor-pointer"
                           title="Remove item"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span className="text-[11px]">Remove</span>
+                          <span className="text-[11px] font-semibold">Remove</span>
                         </button>
                       )}
                     </div>
@@ -635,16 +700,16 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                     {/* Product Search & Thumbnail Row */}
                     <div className="flex items-start gap-3">
                       {/* Thumbnail Box */}
-                      <div className="w-16 h-16 rounded-2xl bg-neutral-50 border border-neutral-200/80 p-1.5 shrink-0 overflow-hidden flex items-center justify-center">
-                        {item.product ? (
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-50/70 to-rose-50/50 border border-indigo-100/80 p-1.5 shrink-0 overflow-hidden flex items-center justify-center transition-transform duration-300 hover:scale-105">
+                        {item.product?.images && item.product.images[0] ? (
                           <img 
-                            src={item.product.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80'} 
+                            src={item.product.images[0]} 
                             alt={item.product.title}
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-contain"
                           />
                         ) : (
-                          <div className="text-neutral-300 flex items-center justify-center">
+                          <div className="text-indigo-300 flex items-center justify-center">
                             <ShoppingBag className="w-5 h-5" />
                           </div>
                         )}
@@ -653,7 +718,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                       {/* Autocomplete Search Input */}
                       <div className="flex-1 relative min-w-0">
                         <div className="relative">
-                          <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <Search className="w-4 h-4 text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                           <input
                             type="text"
                             value={item.searchQuery}
@@ -701,13 +766,19 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                                     >
                                       {/* Left: Enlarged Product Thumbnail Image */}
                                       <div className="w-14 h-14 sm:w-15 sm:h-15 rounded-xl bg-neutral-50 p-1 border border-neutral-200/90 shadow-xs shrink-0 overflow-hidden flex items-center justify-center group-hover:border-neutral-300 transition-colors">
-                                        <img 
-                                          src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=300&q=80'} 
-                                          alt={prod.title}
-                                          referrerPolicy="no-referrer"
-                                          className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-105"
-                                          loading="lazy"
-                                        />
+                                        {prod.images && prod.images[0] ? (
+                                          <img 
+                                            src={prod.images[0]} 
+                                            alt={prod.title}
+                                            referrerPolicy="no-referrer"
+                                            className="w-full h-full object-contain transition-transform duration-200 group-hover:scale-105"
+                                            loading="lazy"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-[10px] text-neutral-400 font-bold">
+                                            ITEM
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* Right: Stacked Layout (Top: Code, Bottom: Title) */}
@@ -757,31 +828,43 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                         )}
                       </div>
 
-                      <div className="flex flex-wrap gap-1.5">
-                        {AVAILABLE_SIZES.map((sz) => {
-                          const isSelected = item.selectedSize === sz;
-                          return (
-                            <button
-                              type="button"
-                              key={sz}
-                              onClick={() => {
-                                handleUpdateItem(index, { selectedSize: sz });
-                                if (hasSizeError) {
-                                  setSizeErrors(prev => ({ ...prev, [item.id]: false }));
-                                }
-                              }}
-                              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                                isSelected
-                                  ? 'bg-neutral-900 text-white shadow-xs scale-105'
-                                  : hasSizeError
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
-                                  : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 border border-transparent'
-                              }`}
-                            >
-                              {sz}
-                            </button>
-                          );
-                        })}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex flex-wrap gap-1.5">
+                          {AVAILABLE_SIZES.map((sz) => {
+                            const isSelected = item.selectedSize === sz;
+                            return (
+                              <button
+                                type="button"
+                                key={sz}
+                                onClick={() => {
+                                  handleUpdateItem(index, { selectedSize: sz });
+                                  if (hasSizeError) {
+                                    setSizeErrors(prev => ({ ...prev, [item.id]: false }));
+                                  }
+                                }}
+                                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm shadow-indigo-500/30 scale-105'
+                                    : hasSizeError
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
+                                    : 'bg-slate-100/80 text-neutral-700 hover:bg-indigo-50 hover:text-indigo-700 border border-transparent'
+                                }`}
+                              >
+                                {sz}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateJersey(index)}
+                          className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-indigo-50 to-sky-50 hover:from-indigo-100 hover:to-sky-100 text-indigo-700 border border-indigo-200/70 text-[11px] font-bold flex items-center gap-1 transition-all duration-200 active:scale-95 shrink-0 cursor-pointer shadow-2xs"
+                          title="Duplicate selected jersey, size, and custom name/number"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Duplicate</span>
+                        </button>
                       </div>
                     </div>
 
@@ -795,7 +878,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                         value={item.customNameNumber}
                         onChange={(e) => handleUpdateItem(index, { customNameNumber: e.target.value.toUpperCase() })}
                         placeholder="e.g. RONALDO 7 or MESSI"
-                        className="w-full px-3 py-1.5 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-neutral-400 font-mono uppercase transition-all"
+                        className="w-full px-3 py-1.5 text-xs bg-slate-50/80 border border-indigo-100 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-indigo-400 font-mono uppercase transition-all"
                       />
                     </div>
 
@@ -808,7 +891,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
             <button
               type="button"
               onClick={handleAddMoreJersey}
-              className="w-full py-2.5 rounded-2xl border border-dashed border-neutral-300 hover:border-neutral-400 bg-white hover:bg-neutral-50 text-neutral-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              className="w-full py-2.5 rounded-2xl border border-dashed border-indigo-300/80 hover:border-indigo-400 bg-white/75 hover:bg-indigo-50/70 backdrop-blur-sm text-indigo-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all duration-200 hover:-translate-y-0.5 shadow-xs cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Add More Jersey</span>
@@ -820,18 +903,19 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
               (Exactly 3 Clean Boxes as requested)
               ========================================= */}
           <div className="space-y-3 pt-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-500 px-1">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-950/70 px-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-3.5 rounded-full bg-gradient-to-b from-sky-500 to-teal-500 inline-block" />
               Order Details
             </span>
 
             {/* BOX 1: SINGLE FULL ADDRESS BOX (Name, Phone, Address in 1 Box) */}
-            <div className="p-4 rounded-3xl bg-white border border-neutral-200/90 shadow-sm space-y-2">
+            <div className="p-4 rounded-3xl bg-white/90 backdrop-blur-md border border-sky-100/90 focus-within:border-sky-300 focus-within:ring-4 focus-within:ring-sky-100/60 shadow-[0_8px_28px_-12px_rgba(14,165,233,0.14)] space-y-2 transition-all duration-300">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-neutral-800">
                   Customer & Delivery Details <span className="text-rose-500">*</span>
                 </label>
                 {phoneNumber && phoneNumber.length === 11 && !phoneError && (
-                  <span className="text-[10px] text-emerald-600 font-bold font-mono flex items-center gap-0.5">
+                  <span className="place-order-card-enter text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/70 font-bold font-mono flex items-center gap-1">
                     <Check className="w-3 h-3" />
                     11 Digits Verified
                   </span>
@@ -842,10 +926,15 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 rows={4}
                 required
                 value={combinedDetailsText}
-                onChange={(e) => handleCombinedDetailsChange(e.target.value)}
+                onPaste={handleCombinedDetailsPaste}
+                onChange={(e) => {
+                  const nativeEvt = e.nativeEvent as InputEvent | undefined;
+                  const isPaste = nativeEvt?.inputType === 'insertFromPaste';
+                  handleCombinedDetailsChange(e.target.value, isPaste);
+                }}
                 placeholder={`Line 1: Customer Name\nLine 2: Mobile Number (e.g. 01715123766)\nLine 3: Delivery Address (District, Area, Road, House No)`}
-                className={`w-full p-3 text-xs bg-neutral-50 border rounded-2xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white transition-all font-sans leading-relaxed ${
-                  phoneError ? 'border-rose-300 focus:border-rose-400' : 'border-neutral-200 focus:border-neutral-400'
+                className={`w-full p-3 text-xs bg-slate-50/70 border rounded-2xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white transition-all font-sans leading-relaxed ${
+                  phoneError ? 'border-rose-300 focus:border-rose-400' : 'border-sky-100 focus:border-sky-400'
                 }`}
               />
 
@@ -855,20 +944,20 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                   {phoneError}
                 </p>
               ) : (
-                <p className="text-[10px] text-neutral-400">
-                  Tip: Paste name, phone, and address together. Bengali numbers are automatically converted.
+                <p className="text-[10px] text-sky-700/70 font-medium">
+                  Tip: এলোমেলো মেসেজ Paste করলেই অটোমেটিক শুধু নাম, মোবাইল ও অ্যাড্রেস সাজিয়ে নেবে।
                 </p>
               )}
             </div>
 
             {/* BOX 2: COD AMOUNT (Simple Typeable Input Box) */}
-            <div className="p-4 rounded-3xl bg-white border border-neutral-200/90 shadow-sm space-y-2">
+            <div className="p-4 rounded-3xl bg-white/90 backdrop-blur-md border border-emerald-100/90 focus-within:border-emerald-300 focus-within:ring-4 focus-within:ring-emerald-100/60 shadow-[0_8px_28px_-12px_rgba(16,185,129,0.14)] space-y-2 transition-all duration-300">
               <label className="text-xs font-bold text-neutral-800 block">
                 Cash On Delivery (COD) Amount
               </label>
 
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600 font-bold text-xs">
                   ৳
                 </span>
                 <input
@@ -879,17 +968,17 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                     setCodAmount(clean);
                   }}
                   placeholder="e.g. 1500 (Type COD Amount)"
-                  className="w-full pl-8 pr-3 py-2.5 text-xs bg-neutral-50 border border-neutral-200 rounded-2xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-neutral-400 font-mono font-bold transition-all"
+                  className="w-full pl-8 pr-3 py-2.5 text-xs bg-emerald-50/30 border border-emerald-100 rounded-2xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-emerald-400 font-mono font-bold transition-all"
                 />
               </div>
 
-              <p className="text-[10px] text-neutral-400">
+              <p className="text-[10px] text-emerald-700/70 font-medium">
                 Enter the total COD cash amount to collect upon delivery.
               </p>
             </div>
 
             {/* BOX 3: EXCHANGE PARCEL TOGGLE SWITCH (Default OFF) */}
-            <div className="p-4 rounded-3xl bg-white border border-neutral-200/90 shadow-sm space-y-3">
+            <div className="p-4 rounded-3xl bg-white/90 backdrop-blur-md border border-rose-100/80 shadow-[0_8px_28px_-12px_rgba(244,63,94,0.10)] space-y-3 transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-xs font-bold text-neutral-800 block">
@@ -904,13 +993,15 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 <button
                   type="button"
                   onClick={() => setIsExchangeParcel(!isExchangeParcel)}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out cursor-pointer ${
-                    isExchangeParcel ? 'bg-neutral-900' : 'bg-neutral-200'
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-all duration-300 ease-in-out cursor-pointer ${
+                    isExchangeParcel
+                      ? 'bg-gradient-to-r from-rose-500 to-pink-600 shadow-sm shadow-rose-500/30'
+                      : 'bg-neutral-200'
                   }`}
                   aria-pressed={isExchangeParcel}
                 >
                   <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${
+                    className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-300 ease-in-out ${
                       isExchangeParcel ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
@@ -919,27 +1010,27 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
 
               {/* Optional Exchange Details if ON */}
               {isExchangeParcel && (
-                <div className="pt-2 border-t border-neutral-100">
+                <div className="place-order-card-enter pt-2 border-t border-rose-100">
                   <input
                     type="text"
                     value={exchangeDetails}
                     onChange={(e) => setExchangeDetails(e.target.value)}
                     placeholder="Exchange reason or original order ID..."
-                    className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-neutral-400 transition-all"
+                    className="w-full px-3 py-2 text-xs bg-rose-50/40 border border-rose-200/80 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-rose-400 transition-all"
                   />
                 </div>
               )}
             </div>
 
             {/* BOX 4: GIFT BOX TOGGLE SWITCH (Default OFF) */}
-            <div className="p-4 rounded-3xl bg-white border border-neutral-200/90 shadow-sm space-y-3">
+            <div className="p-4 rounded-3xl bg-gradient-to-br from-white/95 to-amber-50/40 backdrop-blur-md border border-amber-200/70 shadow-[0_8px_28px_-12px_rgba(245,158,11,0.12)] space-y-3 transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-bold text-neutral-800 block">
                       Gift Box
                     </span>
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-800 border border-amber-200/60">
                       🎁 Premium
                     </span>
                   </div>
@@ -952,13 +1043,15 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                 <button
                   type="button"
                   onClick={() => setHasGiftBox(!hasGiftBox)}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 ease-in-out cursor-pointer ${
-                    hasGiftBox ? 'bg-amber-600' : 'bg-neutral-200'
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-all duration-300 ease-in-out cursor-pointer ${
+                    hasGiftBox
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-sm shadow-amber-500/30'
+                      : 'bg-neutral-200'
                   }`}
                   aria-pressed={hasGiftBox}
                 >
                   <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${
+                    className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-300 ease-in-out ${
                       hasGiftBox ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
@@ -967,7 +1060,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
 
               {/* Optional Gift Box Details if ON */}
               {hasGiftBox && (
-                <div className="pt-2 border-t border-neutral-100 space-y-2">
+                <div className="place-order-card-enter pt-2 border-t border-amber-100 space-y-2">
                   <div className="flex flex-wrap gap-1.5">
                     {['Premium Gift Box', 'Luxury Magnetic Box', 'Special Birthday Box', 'Custom Gift Packaging'].map((boxOption) => (
                       <button
@@ -976,8 +1069,8 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                         onClick={() => setGiftBoxType(boxOption)}
                         className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all cursor-pointer ${
                           giftBoxType === boxOption
-                            ? 'bg-amber-500 text-neutral-950 font-bold shadow-xs'
-                            : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                            ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-neutral-950 font-bold shadow-xs'
+                            : 'bg-amber-50/70 text-amber-900/70 hover:bg-amber-100'
                         }`}
                       >
                         {boxOption}
@@ -990,7 +1083,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
                     value={giftBoxType}
                     onChange={(e) => setGiftBoxType(e.target.value)}
                     placeholder="Enter or customize Gift Box type/note..."
-                    className="w-full px-3 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-amber-400 transition-all"
+                    className="w-full px-3 py-2 text-xs bg-amber-50/30 border border-amber-200/80 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-amber-400 transition-all"
                   />
                 </div>
               )}
@@ -1003,7 +1096,7 @@ Amount: ${amountDisplay}${exchangeLine}${giftBoxLine}`;
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 rounded-full bg-neutral-900 hover:bg-black text-white text-xs font-bold shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 rounded-full place-order-cta-gradient text-white text-xs font-extrabold shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-violet-500/30 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <span>Generating Formatted Order...</span>

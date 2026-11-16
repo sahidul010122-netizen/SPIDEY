@@ -83,12 +83,18 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
             <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
               {items.map((item) => (
                 <div key={item.itemKey} className="flex items-center gap-2.5 p-1.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
-                  <img
-                    src={item.product?.images?.[0] || '/images/default_jersey.png'}
-                    alt={item.product?.title}
-                    referrerPolicy="no-referrer"
-                    className="w-10 h-10 rounded-lg object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
-                  />
+                  {item.product?.images?.[0] ? (
+                    <img
+                      src={item.product.images[0]}
+                      alt={item.product?.title}
+                      referrerPolicy="no-referrer"
+                      className="w-10 h-10 rounded-lg object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-neutral-100 border border-neutral-200 shrink-0 flex items-center justify-center text-neutral-400">
+                      <ShoppingBag className="w-4 h-4" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xs font-black text-neutral-900 truncate">
                       {formatShortTitle(item.product?.title)}
@@ -116,12 +122,18 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
             >
               {/* Product Thumbnail in Corner */}
               <div className="relative shrink-0">
-                <img
-                  src={latestItem.product?.images?.[0] || '/images/default_jersey.png'}
-                  alt={latestItem.product?.title}
-                  referrerPolicy="no-referrer"
-                  className="w-12 h-12 rounded-xl object-contain bg-neutral-100 border border-neutral-200 p-0.5"
-                />
+                {latestItem.product?.images?.[0] ? (
+                  <img
+                    src={latestItem.product.images[0]}
+                    alt={latestItem.product?.title}
+                    referrerPolicy="no-referrer"
+                    className="w-12 h-12 rounded-xl object-contain bg-neutral-100 border border-neutral-200 p-0.5"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400">
+                    <ShoppingBag className="w-5 h-5" />
+                  </div>
+                )}
                 {items.length > 1 && (
                   <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-[#e50914] text-white text-[9px] font-black font-mono shadow-xs">
                     +{items.length - 1}

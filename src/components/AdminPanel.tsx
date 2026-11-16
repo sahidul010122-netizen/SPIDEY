@@ -19,6 +19,7 @@ import { OrderProcessManager } from './admin/OrderProcessManager';
 import { SteadfastApiSection } from './admin/SteadfastApiSection';
 import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
 import { PlaceOrderInstallSection } from './admin/PlaceOrderInstallSection';
+import { DtfPrintSection } from './admin/DtfPrintSection';
 import { BulkFolderImportModal } from './admin/BulkFolderImportModal';
 import { CategoryManager } from './CategoryManager';
 import { TrustBadgeIcon } from './TrustBadgeIcon';
@@ -82,8 +83,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   // Active Sidebar Menu Tab
   const [activeMenu, setActiveMenu] = useState<
-    'order_process' | 'barcode_scanner' | 'steadfast_api' | 'telegram' | 'checkout_coupons' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
+    'order_process' | 'dtf_print' | 'barcode_scanner' | 'steadfast_api' | 'telegram' | 'checkout_coupons' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage'
   >('order_process');
+
+  // Shared Order Selection between Master Order Ledger & DTF Print Section
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
 
   // Telegram Test State
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
@@ -284,7 +288,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleSelectMenu = (menu: 'order_process' | 'barcode_scanner' | 'steadfast_api' | 'telegram' | 'checkout_coupons' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
+  const handleSelectMenu = (menu: 'order_process' | 'dtf_print' | 'barcode_scanner' | 'steadfast_api' | 'telegram' | 'checkout_coupons' | 'place_order_install' | 'overview' | 'categories' | 'products' | 'banner' | 'cms_texts' | 'r2_storage') => {
     setActiveMenu(menu);
     // Auto-collapse sidebar on mobile after selecting a menu
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -323,23 +327,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Product Form Fields
   const [formCode, setFormCode] = useState('');
   const [formTitle, setFormTitle] = useState('');
-  const [formCategory, setFormCategory] = useState('EDC');
+  const [formCategory, setFormCategory] = useState(() => categories[0]?.id || categories[0]?.name || '');
   const [formCustomCategory, setFormCustomCategory] = useState('');
-  const [formPrice, setFormPrice] = useState('129.99');
-  const [formOriginalPrice, setFormOriginalPrice] = useState('159.99');
-  const [formSeason, setFormSeason] = useState('2025');
-  const [formEdition, setFormEdition] = useState('Pro Edition / Titanium');
-  const [formBadge, setFormBadge] = useState('New Drop');
+  const [formPrice, setFormPrice] = useState('');
+  const [formOriginalPrice, setFormOriginalPrice] = useState('');
+  const [formSeason, setFormSeason] = useState('');
+  const [formEdition, setFormEdition] = useState('');
+  const [formBadge, setFormBadge] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formStockCount, setFormStockCount] = useState('25');
+  const [formStockCount, setFormStockCount] = useState('20');
   const [formInStock, setFormInStock] = useState(true);
   const [formSizes, setFormSizes] = useState<string[]>(['S', 'M', 'L', 'XL', 'XXL', '3XL']);
   const [formImages, setFormImages] = useState<string[]>([]);
-  const [formFeatures, setFormFeatures] = useState<string[]>([
-    'CNC milled grade-5 titanium frame',
-    'Drop-tested anti-impact honeycomb core',
-    'MagSafe magnetic neodymium array'
-  ]);
+  const [formFeatures, setFormFeatures] = useState<string[]>([]);
   const [featureInput, setFeatureInput] = useState('');
 
   // Uploading states
@@ -384,23 +384,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingProduct(null);
     setFormCode(generateRandomCode());
     setFormTitle('');
-    setFormCategory(categories[0]?.id || 'EDC');
+    setFormCategory(categories[0]?.id || categories[0]?.name || '');
     setFormCustomCategory('');
-    setFormPrice('1150');
-    setFormOriginalPrice('1350');
-    setFormSeason('2025');
-    setFormEdition('Pro Edition / Titanium');
-    setFormBadge('New Drop');
-    setFormDescription('Authentic club matchwear jersey with moisture-wicking Dri-FIT fabric and heat-pressed club crest.');
+    setFormPrice('');
+    setFormOriginalPrice('');
+    setFormSeason('');
+    setFormEdition('');
+    setFormBadge('');
+    setFormDescription('');
     setFormStockCount('20');
     setFormInStock(true);
     setFormSizes(['S', 'M', 'L', 'XL', 'XXL', '3XL']);
-    setFormImages(['/images/prod_pixel_case_1787668274006.jpg']);
-    setFormFeatures([
-      'Moisture-wicking breathable ventilation matrix',
-      'Authentic heat-pressed club emblem',
-      'Athletic ergonomic seam construction'
-    ]);
+    setFormImages([]);
+    setFormFeatures([]);
     setFormCustomizationChargeType(localSettings.defaultCustomizationChargeType || 'free');
     setFormCustomizationCharge(String(localSettings.defaultCustomizationCharge || 0));
     setIsProductModalOpen(true);
@@ -429,77 +425,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsProductModalOpen(true);
   };
 
-  // Club & Brand Presets for 1-Click Category Creation
-  const CLUB_PRESETS = [
-    {
-      name: 'Real Madrid',
-      subtitle: '24/25 Champions',
-      tag: 'La Liga',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png'
-    },
-    {
-      name: 'FC Barcelona',
-      subtitle: 'Blaugrana Pride',
-      tag: 'La Liga',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/4/47/FC_Barcelona_%28crest%29.svg/300px-FC_Barcelona_%28crest%29.svg.png'
-    },
-    {
-      name: 'Manchester United',
-      subtitle: 'Red Devils',
-      tag: 'Premier League',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/7/7a/Manchester_United_FC_crest.svg/300px-Manchester_United_FC_crest.svg.png'
-    },
-    {
-      name: 'Arsenal',
-      subtitle: 'Gunners Edition',
-      tag: 'Premier League',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/300px-Arsenal_FC.svg.png'
-    },
-    {
-      name: 'Manchester City',
-      subtitle: 'Sky Blue Dynasty',
-      tag: 'Premier League',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Manchester_City_FC_badge.svg/300px-Manchester_City_FC_badge.svg.png'
-    },
-    {
-      name: 'Liverpool',
-      subtitle: 'Anfield Legends',
-      tag: 'Premier League',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/0/0c/Liverpool_FC.svg/300px-Liverpool_FC.svg.png'
-    },
-    {
-      name: 'Chelsea',
-      subtitle: 'The Blues',
-      tag: 'Premier League',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/c/cc/Chelsea_FC.svg/300px-Chelsea_FC.svg.png'
-    },
-    {
-      name: 'Bayern Munich',
-      subtitle: 'Mia San Mia',
-      tag: 'Bundesliga',
-      image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/FC_Bayern_M%C3%BCnchen_logo_%282017%29.svg/300px-FC_Bayern_M%C3%BCnchen_logo_%282017%29.svg.png'
-    },
-    {
-      name: 'Argentina',
-      subtitle: '3-Star World Champions',
-      tag: 'National',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/a/a2/Argentine_Football_Association_logo.svg/300px-Argentine_Football_Association_logo.svg.png'
-    },
-    {
-      name: 'Brazil',
-      subtitle: 'Pentacampeão',
-      tag: 'National',
-      image: 'https://upload.wikimedia.org/wikipedia/en/thumb/9/99/Brazilian_Football_Confederation_logo.svg/300px-Brazilian_Football_Confederation_logo.svg.png'
-    }
-  ];
-
   // Open Category Modal
   const openAddCategoryModal = () => {
     setEditingCatId(null);
     setCatName('');
     setCatSubtitle('');
-    setCatImage('https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png');
-    setCatTag('Drop');
+    setCatImage('');
+    setCatTag('');
     setIsCatModalOpen(true);
   };
 
@@ -507,7 +439,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingCatId(cat.id);
     setCatName(cat.name);
     setCatSubtitle(cat.subtitle || '');
-    setCatImage(cat.image || 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png');
+    setCatImage(cat.image || '');
     setCatTag(cat.tag || '');
     setIsCatModalOpen(true);
   };
@@ -520,9 +452,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       if (editingCatId) {
         await onUpdateCategory(editingCatId, {
+          id: editingCatId,
           name: catName.trim(),
           subtitle: catSubtitle.trim(),
-          image: catImage.trim() || 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png',
+          image: catImage.trim(),
           tag: catTag.trim()
         });
       } else {
@@ -532,7 +465,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           id: newId,
           name: catName.trim(),
           subtitle: catSubtitle.trim(),
-          image: catImage.trim() || 'https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Real_Madrid_CF.svg/300px-Real_Madrid_CF.svg.png',
+          image: catImage.trim(),
           tag: catTag.trim() || 'Category'
         });
       }
@@ -662,6 +595,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const url = await uploadFileToR2(file);
     if (url) {
       setFormImages((prev) => [...prev, url]);
+      const fileCode = file.name.replace(/\.[^/.]+$/, '').trim();
+      if (fileCode && (!formCode || formCode.startsWith('SJ-') || !formCode.trim())) {
+        setFormCode(fileCode);
+      }
     }
     setIsUploading(false);
   };
@@ -745,8 +682,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       description: formDescription.trim(),
       stockCount: parseInt(formStockCount, 10) || 15,
       inStock: formInStock,
-      images: formImages.length > 0 ? formImages : ['/images/prod_pixel_case_1787668274006.jpg'],
-      features: formFeatures.length > 0 ? formFeatures : ['Moisture-wicking breathable ventilation matrix'],
+      images: formImages,
+      features: formFeatures,
       sizes: formSizes.length > 0 ? formSizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
       customizable: true,
       customizationChargeType: formCustomizationChargeType,
@@ -758,6 +695,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     let success = false;
     if (editingProduct) {
+      setLocalProducts((prev) => prev.map((p) => p.id === editingProduct.id ? { ...p, ...payload } : p));
       success = await onUpdateProduct(editingProduct.id, payload);
     } else {
       success = await onAddProduct(payload);
@@ -997,6 +935,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 activeMenu === 'order_process' ? 'bg-white text-rose-900 font-black' : 'bg-rose-500/20 text-rose-300 font-bold'
               }`}>
                 Auto
+              </span>
+            </button>
+
+            {/* 1b. DTF Print Section */}
+            <button
+              onClick={() => handleSelectMenu('dtf_print')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                activeMenu === 'dtf_print'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 font-extrabold'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <span className="font-extrabold tracking-tight">DTF Print</span>
+              </div>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                activeMenu === 'dtf_print' ? 'bg-white text-indigo-900 font-black' : 'bg-indigo-500/20 text-indigo-300 font-bold'
+              }`}>
+                {selectedOrderIds.size > 0 ? `${selectedOrderIds.size} Sel` : 'Name/Num'}
               </span>
             </button>
 
@@ -1271,6 +1229,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div>
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-neutral-900 tracking-tight">
                   {activeMenu === 'order_process' && 'Order Process & Management System'}
+                  {activeMenu === 'dtf_print' && 'DTF Print Data Generator'}
                   {activeMenu === 'barcode_scanner' && 'Barcode Scanner & Auto-Matching System'}
                   {activeMenu === 'steadfast_api' && 'Steadfast Courier API Settings & Credentials'}
                   {activeMenu === 'place_order_install' && 'Place Order Shortcut & PWA Install'}
@@ -1283,10 +1242,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </h1>
                 <p className="text-xs text-neutral-500 mt-1 font-medium line-clamp-2">
                   {activeMenu === 'order_process' && 'Intelligent WhatsApp bulk order extraction, Steadfast Courier API dispatch, and 3-inch/A4 compact invoice printing.'}
+                  {activeMenu === 'dtf_print' && 'সিলেক্ট করা অর্ডার থেকে শুধুমাত্র Name ও Number যুক্ত জার্সিগুলোর সিরিয়াল অনুযায়ী DTF Print ফরম্যাট জেনারেট ও কপি করুন।'}
                   {activeMenu === 'barcode_scanner' && 'Continuous live camera scanning, automatic parcel barcode matching, instant status updates, and permanent database storage.'}
                   {activeMenu === 'steadfast_api' && 'Configure and permanently save your Steadfast Courier Merchant API credentials for automated one-click order dispatching.'}
                   {activeMenu === 'place_order_install' && 'ডেডিকেটেড লিঙ্ক ও PWA শর্টকাট ইনস্টল করুন যাতে স্টাফ বা এজেন্টরা দ্রুত সরাসরি প্লেস অর্ডার করতে পারে।'}
-                  {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && activeMenu !== 'place_order_install' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
+                  {activeMenu !== 'order_process' && activeMenu !== 'dtf_print' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && activeMenu !== 'place_order_install' && 'Live CMS manager. Every text, logo, photo, and title updates the public storefront immediately.'}
                 </p>
               </div>
             </div>
@@ -1331,6 +1291,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onRefreshStats={() => {}}
               onNavigateToSteadfastApi={() => setActiveMenu('steadfast_api')}
               onNavigateToBarcodeScanner={() => setActiveMenu('barcode_scanner')}
+              onNavigateToDtfPrint={() => setActiveMenu('dtf_print')}
+              selectedOrderIdsProp={selectedOrderIds}
+              onSelectedOrderIdsChange={setSelectedOrderIds}
+            />
+          )}
+
+          {/* TAB: DTF PRINT GENERATOR */}
+          {activeMenu === 'dtf_print' && (
+            <DtfPrintSection
+              products={products}
+              selectedOrderIds={selectedOrderIds}
+              onUpdateSelectedOrderIds={setSelectedOrderIds}
+              onGoToOrderProcess={() => setActiveMenu('order_process')}
             />
           )}
 
@@ -1362,7 +1335,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           )}
 
           {/* 3. FOUR METRIC SUMMARY CARDS (Shown on other tabs) */}
-          {activeMenu !== 'order_process' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && activeMenu !== 'place_order_install' && (
+          {activeMenu !== 'order_process' && activeMenu !== 'dtf_print' && activeMenu !== 'barcode_scanner' && activeMenu !== 'steadfast_api' && activeMenu !== 'place_order_install' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
             {/* Card 1: Dark Solid Card with Sparkline */}
@@ -1596,13 +1569,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </div>
                         </div>
 
-                        <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden">
-                          <img
-                            src={prod.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=200&q=80'}
-                            alt={prod.title}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-contain"
-                          />
+                        <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
+                          {prod.images && prod.images[0] ? (
+                            <img
+                              src={prod.images[0]}
+                              alt={prod.title}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <Package className="w-5 h-5 text-neutral-300" />
+                          )}
                         </div>
 
                         <div className="min-w-0">
@@ -1692,13 +1669,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               
               {/* Banner Live Preview */}
               <div className="relative w-full rounded-3xl overflow-hidden bg-[#8b0000] border border-neutral-200 shadow-xl">
-                <div className="relative aspect-[21/9] sm:aspect-[2.6/1] w-full overflow-hidden">
-                  <img
-                    src={localSettings.heroBgImage || '/images/fragment_hero_banner_1787668127629.jpg'}
-                    alt="Hero Banner Preview"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover object-center"
-                  />
+                  {localSettings.heroBgImage ? (
+                    <img
+                      src={localSettings.heroBgImage}
+                      alt="Hero Banner Preview"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover object-center"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-neutral-950 via-[#8b0000] to-neutral-950 flex items-center justify-center">
+                      <span className="text-xs font-mono uppercase tracking-widest text-neutral-400">No Custom Banner Uploaded</span>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/40 pointer-events-none" />
 
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
@@ -1728,7 +1710,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </p>
                   </div>
                 </div>
-              </div>
 
               {/* Banner Editing Form */}
               <form onSubmit={handleSaveAllSettings} className="p-6 rounded-3xl bg-[#f8f9fa] border border-neutral-200/80 space-y-4">
@@ -1742,6 +1723,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         type="text"
                         value={localSettings.heroBgImage}
                         onChange={(e) => setLocalSettings({ ...localSettings, heroBgImage: e.target.value })}
+                        placeholder="Banner image URL or upload directly..."
                         className="flex-1 px-3 py-2 text-xs bg-white border border-neutral-200 rounded-xl text-neutral-900 focus:outline-none font-mono"
                       />
                       <input
@@ -1754,11 +1736,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         type="button"
                         onClick={() => bannerFileInputRef.current?.click()}
-                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-xs font-semibold text-white flex items-center gap-1 shrink-0"
+                        className="px-3 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-xs font-semibold text-white flex items-center gap-1 shrink-0 cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>Upload R2</span>
                       </button>
+                      {localSettings.heroBgImage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocalSettings((prev) => {
+                              const next = { ...prev, heroBgImage: '' };
+                              onUpdateSiteSettings(next);
+                              return next;
+                            });
+                            setSyncStatusNote('✓ ব্যানার সফলভাবে ডিলিট করা হয়েছে');
+                            setTimeout(() => setSyncStatusNote(null), 3500);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-xs font-semibold text-rose-600 border border-rose-200 flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                          title="Delete current banner image"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1902,16 +1903,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           className="w-full h-full object-contain rounded-lg"
                         />
                       ) : (
-                        <svg 
-                          viewBox="0 0 24 24" 
-                          className="w-9 h-9 text-neutral-900" 
-                          fill="currentColor"
-                        >
-                          <path d="M12 2C7.58 2 4 5.58 4 10c0 2.21.9 4.21 2.35 5.66L6 20h3l1-2h4l1 2h3l-.35-4.34C19.1 14.21 20 12.21 20 10c0-4.42-3.58-8-8-8zm-3 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm-3 5c-1.1 0-2-.4-2-1h4c0 .6-.9 1-2 1z" />
-                          <circle cx="8" cy="18" r="1" />
-                          <circle cx="16" cy="18" r="1" />
-                          <path d="M7 21h10v1H7z" />
-                        </svg>
+                        <span className="text-[10px] font-bold text-neutral-400 uppercase text-center">
+                          Text Logo
+                        </span>
                       )}
                     </div>
 
@@ -1935,7 +1929,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           type="button"
                           disabled={isUploading}
                           onClick={() => headerLogoFileInputRef.current?.click()}
-                          className="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-xs font-bold text-white flex items-center gap-1.5 shrink-0 shadow-sm transition-all"
+                          className="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-xs font-bold text-white flex items-center gap-1.5 shrink-0 shadow-sm transition-all cursor-pointer"
                         >
                           <Upload className="w-3.5 h-3.5" />
                           <span>{isUploading ? 'Uploading...' : 'Upload Logo'}</span>
@@ -1944,13 +1938,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              setLocalSettings({ ...localSettings, headerLogoImage: '' });
-                              onUpdateSiteSettings({ headerLogoImage: '' });
+                              setLocalSettings((prev) => {
+                                const next = { ...prev, headerLogoImage: '' };
+                                onUpdateSiteSettings(next);
+                                return next;
+                              });
                             }}
-                            className="px-3 py-2 rounded-xl bg-neutral-200 hover:bg-neutral-300 text-xs font-bold text-neutral-800 shrink-0 transition-all"
-                            title="Reset to default icon"
+                            className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-xs font-semibold text-rose-600 border border-rose-200 flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                            title="Delete current logo image"
                           >
-                            Reset
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
                           </button>
                         )}
                       </div>
@@ -2116,7 +2114,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold text-neutral-700 mb-1">
-                      Bestseller Section Heading
+                      All Jerseys Section Heading
                     </label>
                     <input
                       type="text"
@@ -3830,8 +3828,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 onClick={async () => {
                   setIsDeletingProduct(true);
                   try {
-                    await onDeleteProduct(productPendingDelete.id);
-                    if (editingProduct?.id === productPendingDelete.id) {
+                    const deleteTargetId = productPendingDelete.id;
+                    setLocalProducts((prev) => prev.filter((p) => p.id !== deleteTargetId));
+                    await onDeleteProduct(deleteTargetId);
+                    if (editingProduct?.id === deleteTargetId) {
                       setIsProductModalOpen(false);
                     }
                     setProductPendingDelete(null);
@@ -3879,15 +3879,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {/* Target Category Summary Card */}
             <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 flex items-center gap-3">
               <div className="w-14 h-14 rounded-xl bg-white border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center p-1">
-                <img
-                  src={categoryPendingDelete.image || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
-                  alt={categoryPendingDelete.name}
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
-                  }}
-                  className="w-full h-full object-cover rounded-lg"
-                />
+                {categoryPendingDelete.image ? (
+                  <img
+                    src={categoryPendingDelete.image}
+                    alt={categoryPendingDelete.name}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-neutral-400 bg-neutral-100 rounded-lg">
+                    {categoryPendingDelete.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-mono text-neutral-500 font-semibold truncate">

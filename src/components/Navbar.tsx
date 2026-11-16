@@ -53,27 +53,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="cursor-pointer select-none flex items-center gap-2 group shrink-0"
           title="Home"
         >
-          <div className="w-8 h-8 flex items-center justify-center">
-            {siteSettings.headerLogoImage ? (
+          {siteSettings.headerLogoImage ? (
+            <div className="w-8 h-8 flex items-center justify-center">
               <img 
                 src={siteSettings.headerLogoImage} 
-                alt="Store Logo" 
+                alt={siteSettings.brandName || "Store Logo"} 
                 referrerPolicy="no-referrer"
                 className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded-md group-hover:scale-105 transition-transform" 
               />
-            ) : (
-              <svg 
-                viewBox="0 0 24 24" 
-                className="w-7 h-7 text-neutral-900 group-hover:scale-105 transition-transform" 
-                fill="currentColor"
-              >
-                <path d="M12 2C7.58 2 4 5.58 4 10c0 2.21.9 4.21 2.35 5.66L6 20h3l1-2h4l1 2h3l-.35-4.34C19.1 14.21 20 12.21 20 10c0-4.42-3.58-8-8-8zm-3 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm-3 5c-1.1 0-2-.4-2-1h4c0 .6-.9 1-2 1z" />
-                <circle cx="8" cy="18" r="1" />
-                <circle cx="16" cy="18" r="1" />
-                <path d="M7 21h10v1H7z" />
-              </svg>
-            )}
-          </div>
+            </div>
+          ) : (
+            <span className="font-typewriter text-xs sm:text-sm font-bold tracking-widest text-neutral-900 uppercase group-hover:opacity-80 transition-opacity">
+              {siteSettings.brandName || 'SPIDEY'}
+            </span>
+          )}
         </div>
 
         {/* 2. Center: Middle Text ("Drafted don't compare") */}

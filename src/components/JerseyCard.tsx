@@ -27,12 +27,21 @@ export const JerseyCard: React.FC<JerseyCardProps> = ({
         className="relative aspect-[1/1.2] w-full flex items-center justify-center cursor-pointer overflow-hidden rounded-xl bg-transparent"
       >
         {/* Full-width Product Image */}
-        <img
-          src={jersey.images?.[0] || 'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80'}
-          alt={jersey.title}
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
-        />
+        {jersey.images && jersey.images[0] ? (
+          <img
+            src={jersey.images[0]}
+            alt={jersey.title}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.opacity = '0';
+            }}
+            className="w-full h-full object-contain object-center transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-neutral-100/70 text-neutral-400">
+            <span className="text-[11px] font-medium tracking-wide">No Image</span>
+          </div>
+        )}
 
         {/* Floating Top / Pinned Badge */}
         {jersey.isPinned && (

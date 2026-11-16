@@ -290,6 +290,10 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       }
     } catch (err) {
       console.warn('Category image upload error, using fallback:', err);
+      try {
+        const { base64Data } = await compressImageFile(file, 800, 0.75);
+        if (base64Data) setFormImage(base64Data);
+      } catch {}
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -311,7 +315,17 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
       const cleanImage = formImage.trim();
 
       if (editingCatId) {
+        // Optimistically update local categories so table updates instantly
+        setLocalCategories((prev) =>
+          prev.map((c) =>
+            c.id === editingCatId
+              ? { ...c, name: trimmedName, subtitle: trimmedSubtitle, image: cleanImage, tag: trimmedTag }
+              : c
+          )
+        );
+
         await onUpdateCategory(editingCatId, {
+          id: editingCatId,
           name: trimmedName,
           subtitle: trimmedSubtitle,
           image: cleanImage,
@@ -322,13 +336,19 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
         const slug = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         const newId = slug || `cat-${Date.now().toString(36)}`;
 
-        await onAddCategory({
+        const newCat: CategoryItem = {
           id: newId,
           name: trimmedName,
           subtitle: trimmedSubtitle,
           image: cleanImage,
-          tag: trimmedTag || 'Drop'
-        });
+          tag: trimmedTag || 'Drop',
+          sortOrder: localCategories.length,
+          position: localCategories.length,
+          priority: localCategories.length
+        };
+
+        setLocalCategories((prev) => [...prev, newCat]);
+        await onAddCategory(newCat);
       }
 
       setIsModalOpen(false);
@@ -344,6 +364,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
     if (!categoryToDelete || isDeleting) return;
     setIsDeleting(true);
     try {
+      setLocalCategories((prev) => prev.filter((c) => c.id !== categoryToDelete.id));
       await onDeleteCategory(categoryToDelete.id);
       setCategoryToDelete(null);
     } catch (err) {
@@ -547,8 +568,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                         alt={cat.name}
                         referrerPolicy="no-referrer"
                         onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src =
-                            'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
                         }}
                         className="w-full h-full object-cover rounded-xl"
                       />
@@ -715,8 +735,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                         alt="Category Preview"
                         referrerPolicy="no-referrer"
                         onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src =
-                            'https://images.unsplash.com/photo-1577212017184-80cc0da11082?auto=format&fit=crop&w=400&q=80';
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
                         }}
                         className="w-full h-full object-cover"
                       />
