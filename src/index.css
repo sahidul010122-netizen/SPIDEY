@@ -88,7 +88,7 @@
   transform: scale(1.04);
 }
 
-/* Place Order: Fresh Ice-Blue & Mint-Teal Soft Gradation + Smooth Micro-Animations */
+/* Place Order: Sleek Black, Dark Red & White Gradation + Smooth Micro-Animations */
 @keyframes placeOrderSurfaceDrift {
   0% {
     background-position: 0% 50%;
@@ -108,7 +108,16 @@
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
+  }
+}
+
+@keyframes placeOrderOrbFloat {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(12px, -14px, 0) scale(1.06);
   }
 }
 
@@ -117,22 +126,24 @@
     transform: translateX(-140%) skewX(-18deg);
   }
   100% {
-    transform: translateX(240%) skewX(-18deg);
+    transform: translateX(260%) skewX(-18deg);
   }
 }
 
 .place-order-studio-bg {
-  background: linear-gradient(135deg, #fff9f9 0%, #fff1f2 35%, #fef2f2 70%, #fff8f7 100%);
+  background-color: #0b0b0e;
+  background-image: linear-gradient(135deg, #09090b 0%, #1c080d 35%, #111115 68%, #280a12 100%);
   background-size: 220% 220%;
-  animation: placeOrderSurfaceDrift 16s ease infinite;
+  animation: placeOrderSurfaceDrift 14s ease infinite;
 }
 
 .place-order-cta-satin {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(110deg, #b91c1c 0%, #dc2626 48%, #e11d48 100%);
-  background-size: 200% 200%;
-  animation: placeOrderSurfaceDrift 7s ease infinite;
+  background-color: #b91c1c;
+  background-image: linear-gradient(110deg, #7f1d1d 0%, #b91c1c 35%, #dc2626 65%, #991b1b 100%);
+  background-size: 220% 220%;
+  animation: placeOrderSurfaceDrift 6s ease infinite;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -141,7 +152,7 @@
   position: absolute;
   inset: 0;
   width: 45%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.24), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
   transform: translateX(-140%) skewX(-18deg);
   pointer-events: none;
 }
@@ -154,10 +165,20 @@
   animation: placeOrderCardEnter 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.place-order-orb-1 {
+  animation: placeOrderOrbFloat 11s ease-in-out infinite;
+}
+
+.place-order-orb-2 {
+  animation: placeOrderOrbFloat 14s ease-in-out infinite reverse;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .place-order-studio-bg,
   .place-order-cta-satin,
   .place-order-card-enter,
+  .place-order-orb-1,
+  .place-order-orb-2,
   .place-order-cta-satin::after {
     animation: none !important;
   }
