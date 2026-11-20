@@ -1119,7 +1119,22 @@ async function startServer() {
       }
 
       // Collect images to process
-      let imagesToProcess: Array<{ filename?: string; url: string; title?: string }> = [];
+      let imagesToProcess: Array<{
+        filename?: string;
+        url: string;
+        title?: string;
+        code?: string;
+        price?: number;
+        originalPrice?: number;
+        category?: string;
+        season?: string;
+        edition?: string;
+        badge?: string;
+        sizes?: string[];
+        stockCount?: number;
+        inStock?: boolean;
+        caption?: string;
+      }> = [];
 
       if (Array.isArray(selectedImages) && selectedImages.length > 0) {
         imagesToProcess = selectedImages.map((img: any) => {
@@ -1129,7 +1144,18 @@ async function startServer() {
           return {
             url: img.url,
             filename: img.filename || path.basename(img.url),
-            title: img.title
+            title: img.title,
+            code: img.code,
+            price: img.price !== undefined ? Number(img.price) : undefined,
+            originalPrice: img.originalPrice !== undefined ? Number(img.originalPrice) : undefined,
+            category: img.category,
+            season: img.season,
+            edition: img.edition,
+            badge: img.badge,
+            sizes: Array.isArray(img.sizes) ? img.sizes : undefined,
+            stockCount: img.stockCount !== undefined ? Number(img.stockCount) : undefined,
+            inStock: img.inStock,
+            caption: img.caption
           };
         });
       } else {
@@ -1274,25 +1300,48 @@ async function startServer() {
           uniqueCode = generateUniqueCode();
         }
 
-        const rawCaption = (imgItem && (imgItem as any).caption) ? (imgItem as any).caption.trim() : sharedCaption;
+        const itemCategory =
+          imgItem.category && imgItem.category.trim() ? imgItem.category.trim() : category.trim();
+        const itemPrice =
+          typeof imgItem.price === 'number' && Number.isFinite(imgItem.price) && imgItem.price > 0
+            ? imgItem.price
+            : (Number(price) || 1150);
+        const itemOriginalPrice =
+          typeof imgItem.originalPrice === 'number' && Number.isFinite(imgItem.originalPrice) && imgItem.originalPrice > 0
+            ? imgItem.originalPrice
+            : (originalPrice ? Number(originalPrice) : undefined);
+        const itemSeason = imgItem.season || season || '2025/26';
+        const itemEdition = imgItem.edition || edition || 'Player Issue Authentic';
+        const itemBadge = imgItem.badge || badge || 'New Drop';
+        const itemSizes =
+          Array.isArray(imgItem.sizes) && imgItem.sizes.length > 0
+            ? imgItem.sizes
+            : (Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL']);
+        const itemStockCount =
+          typeof imgItem.stockCount === 'number' && Number.isFinite(imgItem.stockCount)
+            ? imgItem.stockCount
+            : (stockCount !== undefined ? Number(stockCount) : 20);
+        const itemInStock = imgItem.inStock !== undefined ? imgItem.inStock !== false : inStock !== false;
+
+        const rawCaption = (imgItem && imgItem.caption) ? imgItem.caption.trim() : sharedCaption;
         const resolvedCaption = rawCaption
           .replace(/{title}/gi, finalTitle)
           .replace(/{code}/gi, uniqueCode)
-          .replace(/{price}/gi, String(Number(price) || 1150))
-          .replace(/{category}/gi, category.trim())
-          .replace(/{sizes}/gi, (Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL']).join(', '))
-          .replace(/{edition}/gi, edition || 'Player Issue Authentic');
+          .replace(/{price}/gi, String(itemPrice))
+          .replace(/{category}/gi, itemCategory)
+          .replace(/{sizes}/gi, itemSizes.join(', '))
+          .replace(/{edition}/gi, itemEdition);
 
         const newProduct: JerseyProduct = {
           id: `spidey-bulk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}-${idx}`,
           code: uniqueCode,
           title: finalTitle,
-          category: category.trim(),
-          price: Number(price) || 1150,
-          originalPrice: originalPrice ? Number(originalPrice) : undefined,
-          season: season || '2025/26',
-          edition: edition || 'Player Issue Authentic',
-          badge: badge || 'New Drop',
+          category: itemCategory,
+          price: itemPrice,
+          originalPrice: itemOriginalPrice,
+          season: itemSeason,
+          edition: itemEdition,
+          badge: itemBadge,
           images: [imgItem.url],
           description: resolvedCaption, // Product caption/description with optional variables resolved
           features: [
@@ -1301,9 +1350,9 @@ async function startServer() {
             'Anti-odor active breathability yarn integration',
             'Laser-cut ventilation zone mapping'
           ],
-          sizes: Array.isArray(sizes) && sizes.length > 0 ? sizes : ['S', 'M', 'L', 'XL', 'XXL', '3XL'],
-          inStock: inStock !== false,
-          stockCount: stockCount !== undefined ? Number(stockCount) : 20,
+          sizes: itemSizes,
+          inStock: itemInStock,
+          stockCount: itemStockCount,
           rating: 5.0,
           reviewCount: 0,
           customizable: customizable !== false,

@@ -41,8 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200/80">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-[#0b0b0e]/90 backdrop-blur-xl border-b border-white/[0.08]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-2">
         
         {/* 1. Left: Brand Logo */}
         <div 
@@ -54,31 +54,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           title="Home"
         >
           {siteSettings.headerLogoImage ? (
-            <div className="w-8 h-8 flex items-center justify-center">
+            <div className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/[0.04] border border-white/10 p-0.5">
               <img 
                 src={siteSettings.headerLogoImage} 
                 alt={siteSettings.brandName || "Store Logo"} 
                 referrerPolicy="no-referrer"
-                className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded-md group-hover:scale-105 transition-transform" 
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded-lg group-hover:scale-105 transition-transform duration-200" 
               />
             </div>
           ) : (
-            <span className="font-typewriter text-xs sm:text-sm font-bold tracking-widest text-neutral-900 uppercase group-hover:opacity-80 transition-opacity">
+            <span className="font-typewriter text-xs sm:text-sm font-bold tracking-widest text-neutral-100 uppercase group-hover:text-red-400 transition-colors duration-200">
               {siteSettings.brandName || 'SPIDEY'}
             </span>
           )}
         </div>
 
-        {/* 2. Center: Middle Text ("Drafted don't compare") */}
+        {/* 2. Center: Middle Text */}
         <div className="text-center select-none px-2">
-          <div className="font-typewriter text-[11px] sm:text-xs md:text-sm font-semibold tracking-wider text-neutral-900 leading-tight uppercase">
+          <div className="font-typewriter text-[11px] sm:text-xs md:text-sm font-semibold tracking-wider text-neutral-100 leading-tight uppercase">
             {siteSettings.headerSloganTop || 'DIFFERENTIATE,'} <br />
-            {siteSettings.headerSloganBottom || "DON'T COMPARE"}
+            <span className="text-neutral-400">{siteSettings.headerSloganBottom || "DON'T COMPARE"}</span>
           </div>
         </div>
 
-        {/* 3. Right: "Place Order" Button & Search Bar Controls */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* 3. Right: Controls */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           
           {/* Back to Storefront if not in showcase */}
           {currentView !== 'showcase' ? (
@@ -87,7 +87,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setCurrentView('showcase');
                 window.history.pushState({}, '', '/');
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-900 hover:bg-black text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1a1a20] hover:bg-red-700 border border-white/15 hover:border-red-500 text-neutral-100 text-xs font-bold whitespace-nowrap shrink-0 transition-all duration-200 active:scale-95 shadow-xs cursor-pointer"
               title="Return to Storefront"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -98,11 +98,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Fixed BDT Currency Badge */}
           <div
             id="nav-currency-badge"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-800 shadow-2xs select-none"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#15151a] border border-white/10 text-xs font-bold text-neutral-200 select-none whitespace-nowrap shrink-0"
             title="All prices in Bangladeshi Taka (BDT ৳)"
           >
-            <span className="font-extrabold text-neutral-950 font-mono text-xs sm:text-sm">৳</span>
-            <span className="text-[10px] text-neutral-600 font-bold uppercase">BDT</span>
+            <span className="font-extrabold text-red-500 font-mono text-xs sm:text-sm">৳</span>
+            <span className="text-[10px] text-neutral-400 font-bold uppercase">BDT</span>
           </div>
 
           {/* Search Toggle */}
@@ -110,7 +110,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="nav-search-btn"
             onClick={() => setIsSearchOpen(!isSearchOpen)}
             aria-label="Search"
-            className="p-1.5 text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
+            className={`p-2 rounded-full transition-colors duration-200 cursor-pointer shrink-0 ${
+              isSearchOpen
+                ? 'bg-red-600/20 text-red-400'
+                : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+            }`}
           >
             <Search className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
@@ -120,11 +124,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="nav-wishlist-btn"
             onClick={openWishlist}
             aria-label="Favorites"
-            className="relative p-1.5 text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
+            className="relative p-2 rounded-full text-neutral-300 hover:text-white hover:bg-white/[0.06] transition-colors duration-200 cursor-pointer shrink-0"
           >
             <Heart className="w-4 h-4 sm:w-5 sm:h-5" />
             {wishlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center">
+              <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs tabular-nums">
                 {wishlistCount}
               </span>
             )}
@@ -136,12 +140,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               id="nav-cart-btn"
               onClick={openCart}
               aria-label="Cart"
-              className="relative p-1.5 text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
+              className="relative p-2 rounded-full text-neutral-300 hover:text-white hover:bg-white/[0.06] transition-colors duration-200 cursor-pointer shrink-0"
               title="শপিং কার্ট"
             >
               <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-neutral-900 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+                <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs tabular-nums">
                   {cartCount}
                 </span>
               )}
@@ -153,25 +157,27 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Expandable Search Drawer */}
       {isSearchOpen && (
-        <div className="border-t border-neutral-100 bg-neutral-50 px-4 sm:px-6 py-2.5 max-w-7xl mx-auto flex items-center gap-3">
-          <Search className="w-4 h-4 text-neutral-400 shrink-0" />
-          <input
-            id="header-search-input"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search jerseys by name, code (e.g. SJ-CXYQD), category..."
-            autoFocus
-            className="w-full bg-transparent text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="text-neutral-400 hover:text-neutral-700 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+        <div className="border-t border-white/[0.08] bg-[#121216] px-4 sm:px-6 py-2.5">
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
+            <Search className="w-4 h-4 text-red-400 shrink-0" />
+            <input
+              id="header-search-input"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search jerseys by name, code (e.g. SJ-CXYQD), category..."
+              autoFocus
+              className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-neutral-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </header>

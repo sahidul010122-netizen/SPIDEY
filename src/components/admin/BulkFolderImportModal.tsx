@@ -32,6 +32,10 @@ import {
 import { JerseyProduct } from '../../types';
 import { CategoryItem } from '../../types/settings';
 import { CurrencyCode, formatPrice } from '../../utils/currency';
+import {
+  parseStructuredProductFilename,
+  ProductBackupMetadataEntry
+} from '../../utils/productBackupZip';
 
 export interface StorageFolder {
   id: string;
@@ -51,6 +55,16 @@ export interface FolderImageItem {
   selected?: boolean;
   customTitle?: string;
   customCaption?: string;
+  customCode?: string;
+  customPrice?: string;
+  customOriginalPrice?: string;
+  customCategory?: string;
+  customSizes?: string[];
+  customSeason?: string;
+  customEdition?: string;
+  customBadge?: string;
+  customStockCount?: number;
+  fromStructuredBackup?: boolean;
 }
 
 interface BulkFolderImportModalProps {
@@ -114,6 +128,7 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
   // Execution state
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [autoParseBanner, setAutoParseBanner] = useState<string | null>(null);
   const [successSummary, setSuccessSummary] = useState<{
     count: number;
     category: string;
@@ -144,16 +159,32 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
   const fetchFolderImages = async (folderId: string) => {
     setIsLoadingImages(true);
     setErrorMsg(null);
+    setAutoParseBanner(null);
     try {
       const res = await fetch(`/api/storage/folder-images?folder=${encodeURIComponent(folderId)}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.images)) {
-        // Pre-select all images by default
-        const mapped = data.images.map((img: FolderImageItem) => ({
-          ...img,
-          selected: true
-        }));
+        let structuredCount = 0;
+        const mapped: FolderImageItem[] = data.images.map((img: FolderImageItem) => {
+          const parsedFn = parseStructuredProductFilename(img.filename);
+          if (parsedFn.isStructured) structuredCount++;
+          return {
+            ...img,
+            cleanTitle: parsedFn.title || img.cleanTitle,
+            customTitle: parsedFn.isStructured ? (parsedFn.title || img.cleanTitle) : img.customTitle,
+            customCode: parsedFn.code || img.customCode,
+            customPrice: parsedFn.price || img.customPrice,
+            fromStructuredBackup: parsedFn.isStructured,
+            selected: true
+          };
+        });
         setFolderImages(mapped);
+        if (structuredCount > 0) {
+          setTitleMode('individual');
+          setAutoParseBanner(
+            `✓ ${structuredCount}টি ইমেজ ফাইলের নাম থেকে স্বয়ংক্রিয়ভাবে Title, Code এবং Price শনাক্ত করা হয়েছে!`
+          );
+        }
       } else {
         setFolderImages([]);
       }
@@ -169,6 +200,7 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
     if (isOpen) {
       setSuccessSummary(null);
       setErrorMsg(null);
+      setAutoParseBanner(null);
       fetchFolders();
     }
   }, [isOpen]);
@@ -208,7 +240,7 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
     );
   };
 
-  // Local Folder Picker & Direct Upload to R2 Handler
+  // Local Folder Picker & Direct Upload to R2 Handler (with automatic Title/Code/Price parsing)
   const handleLocalFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -223,11 +255,40 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
       return;
     }
 
+    // Parse optional products-metadata.json exported by "Download All Products"
+    const metadataByFilename = new Map<string, ProductBackupMetadataEntry>();
+    const metadataFile = fileList.find(
+      (f) => f.name.toLowerCase() === 'products-metadata.json'
+    );
+    if (metadataFile) {
+      try {
+        const rawJson = await metadataFile.text();
+        const parsedJson = JSON.parse(rawJson);
+        const entries: ProductBackupMetadataEntry[] = Array.isArray(parsedJson?.products)
+          ? parsedJson.products
+          : Array.isArray(parsedJson)
+          ? parsedJson
+          : [];
+        entries.forEach((entry) => {
+          if (entry && entry.filename) {
+            metadataByFilename.set(entry.filename.toLowerCase(), entry);
+            const base = entry.filename.split('/').pop()?.toLowerCase();
+            if (base) metadataByFilename.set(base, entry);
+          }
+        });
+      } catch (jsonErr) {
+        console.warn('Could not parse products-metadata.json:', jsonErr);
+      }
+    }
+
     setIsUploadingLocalFiles(true);
     setLocalUploadProgress({ current: 0, total: imageFiles.length });
     setErrorMsg(null);
+    setAutoParseBanner(null);
 
     const uploadedItems: FolderImageItem[] = [];
+    let structuredCount = 0;
+    const detectedCategories: string[] = [];
 
     for (let i = 0; i < imageFiles.length; i++) {
       const file = imageFiles[i];
@@ -252,18 +313,57 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
         const uploadData = await uploadRes.json();
         if (uploadData.success && (uploadData.staticUrl || uploadData.url)) {
           const itemUrl = uploadData.staticUrl || uploadData.url;
+          const meta = metadataByFilename.get(file.name.toLowerCase());
+          const parsedFn = parseStructuredProductFilename(file.name);
+
+          const fallbackClean = file.name
+            .replace(/\.[^/.]+$/, '')
+            .replace(/^\d+[-_]/, '')
+            .replace(/[-_]/g, ' ')
+            .trim();
+
+          const detectedTitle =
+            (meta?.title && meta.title.trim()) ||
+            parsedFn.title ||
+            fallbackClean;
+
+          const detectedCode =
+            (meta?.code && meta.code.trim()) ||
+            parsedFn.code ||
+            file.name.replace(/\.[^/.]+$/, '').trim();
+
+          const detectedPrice =
+            meta?.price !== undefined && Number.isFinite(Number(meta.price)) && Number(meta.price) > 0
+              ? String(meta.price)
+              : parsedFn.price;
+
+          const isStructured = Boolean(meta || parsedFn.isStructured);
+          if (isStructured) structuredCount++;
+          if (meta?.category) detectedCategories.push(meta.category);
+
           uploadedItems.push({
             filename: file.name,
             url: itemUrl,
             size: file.size,
             modifiedAt: new Date().toISOString(),
-            cleanTitle: file.name
-              .replace(/\.[^/.]+$/, '')
-              .replace(/^\d+[-_]/, '')
-              .replace(/[-_]/g, ' ')
-              .trim(),
+            cleanTitle: detectedTitle,
             alreadyUsed: false,
-            selected: true
+            selected: true,
+            customTitle: isStructured ? detectedTitle : undefined,
+            customCode: detectedCode,
+            customPrice: detectedPrice,
+            customOriginalPrice:
+              meta?.originalPrice !== undefined && Number.isFinite(Number(meta.originalPrice))
+                ? String(meta.originalPrice)
+                : undefined,
+            customCategory: meta?.category,
+            customSizes: Array.isArray(meta?.sizes) && meta.sizes.length > 0 ? meta.sizes : undefined,
+            customSeason: meta?.season,
+            customEdition: meta?.edition,
+            customBadge: meta?.badge,
+            customStockCount: typeof meta?.stockCount === 'number' ? meta.stockCount : undefined,
+            customCaption: meta?.description,
+            fromStructuredBackup: isStructured
           });
         }
       } catch (uploadErr) {
@@ -276,6 +376,33 @@ export const BulkFolderImportModal: React.FC<BulkFolderImportModalProps> = ({
 
     if (uploadedItems.length > 0) {
       setFolderImages(uploadedItems);
+
+      if (structuredCount > 0) {
+        setTitleMode('individual');
+        if (metadataByFilename.size > 0) {
+          setCaptionMode('individual');
+          setAutoParseBanner(
+            `✓ Backup Metadata ও ফাইলের নাম থেকে ${structuredCount}টি প্রোডাক্টের Title, Code এবং Price অটোমেটিক পূরণ করা হয়েছে! এখন সরাসরি Import চাপলেই সব সেভ হয়ে যাবে।`
+          );
+        } else {
+          setAutoParseBanner(
+            `✓ ফাইলের নাম ({CODE} ~~ {TITLE} ~~ {PRICE}) থেকে ${structuredCount}টি প্রোডাক্টের Title, Code এবং Price স্বয়ংক্রিয়ভাবে শনাক্ত ও পূরণ করা হয়েছে!`
+          );
+        }
+      }
+
+      if (detectedCategories.length > 0) {
+        const primaryCat = detectedCategories[0];
+        const matched = categories.find(
+          (c) => c.id === primaryCat || c.name.toLowerCase() === primaryCat.toLowerCase()
+        );
+        if (matched) {
+          setBatchCategory(matched.id);
+        }
+      }
+
+      // Reset file input so the same folder can be re-selected if needed
+      e.target.value = '';
       // Auto-refresh folders so R2 list updates
       fetchFolders();
     } else {
@@ -367,9 +494,36 @@ Sizes: ${selectedSizes.join(', ')}`
     setSharedCaption((prev) => `${prev.trimEnd()} {${varName}}`);
   };
 
+  const getResolvedCode = (item?: FolderImageItem) => {
+    if (!item) return '';
+    if (item.customCode && item.customCode.trim()) return item.customCode.trim();
+    const parsed = parseStructuredProductFilename(item.filename);
+    if (parsed.code) return parsed.code;
+    return item.filename ? item.filename.replace(/\.[^/.]+$/, '').trim() : '';
+  };
+
+  const getResolvedPrice = (item?: FolderImageItem) => {
+    if (item?.customPrice && item.customPrice.trim() !== '') {
+      return item.customPrice.trim();
+    }
+    return batchPrice || '1150';
+  };
+
   const handleSetIndividualTitle = (filename: string, text: string) => {
     setFolderImages((prev) =>
       prev.map((img) => (img.filename === filename ? { ...img, customTitle: text } : img))
+    );
+  };
+
+  const handleSetIndividualCode = (filename: string, code: string) => {
+    setFolderImages((prev) =>
+      prev.map((img) => (img.filename === filename ? { ...img, customCode: code } : img))
+    );
+  };
+
+  const handleSetIndividualPrice = (filename: string, price: string) => {
+    setFolderImages((prev) =>
+      prev.map((img) => (img.filename === filename ? { ...img, customPrice: price } : img))
     );
   };
 
@@ -398,23 +552,26 @@ Sizes: ${selectedSizes.join(', ')}`
     );
   };
 
-  // Sample auto-codes preview based on uploaded image filenames
+  // Sample auto-codes preview based on parsed or uploaded image filenames
   const sampleUniqueCodes = selectedImagesList.length > 0
-    ? selectedImagesList.slice(0, 3).map((img) => (img.filename ? img.filename.replace(/\.[^/.]+$/, '').trim() : 'CODE'))
+    ? selectedImagesList.slice(0, 3).map((img) => getResolvedCode(img) || 'CODE')
     : ['ARG-01', 'RM-HOME', 'BRAZIL-2025'];
 
   const previewResolvedCaption = () => {
     const sampleTitle = selectedImagesList[0]
       ? getResolvedTitle(0, selectedImagesList[0])
       : (commonTitle.trim() || `${batchCategory} Player Edition Kit`);
-    const sampleCode = selectedImagesList[0]?.filename
-      ? selectedImagesList[0].filename.replace(/\.[^/.]+$/, '').trim()
+    const sampleCode = selectedImagesList[0]
+      ? getResolvedCode(selectedImagesList[0])
       : (sampleUniqueCodes[0] || 'ARG-01');
+    const samplePrice = selectedImagesList[0]
+      ? getResolvedPrice(selectedImagesList[0])
+      : (batchPrice || '1150');
     const finalCategory = batchCategory === 'custom' && customCategory.trim() ? customCategory.trim() : batchCategory;
     return sharedCaption
       .replace(/{title}/gi, sampleTitle)
       .replace(/{code}/gi, sampleCode)
-      .replace(/{price}/gi, batchPrice || '1150')
+      .replace(/{price}/gi, samplePrice)
       .replace(/{category}/gi, finalCategory)
       .replace(/{sizes}/gi, selectedSizes.join(', '))
       .replace(/{edition}/gi, batchEdition || 'Player Issue Authentic');
@@ -454,16 +611,30 @@ Sizes: ${selectedSizes.join(', ')}`
         stockCount: parseInt(batchStockCount, 10) || 20,
         inStock: isInStock,
         customizable: true,
-        selectedImages: selectedImagesList.map((item, idx) => ({
-          filename: item.filename,
-          code: item.filename ? item.filename.replace(/\.[^/.]+$/, '').trim() : '',
-          url: item.url,
-          title: getResolvedTitle(idx, item),
-          caption:
-            captionMode === 'individual' && item.customCaption && item.customCaption.trim()
-              ? item.customCaption.trim()
-              : sharedCaption.trim()
-        })),
+        selectedImages: selectedImagesList.map((item, idx) => {
+          const parsedItemPrice = item.customPrice ? parseFloat(item.customPrice) : NaN;
+          const parsedOrigPrice = item.customOriginalPrice ? parseFloat(item.customOriginalPrice) : NaN;
+          return {
+            filename: item.filename,
+            code: getResolvedCode(item),
+            url: item.url,
+            title: getResolvedTitle(idx, item),
+            price: Number.isFinite(parsedItemPrice) && parsedItemPrice > 0 ? parsedItemPrice : undefined,
+            originalPrice: Number.isFinite(parsedOrigPrice) && parsedOrigPrice > 0 ? parsedOrigPrice : undefined,
+            category: item.customCategory || undefined,
+            season: item.customSeason || undefined,
+            edition: item.customEdition || undefined,
+            badge: item.customBadge || undefined,
+            sizes: item.customSizes && item.customSizes.length > 0 ? item.customSizes : undefined,
+            stockCount: typeof item.customStockCount === 'number' ? item.customStockCount : undefined,
+            caption:
+              captionMode === 'individual' && item.customCaption && item.customCaption.trim()
+                ? item.customCaption.trim()
+                : (item.customCaption && item.customCaption.trim() && item.fromStructuredBackup
+                    ? item.customCaption.trim()
+                    : sharedCaption.trim())
+          };
+        }),
         folder: selectedFolderId
       };
 
@@ -550,7 +721,7 @@ Sizes: ${selectedSizes.join(', ')}`
                       <img
                         src={p.images?.[0]}
                         alt={p.title}
-                        className="w-8 h-8 rounded-lg object-cover bg-neutral-100 border border-neutral-200 shrink-0"
+                        className="w-8 h-8 rounded-xl object-cover bg-neutral-100 border border-neutral-200 shrink-0"
                       />
                       <div className="min-w-0">
                         <div className="font-bold text-neutral-900 truncate">{p.title}</div>
@@ -592,6 +763,19 @@ Sizes: ${selectedSizes.join(', ')}`
                     <span>{errorMsg}</span>
                   </div>
                   <button onClick={() => setErrorMsg(null)} className="text-rose-500 hover:text-rose-800">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* AUTO-PARSE METADATA BANNER */}
+              {autoParseBanner && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{autoParseBanner}</span>
+                  </div>
+                  <button onClick={() => setAutoParseBanner(null)} className="text-emerald-600 hover:text-emerald-900 shrink-0">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -673,7 +857,7 @@ Sizes: ${selectedSizes.join(', ')}`
                                     key={i}
                                     src={thumb}
                                     alt="sample"
-                                    className="w-8 h-8 rounded-lg object-cover bg-neutral-200 border border-white/20 shrink-0"
+                                    className="w-8 h-8 rounded-xl object-cover bg-neutral-200 border border-white/20 shrink-0"
                                   />
                                 ))}
                               </div>
@@ -694,7 +878,6 @@ Sizes: ${selectedSizes.join(', ')}`
                       webkitdirectory="true"
                       directory="true"
                       multiple
-                      accept="image/*"
                       className="hidden"
                     />
 
@@ -704,10 +887,10 @@ Sizes: ${selectedSizes.join(', ')}`
 
                     <div>
                       <h5 className="text-xs font-bold text-neutral-900">
-                        Select a folder containing images from your computer
+                        Select a folder containing images (or an unzipped Product Backup ZIP folder)
                       </h5>
                       <p className="text-[11px] text-neutral-500 mt-0.5">
-                        Supports JPG, PNG, WEBP, and AVIF. All images will be saved directly into Cloudflare R2 / Storage and prepared for product generation.
+                        Supports JPG, PNG, WEBP, AVIF &amp; <span className="font-mono font-semibold text-neutral-700">products-metadata.json</span>. Structured filenames like <span className="font-mono font-semibold text-neutral-700">{'{CODE} ~~ {TITLE} ~~ {PRICE}.jpg'}</span> auto-fill Title, Code &amp; Price automatically!
                       </p>
                     </div>
 
@@ -788,58 +971,68 @@ Sizes: ${selectedSizes.join(', ')}`
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 max-h-60 overflow-y-auto p-1 bg-neutral-50/60 rounded-2xl border border-neutral-200/80">
-                    {displayedImages.map((img) => (
-                      <div
-                        key={img.filename}
-                        onClick={() => handleToggleSingleImage(img.filename)}
-                        className={`group relative rounded-xl border overflow-hidden cursor-pointer transition-all bg-white flex flex-col justify-between ${
-                          img.selected
-                            ? 'border-neutral-900 ring-2 ring-neutral-900 shadow-sm'
-                            : 'border-neutral-200 opacity-60 hover:opacity-100'
-                        }`}
-                      >
-                        {/* Checkbox badge */}
-                        <div className="absolute top-1.5 left-1.5 z-10 bg-white/90 backdrop-blur-sm rounded-md p-0.5 shadow-sm">
-                          {img.selected ? (
-                            <CheckSquare className="w-3.5 h-3.5 text-neutral-950" />
-                          ) : (
-                            <Square className="w-3.5 h-3.5 text-neutral-400" />
+                    {displayedImages.map((img) => {
+                      const resolvedCode = getResolvedCode(img) || 'AUTO';
+                      const resolvedPrice = img.customPrice;
+                      return (
+                        <div
+                          key={img.filename}
+                          onClick={() => handleToggleSingleImage(img.filename)}
+                          className={`group relative rounded-2xl border overflow-hidden cursor-pointer transition-all bg-white flex flex-col justify-between ${
+                            img.selected
+                              ? 'border-neutral-900 ring-2 ring-neutral-900 shadow-sm'
+                              : 'border-neutral-200 opacity-60 hover:opacity-100'
+                          }`}
+                        >
+                          {/* Checkbox badge */}
+                          <div className="absolute top-1.5 left-1.5 z-10 bg-white/90 backdrop-blur-sm rounded-md p-0.5 shadow-sm">
+                            {img.selected ? (
+                              <CheckSquare className="w-3.5 h-3.5 text-neutral-950" />
+                            ) : (
+                              <Square className="w-3.5 h-3.5 text-neutral-400" />
+                            )}
+                          </div>
+
+                          {/* Already used badge */}
+                          {img.alreadyUsed && (
+                            <div className="absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-amber-500 text-white shadow-sm">
+                              In Use
+                            </div>
                           )}
-                        </div>
 
-                        {/* Already used badge */}
-                        {img.alreadyUsed && (
-                          <div className="absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-amber-500 text-white shadow-sm">
-                            In Use
+                          <div className="w-full aspect-square bg-neutral-900 p-1 overflow-hidden">
+                            <img
+                              src={img.url}
+                              alt={img.cleanTitle}
+                              className="w-full h-full object-contain rounded-xl group-hover:scale-105 transition-transform"
+                            />
                           </div>
-                        )}
 
-                        <div className="w-full aspect-square bg-neutral-100 overflow-hidden">
-                          <img
-                            src={img.url}
-                            alt={img.cleanTitle}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                        </div>
-
-                        <div className="p-1.5 text-[10px] bg-white border-t border-neutral-100">
-                          <div className="font-bold text-neutral-900 truncate" title={img.filename}>
-                            {img.cleanTitle}
+                          <div className="p-2 text-[10px] bg-white border-t border-neutral-100 space-y-1">
+                            <div className="font-bold text-neutral-900 truncate" title={img.customTitle || img.cleanTitle}>
+                              {img.customTitle || img.cleanTitle}
+                            </div>
+                            <div className="flex items-center justify-between text-[9px] gap-1">
+                              <span
+                                className="font-mono font-bold text-rose-700 bg-rose-50 border border-rose-200/60 px-1.5 py-0.5 rounded truncate max-w-[85px]"
+                                title={`Product Code: ${resolvedCode}`}
+                              >
+                                {resolvedCode}
+                              </span>
+                              {resolvedPrice ? (
+                                <span className="font-mono font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded shrink-0">
+                                  ৳{resolvedPrice}
+                                </span>
+                              ) : (
+                                <span className="text-neutral-400 font-mono shrink-0">
+                                  {(img.size / 1024).toFixed(0)} KB
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between text-[9px] mt-0.5 gap-1">
-                            <span
-                              className="font-mono font-bold text-rose-700 bg-rose-50 border border-rose-200/60 px-1 py-0.5 rounded truncate max-w-[90px]"
-                              title={`Product Code: ${img.filename ? img.filename.replace(/\.[^/.]+$/, '').trim() : ''}`}
-                            >
-                              Code: {img.filename ? img.filename.replace(/\.[^/.]+$/, '').trim() : 'AUTO'}
-                            </span>
-                            <span className="text-neutral-400 font-mono shrink-0">
-                              {(img.size / 1024).toFixed(0)} KB
-                            </span>
-                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1166,18 +1359,18 @@ Sizes: ${selectedSizes.join(', ')}`
                           </span>
                         </div>
 
-                        <div className="flex items-start gap-3.5 bg-white p-3 rounded-xl border border-neutral-200">
-                          <div className="w-20 h-24 rounded-lg bg-neutral-100 overflow-hidden shrink-0 border border-neutral-200 relative flex items-center justify-center">
+                        <div className="flex items-start gap-3.5 bg-white p-3 rounded-2xl border border-neutral-200">
+                          <div className="w-20 h-20 rounded-2xl bg-neutral-900 overflow-hidden shrink-0 border border-neutral-200 relative flex items-center justify-center p-1">
                             {selectedImagesList[0] ? (
                               <img
                                 src={selectedImagesList[0].url}
                                 alt="Preview"
-                                className="w-full h-full object-contain"
+                                className="w-full h-full object-contain rounded-xl"
                               />
                             ) : (
                               <Package className="w-8 h-8 text-neutral-400" />
                             )}
-                            <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-neutral-900 text-amber-300">
+                            <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-neutral-900/90 text-amber-300">
                               {batchBadge || 'New Drop'}
                             </span>
                           </div>
@@ -1251,45 +1444,72 @@ Sizes: ${selectedSizes.join(', ')}`
                               item.customTitle !== undefined
                                 ? item.customTitle
                                 : (commonTitle || item.cleanTitle);
+                            const currentCodeValue = getResolvedCode(item);
+                            const currentPriceValue =
+                              item.customPrice !== undefined ? item.customPrice : '';
 
                             return (
                               <div
                                 key={item.filename}
-                                className="p-3 bg-white rounded-xl border border-neutral-200 flex flex-col sm:flex-row gap-3 items-center hover:border-neutral-400 transition-colors"
+                                className="p-3 bg-white rounded-2xl border border-neutral-200 flex flex-col sm:flex-row gap-3 items-start sm:items-center hover:border-neutral-400 transition-colors"
                               >
-                                <div className="w-14 h-14 rounded-lg bg-neutral-100 overflow-hidden shrink-0 border border-neutral-200 relative flex items-center justify-center">
+                                <div className="w-16 h-16 rounded-2xl bg-neutral-900 overflow-hidden shrink-0 border border-neutral-200 relative flex items-center justify-center p-0.5">
                                   <img
                                     src={item.url}
                                     alt={item.cleanTitle}
-                                    className="w-full h-full object-cover"
+                                    className="w-full h-full object-contain rounded-xl"
                                   />
-                                  <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-neutral-900/90 text-white text-[9px] font-mono flex items-center justify-center font-bold">
+                                  <span className="absolute top-1 left-1 w-4 h-4 rounded-full bg-neutral-900/90 text-white text-[9px] font-mono flex items-center justify-center font-bold">
                                     {idx + 1}
                                   </span>
                                 </div>
 
-                                <div className="flex-1 w-full space-y-1">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[11px] font-bold text-neutral-700">
-                                      Product #{idx + 1} Title (নাম):
-                                    </span>
-                                    <span className="px-2 py-0.5 rounded bg-neutral-100 border border-neutral-300 text-[10px] font-mono font-bold text-neutral-800">
-                                      Code: {sampleUniqueCodes[idx] || `SJ-M${idx}K2P`}
-                                    </span>
+                                <div className="flex-1 w-full space-y-2">
+                                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                    <div className="sm:col-span-6">
+                                      <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                                        Title (প্রোডাক্টের নাম)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={currentTitleValue}
+                                        onChange={(e) => handleSetIndividualTitle(item.filename, e.target.value)}
+                                        placeholder="Enter title for this jersey..."
+                                        className="w-full px-2.5 py-1.5 text-xs bg-neutral-50 border border-neutral-300 rounded-lg text-neutral-900 font-bold focus:outline-none focus:bg-white focus:ring-1 focus:ring-neutral-900"
+                                      />
+                                    </div>
+
+                                    <div className="sm:col-span-3">
+                                      <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                                        Code (SKU)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={currentCodeValue}
+                                        onChange={(e) => handleSetIndividualCode(item.filename, e.target.value)}
+                                        placeholder="SJ-XXXXX"
+                                        className="w-full px-2.5 py-1.5 text-xs bg-neutral-50 border border-neutral-300 rounded-lg text-neutral-900 font-mono font-bold focus:outline-none focus:bg-white focus:ring-1 focus:ring-neutral-900"
+                                      />
+                                    </div>
+
+                                    <div className="sm:col-span-3">
+                                      <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                                        Price (৳ BDT)
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={currentPriceValue}
+                                        onChange={(e) => handleSetIndividualPrice(item.filename, e.target.value)}
+                                        placeholder={batchPrice || '1150'}
+                                        className="w-full px-2.5 py-1.5 text-xs bg-neutral-50 border border-neutral-300 rounded-lg text-emerald-700 font-mono font-bold focus:outline-none focus:bg-white focus:ring-1 focus:ring-neutral-900"
+                                      />
+                                    </div>
                                   </div>
 
-                                  <input
-                                    type="text"
-                                    value={currentTitleValue}
-                                    onChange={(e) => handleSetIndividualTitle(item.filename, e.target.value)}
-                                    placeholder="Enter title for this jersey..."
-                                    className="w-full px-3 py-1.5 text-xs bg-neutral-50 border border-neutral-300 rounded-lg text-neutral-900 font-bold focus:outline-none focus:bg-white focus:ring-1 focus:ring-neutral-900"
-                                  />
-
                                   <div className="flex items-center justify-between text-[10px] text-neutral-400">
-                                    <span>File: {item.filename}</span>
-                                    <span className="font-semibold text-emerald-700">
-                                      Display Title: "{currentTitleValue}"
+                                    <span className="truncate max-w-[260px]">File: {item.filename}</span>
+                                    <span className="font-semibold text-emerald-700 shrink-0">
+                                      {item.fromStructuredBackup ? '✓ Auto-parsed from filename/backup' : `Display: "${currentTitleValue}"`}
                                     </span>
                                   </div>
                                 </div>

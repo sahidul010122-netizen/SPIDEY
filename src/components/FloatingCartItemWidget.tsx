@@ -44,12 +44,12 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
 
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 select-none animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="bg-white/95 backdrop-blur-md border border-neutral-300 rounded-2xl shadow-xl shadow-neutral-900/15 overflow-hidden transition-all duration-300 max-w-[320px] sm:max-w-[340px]">
+      <div className="bg-[#141418]/95 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden transition-all duration-300 max-w-[320px] sm:max-w-[340px]">
         
         {/* Header Bar */}
-        <div className="bg-neutral-900 text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
+        <div className="bg-gradient-to-r from-[#1c090d] to-[#141418] border-b border-white/10 text-white px-3 py-1.5 flex items-center justify-between text-[11px] font-bold">
           <div className="flex items-center gap-1.5">
-            <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
+            <ShoppingBag className="w-3.5 h-3.5 text-red-400" />
             <span>কার্টে যুক্ত পণ্য ({totalQuantity} টি)</span>
           </div>
 
@@ -58,7 +58,7 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
               <button
                 type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="hover:text-amber-300 p-0.5 transition-colors cursor-pointer"
+                className="hover:text-red-400 p-0.5 transition-colors cursor-pointer"
                 title={isExpanded ? 'সংক্ষিপ্ত করুন' : 'সবগুলো দেখুন'}
               >
                 {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
@@ -78,34 +78,33 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
         {/* Product Items Display */}
         <div className="p-2.5 space-y-2">
           
-          {/* If Expanded and Multiple Items: show stacked list */}
           {isExpanded && items.length > 1 ? (
             <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
               {items.map((item) => (
-                <div key={item.itemKey} className="flex items-center gap-2.5 p-1.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                <div key={item.itemKey} className="flex items-center gap-2.5 p-1.5 rounded-xl bg-[#1b1b22] border border-white/[0.07]">
                   {item.product?.images?.[0] ? (
                     <img
                       src={item.product.images[0]}
                       alt={item.product?.title}
                       referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-lg object-contain bg-white border border-neutral-200 shrink-0 p-0.5"
+                      className="w-10 h-10 rounded-xl object-contain bg-[#0e0e12] border border-white/10 shrink-0 p-0.5"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-neutral-100 border border-neutral-200 shrink-0 flex items-center justify-center text-neutral-400">
+                    <div className="w-10 h-10 rounded-xl bg-[#0e0e12] border border-white/10 shrink-0 flex items-center justify-center text-neutral-500">
                       <ShoppingBag className="w-4 h-4" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <h5 className="text-xs font-black text-neutral-900 truncate">
+                    <h5 className="text-xs font-black text-neutral-100 truncate">
                       {formatShortTitle(item.product?.title)}
                     </h5>
-                    <div className="text-[10px] text-neutral-500 flex items-center gap-1.5">
-                      <span>সাইজ: <strong className="text-neutral-800 font-mono">[{item.selectedSize}]</strong></span>
+                    <div className="text-[10px] text-neutral-400 flex items-center gap-1.5">
+                      <span>সাইজ: <strong className="text-neutral-200 font-mono">[{item.selectedSize}]</strong></span>
                       <span>•</span>
                       <span>পরিমাণ: <strong>{item.quantity}</strong></span>
                     </div>
                     {(item.customName || item.customNumber) && (
-                      <div className="text-[9px] text-emerald-700 font-bold truncate flex items-center gap-0.5">
+                      <div className="text-[9px] text-red-400 font-bold truncate flex items-center gap-0.5">
                         <Tag className="w-2.5 h-2.5 shrink-0" />
                         <span>{item.customName} {item.customNumber ? `#${item.customNumber}` : ''}</span>
                       </div>
@@ -115,40 +114,37 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
               ))}
             </div>
           ) : (
-            /* Single/Primary Elongated Box (Format requested by user) */
             <div 
               onClick={onOpenCart}
-              className="flex items-center gap-2.5 cursor-pointer hover:bg-neutral-50/80 p-1 rounded-xl transition-colors"
+              className="flex items-center gap-2.5 cursor-pointer hover:bg-white/[0.04] p-1 rounded-xl transition-colors"
             >
-              {/* Product Thumbnail in Corner */}
               <div className="relative shrink-0">
                 {latestItem.product?.images?.[0] ? (
                   <img
                     src={latestItem.product.images[0]}
                     alt={latestItem.product?.title}
                     referrerPolicy="no-referrer"
-                    className="w-12 h-12 rounded-xl object-contain bg-neutral-100 border border-neutral-200 p-0.5"
+                    className="w-12 h-12 rounded-2xl object-contain bg-[#0e0e12] border border-white/10 p-0.5"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400">
+                  <div className="w-12 h-12 rounded-2xl bg-[#0e0e12] border border-white/10 flex items-center justify-center text-neutral-500">
                     <ShoppingBag className="w-5 h-5" />
                   </div>
                 )}
                 {items.length > 1 && (
-                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-[#e50914] text-white text-[9px] font-black font-mono shadow-xs">
+                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[9px] font-black font-mono shadow-xs">
                     +{items.length - 1}
                   </span>
                 )}
               </div>
 
-              {/* Product Details: Name (truncated 1-2 words), Size, Custom Name/Number */}
               <div className="flex-1 min-w-0">
-                <h5 className="text-xs font-black text-neutral-900 truncate leading-snug">
+                <h5 className="text-xs font-black text-neutral-100 truncate leading-snug">
                   {formatShortTitle(latestItem.product?.title)}
                 </h5>
                 
-                <div className="text-[10px] text-neutral-600 flex items-center gap-1 mt-0.5">
-                  <span>সাইজ: <strong className="text-neutral-900 font-mono">[{latestItem.selectedSize}]</strong></span>
+                <div className="text-[10px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                  <span>সাইজ: <strong className="text-neutral-200 font-mono">[{latestItem.selectedSize}]</strong></span>
                   {latestItem.quantity && latestItem.quantity > 1 && (
                     <>
                       <span>•</span>
@@ -158,12 +154,12 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
                 </div>
 
                 {(latestItem.customName || latestItem.customNumber) ? (
-                  <div className="text-[10px] font-mono text-emerald-700 font-bold truncate flex items-center gap-1 mt-0.5">
+                  <div className="text-[10px] font-mono text-red-400 font-bold truncate flex items-center gap-1 mt-0.5">
                     <Tag className="w-2.5 h-2.5 shrink-0" />
                     <span>{latestItem.customName || ''} {latestItem.customNumber ? `#${latestItem.customNumber}` : ''}</span>
                   </div>
                 ) : (
-                  <div className="text-[10px] text-neutral-400">
+                  <div className="text-[10px] text-neutral-500">
                     স্ট্যান্ডার্ড জার্সি
                   </div>
                 )}
@@ -172,8 +168,8 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
           )}
 
           {/* Action Row */}
-          <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-2">
-            <div className="font-mono font-black text-xs text-[#e50914]">
+          <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+            <div className="font-mono font-black text-xs text-white tabular-nums">
               {formatPrice(totalPrice, currency)}
             </div>
 
@@ -181,14 +177,14 @@ export const FloatingCartItemWidget: React.FC<FloatingCartItemWidgetProps> = ({
               <button
                 type="button"
                 onClick={onOpenCart}
-                className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-neutral-700 hover:text-black bg-neutral-100 hover:bg-neutral-200 transition-colors cursor-pointer"
+                className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-neutral-200 hover:text-white bg-[#202028] hover:bg-[#2a2a35] transition-colors cursor-pointer"
               >
                 কার্ট
               </button>
               <button
                 type="button"
                 onClick={onOpenCheckout}
-                className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-black text-white text-[11px] font-black flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11px] font-black flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
               >
                 <span>চেকআউট</span>
                 <ArrowRight className="w-3 h-3" />

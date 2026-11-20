@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import { CategoryItem } from '../types/settings';
 
 interface ShopByCategoryProps {
@@ -53,10 +54,15 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
   }
 
   return (
-    <section className="w-full px-4 sm:px-6 lg:px-8 py-5 max-w-7xl mx-auto">
-      {/* Centered Heading matching screenshot */}
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+      className="w-full px-4 sm:px-6 lg:px-8 py-5 max-w-7xl mx-auto"
+    >
+      {/* Centered Heading */}
       <div className="text-center mb-5">
-        <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-bold text-neutral-100 tracking-tight">
           {headingTitle}
         </h2>
       </div>
@@ -67,14 +73,17 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
         onScroll={handleScroll}
         className="flex items-center gap-3 sm:gap-4 overflow-x-auto no-scrollbar pb-3 px-1 snap-x snap-mandatory"
       >
-        {items.map((cat, idx) => {
+        {items.map((cat) => {
           const isSelected =
             selectedCategory.toLowerCase() === cat.id.toLowerCase() ||
             selectedCategory.toLowerCase() === cat.name.toLowerCase();
 
           return (
-            <div
+            <motion.div
               key={cat.id}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               onClick={() => {
                 if (isSelected) {
                   onSelectCategory('all');
@@ -82,10 +91,10 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
                   onSelectCategory(cat.id);
                 }
               }}
-              className={`snap-start shrink-0 w-[210px] sm:w-[240px] h-[100px] sm:h-[110px] rounded-2xl sm:rounded-3xl p-3 flex items-center justify-between cursor-pointer transition-all duration-200 select-none ${
+              className={`snap-start shrink-0 w-[210px] sm:w-[240px] h-[100px] sm:h-[110px] rounded-2xl p-3 flex items-center justify-between cursor-pointer transition-colors duration-200 select-none border ${
                 isSelected
-                  ? 'bg-neutral-900 text-white shadow-md'
-                  : 'bg-[#f6f7f9] hover:bg-[#ededf2] text-neutral-900'
+                  ? 'bg-gradient-to-br from-[#2d0a10] to-[#171217] border-red-600/80 text-white shadow-[0_10px_28px_-8px_rgba(220,38,38,0.45)]'
+                  : 'bg-[#15151a] hover:bg-[#1c1c23] border-white/[0.08] hover:border-white/20 text-neutral-100'
               }`}
             >
               {/* Category Name on Left */}
@@ -95,7 +104,7 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
                 </span>
                 {cat.subtitle && (
                   <span className={`text-[10px] sm:text-[11px] block mt-0.5 truncate ${
-                    isSelected ? 'text-neutral-400' : 'text-neutral-500'
+                    isSelected ? 'text-red-200/80' : 'text-neutral-400'
                   }`}>
                     {cat.subtitle}
                   </span>
@@ -103,7 +112,7 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
               </div>
 
               {/* Product Preview Image on Right */}
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-white/80 shrink-0 flex items-center justify-center shadow-inner">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-[#0e0e12] border border-white/10 shrink-0 flex items-center justify-center p-1">
                 {cat.image ? (
                   <img
                     src={cat.image}
@@ -112,20 +121,20 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).style.display = 'none';
                     }}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover rounded-xl"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-neutral-400 bg-neutral-100">
+                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-neutral-400 bg-[#18181f] rounded-xl">
                     {cat.name.slice(0, 2).toUpperCase()}
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
 
-      {/* Pagination Dot Indicators with Elongated Active Pill */}
+      {/* Pagination Dot Indicators */}
       {items.length > 0 && (
         <div className="flex items-center justify-center gap-1.5 mt-3">
           {items.map((cat, idx) => {
@@ -135,16 +144,16 @@ export const CategoryFilter: React.FC<ShopByCategoryProps> = ({
                 key={cat.id}
                 onClick={() => scrollToItem(idx)}
                 aria-label={`Go to category ${cat.name}`}
-                className={`transition-all duration-300 ${
+                className={`transition-all duration-300 cursor-pointer ${
                   isActive 
-                    ? 'w-7 h-2 bg-neutral-600 rounded-full' 
-                    : 'w-2 h-2 bg-neutral-300 rounded-full hover:bg-neutral-400'
+                    ? 'w-7 h-2 bg-red-600 rounded-full' 
+                    : 'w-2 h-2 bg-neutral-700 rounded-full hover:bg-neutral-500'
                 }`}
               />
             );
           })}
         </div>
       )}
-    </section>
+    </motion.section>
   );
 };

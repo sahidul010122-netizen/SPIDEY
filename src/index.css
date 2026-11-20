@@ -2,16 +2,17 @@
 
 @layer base {
   :root {
-    --bg-main: #ffffff;
-    --card-bg: #f6f7f9;
-    --brand-red: #e11d48;
-    --text-primary: #111827;
-    --text-secondary: #6b7280;
+    --bg-main: #0b0b0e;
+    --card-bg: #141418;
+    --card-border: rgba(255, 255, 255, 0.08);
+    --brand-red: #dc2626;
+    --text-primary: #f5f5f7;
+    --text-secondary: #a1a1aa;
   }
 
   body {
-    background-color: #ffffff;
-    color: #111827;
+    background-color: #0b0b0e;
+    color: #f5f5f7;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     overflow-x: hidden;
     min-height: 100vh;
@@ -26,48 +27,50 @@
   letter-spacing: 0.05em;
 }
 
-/* Category Card Styling */
+/* Category Card Styling (Dark Obsidian Studio) */
 .category-card {
-  background-color: #f6f7f9;
+  background-color: #15151a;
   border-radius: 1.25rem;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease, border-color 0.25s ease;
 }
 
 .category-card:hover {
-  background-color: #ededf2;
+  background-color: #1c1c23;
   transform: translateY(-2px);
 }
 
-/* Product Card Styling */
+/* Product Card Styling (Dark Obsidian Studio) */
 .product-card-container {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .product-card-container:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px);
 }
 
 .product-image-box {
-  background-color: #f6f7f9;
-  border-radius: 1.25rem;
-  transition: background-color 0.25s ease;
+  background-color: #141418;
+  border-radius: 1rem;
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.28s ease;
 }
 
 .product-card-container:hover .product-image-box {
-  background-color: #ededf2;
+  background-color: #18181f;
+  box-shadow: 0 14px 32px -10px rgba(220, 38, 38, 0.22), 0 8px 20px -8px rgba(0, 0, 0, 0.7);
 }
 
 /* Glass Modal Overlay */
 .clean-modal-backdrop {
-  background-color: rgba(15, 23, 42, 0.75);
+  background-color: rgba(5, 5, 8, 0.8);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
 .clean-modal-content {
-  background-color: #ffffff;
+  background-color: #141418;
+  color: #f5f5f7;
   border-radius: 1.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65);
 }
 
 /* Custom Scrollbar for Smooth Category Carousel */
@@ -173,13 +176,75 @@
   animation: placeOrderOrbFloat 14s ease-in-out infinite reverse;
 }
 
+/* Hero Banner Permanent Studio Motion (Ken Burns + Light Sweep + Crimson Aura) */
+@keyframes heroKenBurnsLoop {
+  0% {
+    transform: scale(1.01) translate3d(0%, 0%, 0);
+  }
+  33% {
+    transform: scale(1.075) translate3d(-1.4%, -0.8%, 0);
+  }
+  66% {
+    transform: scale(1.055) translate3d(1.2%, 0.7%, 0);
+  }
+  100% {
+    transform: scale(1.01) translate3d(0%, 0%, 0);
+  }
+}
+
+@keyframes heroLightSweep {
+  0%, 15% {
+    transform: translate3d(-140%, 0, 0) skewX(-20deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  62% {
+    opacity: 0.9;
+  }
+  75%, 100% {
+    transform: translate3d(240%, 0, 0) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+@keyframes heroStudioAuraPulse {
+  0%, 100% {
+    opacity: 0.48;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.82;
+    transform: scale(1.08);
+  }
+}
+
+.hero-ken-burns {
+  animation: heroKenBurnsLoop 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+.hero-light-sweep {
+  animation: heroLightSweep 9s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  will-change: transform, opacity;
+}
+
+.hero-aura-pulse {
+  animation: heroStudioAuraPulse 7.5s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .place-order-studio-bg,
   .place-order-cta-satin,
   .place-order-card-enter,
   .place-order-orb-1,
   .place-order-orb-2,
-  .place-order-cta-satin::after {
+  .place-order-cta-satin::after,
+  .hero-ken-burns,
+  .hero-light-sweep,
+  .hero-aura-pulse {
     animation: none !important;
   }
 }

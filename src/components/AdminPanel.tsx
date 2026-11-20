@@ -15,6 +15,7 @@ import { JerseyProduct, StoreStats } from '../types';
 import { SiteSettings, CategoryItem } from '../types/settings';
 import { CurrencyCode, formatPrice, CURRENCY_RATES } from '../utils/currency';
 import { sortProductsWithPinned } from '../utils/productSort';
+import { downloadAllProductsAsZip } from '../utils/productBackupZip';
 import { OrderProcessManager } from './admin/OrderProcessManager';
 import { SteadfastApiSection } from './admin/SteadfastApiSection';
 import { BarcodeScannerSection } from './admin/BarcodeScannerSection';
@@ -356,6 +357,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [isReconnectingR2, setIsReconnectingR2] = useState(false);
   const [syncStatusNote, setSyncStatusNote] = useState<string | null>(null);
+  const [isDownloadingProductsZip, setIsDownloadingProductsZip] = useState(false);
+  const [downloadZipProgress, setDownloadZipProgress] = useState<{ current: number; total: number } | null>(null);
+  const [downloadZipStatus, setDownloadZipStatus] = useState<{ success: boolean; message: string } | null>(null);
 
   // Permanent Product Deletion Dialog State
   const [productPendingDelete, setProductPendingDelete] = useState<JerseyProduct | null>(null);
@@ -740,6 +744,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsExportingBackup(false);
       setTimeout(() => setSyncStatusNote(null), 5000);
+    }
+  };
+
+  // Download All Products + Metadata as Structured ZIP Backup
+  const handleDownloadAllProducts = async () => {
+    if (localProducts.length === 0 || isDownloadingProductsZip) return;
+    setIsDownloadingProductsZip(true);
+    setDownloadZipProgress({ current: 0, total: localProducts.length });
+    setDownloadZipStatus(null);
+    try {
+      const result = await downloadAllProductsAsZip(localProducts, (current, total) => {
+        setDownloadZipProgress({ current, total });
+      });
+      setDownloadZipStatus({
+        success: true,
+        message: `✓ ${result.totalProducts}টি প্রোডাক্ট (${result.exportedImages}টি ছবি ও metadata JSON) একটি ZIP ফাইলে ডাউনলোড সম্পন্ন হয়েছে!`
+      });
+    } catch (err: any) {
+      setDownloadZipStatus({
+        success: false,
+        message: `✕ ZIP ডাউনলোড ব্যর্থ হয়েছে: ${err?.message || 'অজানা ত্রুটি'}`
+      });
+    } finally {
+      setIsDownloadingProductsZip(false);
+      setDownloadZipProgress(null);
+      setTimeout(() => setDownloadZipStatus(null), 6000);
     }
   };
 
@@ -1455,7 +1485,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -1463,15 +1493,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search products..."
-                      className="pl-8 pr-3 py-2 text-xs bg-neutral-100 rounded-full border border-neutral-200 text-neutral-900 focus:outline-none focus:bg-white w-40 sm:w-56"
+                      className="pl-8 pr-3 py-2 text-xs bg-neutral-100 rounded-full border border-neutral-200 text-neutral-900 focus:outline-none focus:bg-white w-40 sm:w-52"
                     />
                   </div>
 
                   <button
                     type="button"
+                    disabled={localProducts.length === 0 || isDownloadingProductsZip}
+                    onClick={handleDownloadAllProducts}
+                    className="px-3.5 py-2 rounded-full bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+                    title="Download all product images & details (Code, Title, Price) in one structured ZIP backup"
+                  >
+                    {isDownloadingProductsZip ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" />
+                        <span>
+                          ZIP ({downloadZipProgress ? `${downloadZipProgress.current}/${downloadZipProgress.total}` : '...'})
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />
+                        <span className="hidden sm:inline">Download All Products</span>
+                        <span className="sm:hidden">Download ZIP</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setIsBulkFolderImportOpen(true)}
-                    className="px-3.5 py-2 rounded-full bg-neutral-100 hover:bg-neutral-200/90 text-neutral-800 border border-neutral-300 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
-                    title="Bulk upload draft products from storage folder with auto-generated codes & common caption"
+                    className="px-3.5 py-2 rounded-full bg-neutral-100 hover:bg-neutral-200/90 text-neutral-800 border border-neutral-300 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                    title="Bulk upload products from folder with auto-parsed Code, Title & Price"
                   >
                     <FolderUp className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
                     <span className="hidden sm:inline">Upload from Folder</span>
@@ -1480,13 +1533,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <button
                     onClick={openAddProductModal}
-                    className="px-4 py-2 rounded-full bg-[#0d0f12] hover:bg-neutral-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+                    className="px-4 py-2 rounded-full bg-[#0d0f12] hover:bg-neutral-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer whitespace-nowrap"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>Add New Product</span>
                   </button>
                 </div>
               </div>
+
+              {downloadZipStatus && (
+                <div
+                  className={`px-4 py-3 rounded-2xl border text-xs font-bold flex items-center justify-between gap-2 ${
+                    downloadZipStatus.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <span>{downloadZipStatus.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDownloadZipStatus(null)}
+                    className="text-current opacity-60 hover:opacity-100 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               {/* Drag & Drop Instructions & Real-Time Sync Status */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-neutral-50 rounded-2xl border border-neutral-200/80 text-xs">
@@ -1569,16 +1641,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </div>
                         </div>
 
-                        <div className="relative w-12 h-12 rounded-xl bg-white p-1 border border-neutral-200 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
+                        <div className="relative w-12 h-12 rounded-2xl bg-neutral-900 p-0.5 border border-neutral-300/80 shadow-sm shrink-0 overflow-hidden flex items-center justify-center">
                           {prod.images && prod.images[0] ? (
                             <img
                               src={prod.images[0]}
                               alt={prod.title}
                               referrerPolicy="no-referrer"
-                              className="w-full h-full object-contain"
+                              className="w-full h-full object-contain rounded-xl"
                             />
                           ) : (
-                            <Package className="w-5 h-5 text-neutral-300" />
+                            <Package className="w-5 h-5 text-neutral-400" />
                           )}
                         </div>
 
@@ -3713,8 +3785,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 <div className="flex gap-2 overflow-x-auto py-1">
                   {formImages.map((img, idx) => (
-                    <div key={idx} className="relative w-16 h-16 rounded-xl bg-neutral-100 p-1 border border-neutral-200 shrink-0">
-                      <img src={img} alt="Thumb" className="w-full h-full object-contain" />
+                    <div key={idx} className="relative w-16 h-16 rounded-2xl bg-neutral-900 p-0.5 border border-neutral-200 shrink-0 overflow-visible">
+                      <img src={img} alt="Thumb" className="w-full h-full object-contain rounded-xl" />
                       <button
                         type="button"
                         onClick={() => setFormImages(formImages.filter((_, i) => i !== idx))}
@@ -3784,12 +3856,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Target Product Summary Card */}
             <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl bg-white border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-neutral-900 border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center">
                 {productPendingDelete.images?.[0] ? (
                   <img
                     src={productPendingDelete.images[0]}
                     alt={productPendingDelete.title}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover rounded-xl"
                   />
                 ) : (
                   <Package className="w-6 h-6 text-neutral-400" />
